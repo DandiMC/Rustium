@@ -1,0 +1,28 @@
+[package]
+name = "rubydung-rs"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[[bin]]
+name = "rubydung-rs"
+path = "src/main.rs"
+
+# Launcher: descarga la version original de Mojang y arranca el juego
+[[bin]]
+name = "rustium"
+path = "src/bin/rustium.rs"
+
+[dependencies]
+winit = "0.30"
+wgpu = "25"
+pollster = "0.4"
+png = "0.17"
+zip = "2"
+# Solo para preguntar si hay una version nueva del launcher (una lectura)
+ureq = "2.10"
+# Interfaz del launcher (misma familia wgpu 25 / winit 0.30 que el juego)
+eframe = "0.32"
+
+[profile.release]
+opt-level = 3

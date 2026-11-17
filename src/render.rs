@@ -1,0 +1,1817 @@
+// Modulo de renderizado (wgpu).
+
+use crate::world::{Level, AIR};
+use std::sync::Arc;
+use wgpu::util::DeviceExt;
+use winit::window::Window;
+
+pub const CHUNK: usize = 16;
+
+pub const SHADER_WGSL: &str = r#"
+struct Uniforms {
+    view_proj: mat4x4<f32>,
+    fog_color: vec4<f32>,
+    camera_pos: vec4<f32>,
+    fog_density: f32,
+    // 1.0 = GL_EXP (rd-132211); 0.0 = la cuadratica de la familia nueva
+    fog_exp: f32,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var tex: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+
+struct VOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) shade: f32,
+    // Distancia en el eje de la vista (|z_eye|): es la que usa glFog, no la
+    // distancia euclidea.
+    @location(2) fogz: f32,
+};
+
+@vertex
+fn vs_main(@location(0) pos: vec3<f32>, @location(1) uv: vec2<f32>, @location(2) shade: f32) -> VOut {
+    var o: VOut;
+    let clip = u.view_proj * vec4<f32>(pos, 1.0);
+    o.clip = clip;
+    o.uv = uv;
+    o.shade = shade;
+    o.fogz = clip.w;
+    return o;
+}
+
+@fragment
+fn fs_main(v: VOut) -> @location(0) vec4<f32> {
+    let c = textureSample(tex, samp, v.uv);
+    let dist = max(v.fogz, 0.0);
+    var fog = 1.0 - exp(-dist * dist * u.fog_density * u.fog_density);
+    if (u.fog_exp > 0.5) {
+        fog = 1.0 - exp(-dist * u.fog_density);
+    }
+    let rgb = mix(c.rgb * v.shade, u.fog_color.rgb, clamp(fog, 0.0, 1.0));
+    return vec4<f32>(rgb, 1.0);
+}
+"#;
+
+// Resaltado del bloque apuntado. El original es un velo LISO: renderHit fija
+// glColor4f(1,1,1,0.4+0.2*sin) y llama a Tile.renderFace, que solo emite vertices
+// (nunca Tesselator.tex() ni color()), asi que flush() dibuja sin array de
+// texcoords y los 4 vertices comparten la coordenada que quedo puesta, (0,0).
+// El blending es aditivo (SRC_ALPHA, ONE).
+pub const HIT_SHADER: &str = r#"
+struct HitU { view_proj: mat4x4<f32>, model: mat4x4<f32>, color: vec4<f32>, };
+@group(0) @binding(0) var<uniform> u: HitU;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct VOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) shade: f32,
+};
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) uv: vec2<f32>, @location(2) s: f32) -> VOut {
+    var o: VOut;
+    o.clip = u.view_proj * u.model * vec4<f32>(p, 1.0);
+    o.uv = uv;
+    o.shade = s;
+    return o;
+}
+@fragment fn fs(v: VOut) -> @location(0) vec4<f32> {
+    // Velo blanco liso, no la textura de la cara: renderFace del original solo
+    // emite vertices, asi que el color es el glColor4f(1,1,1,alfa) a pelo.
+    return vec4<f32>(v.shade, v.shade, v.shade, u.color.a);
+}
+"#;
+
+// Modelos de personaje (rd-132328): piel char.png, sin niebla ni brillo, como el
+// render() del original (glColor3f(1,1,1) por poligono).
+pub const MODEL_SHADER: &str = r#"
+struct MU { view_proj: mat4x4<f32>, };
+@group(0) @binding(0) var<uniform> u: MU;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct VIn { @location(0) p: vec3<f32>, @location(1) uv: vec2<f32> };
+struct VOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
+@vertex fn vs(v: VIn) -> VOut {
+    var o: VOut;
+    o.clip = u.view_proj * vec4<f32>(v.p, 1.0);
+    o.uv = v.uv;
+    return o;
+}
+@fragment fn fs(v: VOut) -> @location(0) vec4<f32> {
+    let c = textureSample(tex, samp, v.uv);
+    return vec4<f32>(c.rgb, 1.0);
+}
+"#;
+
+// Vertices (2 triangulos) de la cara indicada de un bloque, con la textura y el
+// brillo que le tocarian en la malla del chunk. Misma tabla de caras que
+// build_chunk_mesh: si se toca una hay que tocar la otra.
+fn hit_face_vertices((bx, by, bz): (i32, i32, i32), n: (i32, i32, i32)) -> [Vertex; 6] {
+    let faces: [(i32, i32, i32, f32, (i32, i32, i32), [[f32; 3]; 4]); 6] = [
+        (0, 0, 1, 1.0, (0, 0, 0), [[0.0, 1.0, 0.0], [0.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 0.0]]),
+        (0, 0, -1, 1.0, (0, 0, -1), [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]]),
+        (1, 0, 0, 0.6, (1, 0, 0), [[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0], [1.0, 0.0, 1.0]]),
+        (-1, 0, 0, 0.6, (-1, 0, 0), [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 1.0], [0.0, 1.0, 0.0]]),
+        (0, 1, 0, 0.8, (0, 1, 0), [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0]]),
+        (0, -1, 0, 0.8, (0, -1, 0), [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]),
+    ];
+    let fi = match n {
+        (0, 0, 1) => 0,
+        (0, 0, -1) => 1,
+        (1, 0, 0) => 2,
+        (-1, 0, 0) => 3,
+        (0, 1, 0) => 4,
+        (0, -1, 0) => 5,
+        // Normal cero: el ojo esta dentro del bloque. El original dibuja la inferior.
+        _ => 1,
+    };
+    let (_, _, _, _, _, corners) = faces[fi];
+    // Un unico texel para toda la cara y sin brillo, como el original: renderFace
+    // solo emite vertices, asi que el velo lleva la coordenada que quedo puesta
+    // (0,0) en los 4 y el color del glColor4f. Antes se texturizaba la cara y se
+    // elegia el tile por altura, y en un lateral del borde superior salia la
+    // textura de arriba: parecia una capa blanca puesta encima del bloque.
+    let shade = 1.0;
+    let uv = [0.0, 0.0];
+    // 1 mm hacia fuera por la normal, en coords de render (X=x, Y=z, Z=y)
+    let off = [n.0 as f32 * 0.001, n.2 as f32 * 0.001, n.1 as f32 * 0.001];
+    let mut p = [Vertex { pos: [0.0; 3], uv, shade }; 4];
+    for (ci, c) in corners.iter().enumerate() {
+        p[ci] = Vertex {
+            pos: [
+                bx as f32 + c[0] + off[0],
+                bz as f32 + c[1] + off[1],
+                by as f32 + c[2] + off[2],
+            ],
+            uv,
+            shade,
+        };
+    }
+    [p[0], p[1], p[2], p[0], p[2], p[3]]
+}
+
+// Overlay de texto (F3). Los vertices llegan ya en coordenadas de recorte, asi que
+// el vertex shader no transforma nada y el fragment shader solo devuelve el color.
+pub const UI_SHADER: &str = r#"
+struct UiU { color: vec4<f32>, };
+@group(0) @binding(0) var<uniform> u: UiU;
+@vertex fn vs(@location(0) p: vec3<f32>) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(p, 1.0);
+}
+@fragment fn fs() -> @location(0) vec4<f32> { return u.color; }
+"#;
+
+// Vertices reservados para el overlay (cada pixel del glifo son 6 vertices).
+const UI_MAX_VERTS: usize = 6144;
+
+// Fuente 5x7 minima: solo lo que necesita el contador.
+const FONT_CHARS: &[(char, [u8; 7])] = &[
+    ('0', [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110]),
+    ('1', [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]),
+    ('2', [0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111]),
+    ('3', [0b11111, 0b00010, 0b00100, 0b00010, 0b00001, 0b10001, 0b01110]),
+    ('4', [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010]),
+    ('5', [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110]),
+    ('6', [0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110]),
+    ('7', [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000]),
+    ('8', [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]),
+    ('9', [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100]),
+    ('F', [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000]),
+    ('P', [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000]),
+    ('S', [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]),
+];
+
+// Genera los triangulos del texto en coordenadas de recorte. Cada pixel encendido
+// de la fuente es un quad de lado `p` pixeles de PANTALLA (usando el ancho y el alto
+// reales para que el glifo no salga estirado por el aspecto de la ventana).
+fn ui_text_quads(text: &str, width: u32, height: u32) -> Vec<f32> {
+    let p = 3.0f32;
+    let margin = 8.0f32;
+    let dx = 2.0 / width.max(1) as f32;
+    let dy = 2.0 / height.max(1) as f32;
+    let mut out: Vec<f32> = Vec::new();
+    let mut cx = margin;
+    for ch in text.chars() {
+        if let Some((_, rows)) = FONT_CHARS.iter().find(|(c, _)| *c == ch) {
+            for (r, bits) in rows.iter().enumerate() {
+                for c in 0..5u32 {
+                    if *bits & (1u8 << (4 - c)) != 0 {
+                        let x0 = -1.0 + (cx + c as f32 * p) * dx;
+                        let y0 = 1.0 - (margin + r as f32 * p) * dy;
+                        let x1 = x0 + p * dx;
+                        let y1 = y0 - p * dy;
+                        out.extend_from_slice(&[x0, y0, 0.0, x1, y0, 0.0, x1, y1, 0.0]);
+                        out.extend_from_slice(&[x0, y0, 0.0, x1, y1, 0.0, x0, y1, 0.0]);
+                    }
+                }
+            }
+        }
+        cx += 6.0 * p;
+    }
+    out
+}
+
+// Cruz de mira del original (drawGui): en su ortográfica la pantalla mide 240
+// de alto, y la cruz son dos barras de 9x1 px centradas. Aqui se pasan a clip
+// space con el mismo criterio (y hacia abajo).
+fn cruz_quads(width: u32, height: u32) -> Vec<f32> {
+    let sh = 240.0f32;
+    let sw = width as f32 * 240.0 / height.max(1) as f32;
+    let cx = (sw / 2.0).round();
+    let cy = sh / 2.0;
+    let mut out: Vec<f32> = Vec::new();
+    let mut quad = |x0: f32, y0: f32, x1: f32, y1: f32| {
+        let c = |px: f32, py: f32| [2.0 * px / sw - 1.0, 1.0 - 2.0 * py / sh];
+        let (a, b, d, e) = (c(x0, y0), c(x1, y0), c(x1, y1), c(x0, y1));
+        out.extend_from_slice(&[a[0], a[1], 0.0, b[0], b[1], 0.0, d[0], d[1], 0.0]);
+        out.extend_from_slice(&[a[0], a[1], 0.0, d[0], d[1], 0.0, e[0], e[1], 0.0]);
+    };
+    // Barra vertical (1 px de ancho, de hc-4 a hc+5)
+    quad(cx, cy - 4.0, cx + 1.0, cy + 5.0);
+    // Barra horizontal (de wc-4 a wc+5, 1 px de alto)
+    quad(cx - 4.0, cy, cx + 5.0, cy + 1.0);
+    out
+}
+
+// Cubo del bloque elegido, como en RubyDung.drawGui: en la ortografica de 240 de
+// alto (esquina superior derecha), girado 30 y 45 grados y espejado en x e y.
+// Cada cara se emite con los dos sentidos de vertices porque el espejo cambia la
+// orientacion y el pipeline de terreno descarta las caras traseras; con la
+// profundidad por delante, el sentido que no toca queda tapado.
+const HUD_VERTS: usize = 6 * 12;
+
+fn hud_proyecta(p: [f32; 3], sw: f32, sh: f32) -> [f32; 3] {
+    // Misma cadena que el original: scale(-1,-1,1), translate(-1.5,0.5,-0.5),
+    // rotacion 45 en Y, rotacion 30 en X, scale(16) y translate(sw-16, 16).
+    let mut x = -p[0];
+    let mut y = -p[1];
+    let mut z = p[2];
+    x -= 1.5;
+    y += 0.5;
+    z -= 0.5;
+    // Giro en Y del original (45): al ir despues del espejo de x, el sentido
+    // util es el contrario; comprobado contra el reparto de luces por cara del
+    // drawGui (0.8 a la izquierda, 0.6 a la derecha).
+    let (s45, c45) = (-45.0f32).to_radians().sin_cos();
+    let (nx, nz) = (x * c45 + z * s45, -x * s45 + z * c45);
+    x = nx;
+    z = nz;
+    // El original gira 30 en X; aqui el eje y de la GUI ya viene espejado, asi que
+    // el giro equivalente es el contrario (si no, el cubo se ve desde abajo).
+    let (s30, c30) = (-30.0f32).to_radians().sin_cos();
+    let (ny, nz2) = (y * c30 - z * s30, y * s30 + z * c30);
+    y = ny;
+    z = nz2;
+    x = x * 16.0 + sw - 16.0;
+    y = y * 16.0 + 16.0;
+    z *= 16.0;
+    [
+        2.0 * x / sw - 1.0,
+        1.0 - 2.0 * y / sh,
+        // La z del cubo (16 unidades de GUI) va de -24 a 24; se lleva a 0.5±0.24
+        // para que ninguna cara se salga del rango y el orden por profundidad mande.
+        0.5 + z * 0.01,
+    ]
+}
+
+// Textura del atlas por cara de los bloques pintables. Son los ids de Tile tal
+// como estan en rd-160052/rd-20090515 (los que usa el motor de legacy::tiles;
+// se repite aqui para que este archivo siga sirviendo a los binarios viejos).
+fn hud_textura(id: u8, cara: usize) -> u32 {
+    match id {
+        1 => 1,              // piedra
+        2 if cara == 1 => 0, // cesped: hierba arriba
+        2 if cara == 0 => 2, // cesped: tierra abajo
+        2 => 3,              // cesped: lados con fleco
+        3 => 2,              // tierra
+        4 => 16,             // ladrillo
+        5 => 4,              // madera
+        6 => 15,             // arbusto
+        _ => 0,
+    }
+}
+
+fn hud_cubo_vertices(id: u8, width: u32, height: u32) -> Vec<Vertex> {
+    let sh = 240.0f32;
+    let sw = width as f32 * 240.0 / height.max(1) as f32;
+    let duv = 0.0624375f32;
+    // (factor de luz, cara, 4 vertices: x, y, z, u01, v01) tal cual los manda
+    // Tile.renderFace para el bloque en (x=-2, y=0, z=0).
+    let caras: [(f32, usize, [[f32; 5]; 4]); 6] = [
+        (1.0, 0, [[-2.0, 0.0, 1.0, 0.0, 1.0], [-2.0, 0.0, 0.0, 0.0, 0.0], [-1.0, 0.0, 0.0, 1.0, 0.0], [-1.0, 0.0, 1.0, 1.0, 1.0]]),
+        (1.0, 1, [[-1.0, 1.0, 1.0, 1.0, 1.0], [-1.0, 1.0, 0.0, 1.0, 0.0], [-2.0, 1.0, 0.0, 0.0, 0.0], [-2.0, 1.0, 1.0, 0.0, 1.0]]),
+        (0.8, 2, [[-2.0, 1.0, 0.0, 1.0, 0.0], [-1.0, 1.0, 0.0, 0.0, 0.0], [-1.0, 0.0, 0.0, 0.0, 1.0], [-2.0, 0.0, 0.0, 1.0, 1.0]]),
+        (0.8, 3, [[-2.0, 1.0, 1.0, 0.0, 0.0], [-2.0, 0.0, 1.0, 0.0, 1.0], [-1.0, 0.0, 1.0, 1.0, 1.0], [-1.0, 1.0, 1.0, 1.0, 0.0]]),
+        (0.6, 4, [[-2.0, 1.0, 1.0, 1.0, 0.0], [-2.0, 1.0, 0.0, 0.0, 0.0], [-2.0, 0.0, 0.0, 0.0, 1.0], [-2.0, 0.0, 1.0, 1.0, 1.0]]),
+        (0.6, 5, [[-1.0, 0.0, 1.0, 0.0, 1.0], [-1.0, 0.0, 0.0, 1.0, 1.0], [-1.0, 1.0, 0.0, 1.0, 0.0], [-1.0, 1.0, 1.0, 0.0, 0.0]]),
+    ];
+    let mut out = Vec::with_capacity(HUD_VERTS);
+    for (factor, cara, vs) in caras.iter() {
+        let tex = hud_textura(id, *cara);
+        let u0 = (tex % 16) as f32 / 16.0;
+        let v0 = (tex / 16) as f32 / 16.0;
+        let mut p = [[0.0f32; 3]; 4];
+        let mut uv = [[0.0f32; 2]; 4];
+        for (i, v) in vs.iter().enumerate() {
+            p[i] = hud_proyecta([v[0], v[1], v[2]], sw, sh);
+            uv[i] = [u0 + v[3] * duv, v0 + v[4] * duv];
+        }
+        for e in [0usize, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2] {
+            out.push(Vertex { pos: p[e], uv: uv[e], shade: *factor });
+        }
+    }
+    out
+}
+
+pub struct Renderer {
+    pub window: Arc<Window>,
+    pub surface: wgpu::Surface<'static>,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub config: wgpu::SurfaceConfiguration,
+    pub pipeline: wgpu::RenderPipeline,
+    pub bind_group: wgpu::BindGroup,
+    pub uniform_buf: wgpu::Buffer,
+    pub depth_tex: wgpu::Texture,
+    pub depth_view: wgpu::TextureView,
+    pub chunks: Vec<Chunk>,
+    pub hit_pipeline: wgpu::RenderPipeline,
+    pub hit_uniform: wgpu::Buffer,
+    pub hit_bind_group: wgpu::BindGroup,
+    pub ui_pipeline: wgpu::RenderPipeline,
+    pub ui_uniform: wgpu::Buffer,
+    pub ui_bind_group: wgpu::BindGroup,
+    pub ui_vbuf: wgpu::Buffer,
+    pub hit_tex_bg: wgpu::BindGroup,
+    pub hit_flat_bg: wgpu::BindGroup,
+    pub hit_face_vbuf: wgpu::Buffer,
+    // Modelos de personaje
+    pub model_pipeline: wgpu::RenderPipeline,
+    pub model_uniform: wgpu::Buffer,
+    pub model_bind_group: wgpu::BindGroup,
+    pub model_tex_bgl: wgpu::BindGroupLayout,
+    pub model_bg: Option<wgpu::BindGroup>,
+    pub model_vbuf: wgpu::Buffer,
+    // Particulas: buffer persistente que se reescribe cada frame (como el de
+    // los modelos), en vez de crear buffers nuevos por frame.
+    pub part_vbuf: wgpu::Buffer,
+    pub part_ibuf: wgpu::Buffer,
+    pub part_count: u32,
+    // Cruz de mira (la dibuja el juego que la quiera, como el original)
+    pub mostrar_cruz: bool,
+    // Cubo del bloque elegido en la esquina (RubyDung.drawGui)
+    pub hud_bloque: Option<u8>,
+    pub hud_uniform: wgpu::Buffer,
+    pub hud_bg: wgpu::BindGroup,
+    pub hud_vbuf: wgpu::Buffer,
+    // Caras de la capa 1 (con bloque encima): el original las dibuja aparte con
+    // niebla exponencial densa y casi negra.
+    pub chunks_fog: Vec<Chunk>,
+    pub fog_uniform: wgpu::Buffer,
+    pub fog_bg: wgpu::BindGroup,
+}
+
+pub struct Chunk {
+    pub vbuf: wgpu::Buffer,
+    pub ibuf: wgpu::Buffer,
+    pub icount: u32,
+}
+
+#[repr(C)]
+struct Uniforms {
+    view_proj: [[f32; 4]; 4],
+    fog_color: [f32; 4],
+    camera_pos: [f32; 4],
+    fog_density: f32,
+    fog_exp: f32,
+    _pad: [f32; 2],
+}
+
+impl Renderer {
+    pub async fn new(window: Arc<Window>) -> Self {
+        let size = window.inner_size();
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        let surface = instance.create_surface(window.clone()).unwrap();
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .unwrap();
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
+            .await
+            .unwrap();
+        let caps = surface.get_capabilities(&adapter);
+        // Sin sRGB para que el color de cielo (0.5, 0.8, 1.0) salga igual que en el GL original
+        let format = caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| !f.is_srgb())
+            .unwrap_or(caps.formats[0]);
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width: size.width.max(1),
+            height: size.height.max(1),
+            // El original no usa vsync (su bucle corre libre): sin este modo, el
+            // FPS de las dos versiones no es comparable.
+            present_mode: wgpu::PresentMode::AutoNoVsync,
+            desired_maximum_frame_latency: 2,
+            alpha_mode: caps.alpha_modes[0],
+            view_formats: vec![],
+        };
+        surface.configure(&device, &config);
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("shader"),
+            source: wgpu::ShaderSource::Wgsl(SHADER_WGSL.into()),
+        });
+
+        // El atlas puede ser el de otra version (familia B tiene 6 tiles distintos):
+        // RD_ATLAS_VERSION elige de que jar se saca, por defecto rd-132211.
+        let version_atlas = std::env::var("RD_ATLAS_VERSION").unwrap_or_else(|_| "rd-132211".to_string());
+        // Prioridad: RD_ATLAS (ruta elegida a mano o detectada por el launcher) ->
+        // jar de la version en %APPDATA% -> terrain.png del jar de rd-132211 ->
+        // textura de reemplazo propia.
+        let atlas_data = std::env::var("RD_ATLAS").ok()
+            .and_then(|r| cargar_atlas_de_ruta(&r))
+            .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
+            .map(|(_, _, px)| px)
+            .or_else(|| {
+                cargar_png_del_jar(&version_atlas, "terrain.png")
+                    .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
+                    .map(|(_, _, px)| px)
+            })
+            .or_else(load_original_atlas)
+            .unwrap_or_else(generate_atlas);
+        // RD_ATLAS_DUMP=1 escribe el atlas que se esta usando, para comprobarlo
+        // contra el terrain.png del jar (careo de texturas).
+        if std::env::var_os("RD_ATLAS_DUMP").is_some() {
+            let f = std::fs::File::create("atlas_port.png");
+            if let Ok(f) = f {
+                let mut enc = png::Encoder::new(std::io::BufWriter::new(f), ATLAS_SIZE as u32, ATLAS_SIZE as u32);
+                enc.set_color(png::ColorType::Rgba);
+                enc.set_depth(png::BitDepth::Eight);
+                if let Ok(mut w) = enc.write_header() {
+                    let _ = w.write_image_data(&atlas_data);
+                }
+            }
+        }
+        let atlas = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("atlas"),
+            size: wgpu::Extent3d {
+                width: ATLAS_SIZE as u32,
+                height: ATLAS_SIZE as u32,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &atlas,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &atlas_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(ATLAS_SIZE as u32 * 4),
+                rows_per_image: Some(ATLAS_SIZE as u32),
+            },
+            wgpu::Extent3d {
+                width: ATLAS_SIZE as u32,
+                height: ATLAS_SIZE as u32,
+                depth_or_array_layers: 1,
+            },
+        );
+        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("sampler"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("uniforms"),
+            size: std::mem::size_of::<Uniforms>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bg"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: uniform_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&atlas_view) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) },
+            ],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pl"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Vertex::layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Greater,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        let depth = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("depth"),
+            size: wgpu::Extent3d {
+                width: config.width,
+                height: config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth_view = depth.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_tex = depth;
+
+        // Pipeline de resaltado (caja del bloque apuntado): cubo unitario + color plano
+        let hit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("hit shader"),
+            source: wgpu::ShaderSource::Wgsl(HIT_SHADER.into()),
+        });
+        // El resaltado muestrea el atlas, asi que necesita la textura en su propio
+        // grupo de bindings (el grupo 0 es solo el uniform de proyeccion y alfa).
+        let hit_tex_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("hit tex bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let hit_tex_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("hit tex bg"),
+            layout: &hit_tex_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&atlas_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
+            ],
+        });
+        // renderHit del original va SIN textura (glDisable(GL_TEXTURE_2D) antes de
+        // dibujarlo): es un blanco plano. Para no tocar el shader se le da un
+        // texel blanco de 1x1 en lugar del atlas.
+        let hit_blanco = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("hit blanco"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &hit_blanco,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &[255, 255, 255, 255],
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        let hit_blanco_view = hit_blanco.create_view(&wgpu::TextureViewDescriptor::default());
+        let hit_flat_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("hit flat bg"),
+            layout: &hit_tex_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&hit_blanco_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
+            ],
+        });
+        // 6 vertices de la cara resaltada, reescritos cada frame
+        let hit_face_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hit face vbuf"),
+            size: (6 * std::mem::size_of::<Vertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        // HUD: cubo del bloque elegido, con el atlas y su propia matriz
+        let hud_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hud uniform"),
+            size: std::mem::size_of::<Uniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let hud_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("hud bg"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: hud_uniform.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&atlas_view) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) },
+            ],
+        });
+        let fog_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("fog uniform"),
+            size: std::mem::size_of::<Uniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let fog_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fog bg"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: fog_uniform.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&atlas_view) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) },
+            ],
+        });
+        let hud_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hud vbuf"),
+            size: (HUD_VERTS * std::mem::size_of::<Vertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let hit_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("hit bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let hit_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hit uniform"),
+            size: 144,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let hit_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("hit bg"),
+            layout: &hit_bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: hit_uniform.as_entire_binding() }],
+        });
+        let hit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("hit pipeline"),
+            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("hit pl"),
+                bind_group_layouts: &[&hit_bgl, &hit_tex_bgl],
+                push_constant_ranges: &[],
+            })),
+            vertex: wgpu::VertexState {
+                module: &hit_shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Vertex::layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &hit_shader,
+                entry_point: Some("fs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    // Original: glBlendFunc(GL_SRC_ALPHA, GL_ONE) -> blending ADITIVO.
+                    // El blanco se SUMA al color de la cara (se quema a blanco puro en
+                    // las zonas claras), no se mezcla hacia blanco.
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::GreaterEqual,
+                stencil: wgpu::StencilState::default(),
+                // Sin bias: el desplazamiento geometrico de 1 mm basta ahora que la
+                // profundidad es inversa. El slope-bias hacia que la cara, vista de
+                // canto, se colara por delante de los bloques vecinos (linea blanca).
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        // ---- modelos de personaje (zombis) ----
+        let model_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("model shader"),
+            source: wgpu::ShaderSource::Wgsl(MODEL_SHADER.into()),
+        });
+        let model_tex_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model tex bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let model_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let model_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("model uniform"),
+            size: 64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let model_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("model bg"),
+            layout: &model_bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: model_uniform.as_entire_binding() }],
+        });
+        // 100 zombis x 6 cajas x 6 caras x 6 verticess = 21600 vertices de 5 floats
+        let model_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("model vbuf"),
+            size: 4 * 1024 * 1024,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let model_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("model pipeline"),
+            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("model pl"),
+                bind_group_layouts: &[&model_bgl, &model_tex_bgl],
+                push_constant_ranges: &[],
+            })),
+            vertex: wgpu::VertexState {
+                module: &model_shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 20,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute { offset: 0, shader_location: 0, format: wgpu::VertexFormat::Float32x3 },
+                        wgpu::VertexAttribute { offset: 12, shader_location: 1, format: wgpu::VertexFormat::Float32x2 },
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &model_shader,
+                entry_point: Some("fs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::GreaterEqual,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        // ---- overlay de FPS (F3) ----
+        let ui_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("ui shader"),
+            source: wgpu::ShaderSource::Wgsl(UI_SHADER.into()),
+        });
+        let ui_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("ui bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let ui_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ui uniform"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let ui_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("ui bg"),
+            layout: &ui_bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: ui_uniform.as_entire_binding() }],
+        });
+        let ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("ui pipeline"),
+            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("ui pl"),
+                bind_group_layouts: &[&ui_bgl],
+                push_constant_ranges: &[],
+            })),
+            vertex: wgpu::VertexState {
+                module: &ui_shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 12,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[wgpu::VertexAttribute {
+                        offset: 0,
+                        shader_location: 0,
+                        format: wgpu::VertexFormat::Float32x3,
+                    }],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &ui_shader,
+                entry_point: Some("fs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            // El texto va siempre por encima de la escena: nunca falla el test ni
+            // escribe profundidad (el pase tiene adjunto de depth, asi que el
+            // pipeline debe declarar el mismo formato).
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        // Particulas: buffer de vertices reutilizable + indices precalculados
+        let part_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("part vbuf"),
+            size: (MAX_PART_QUADS as usize * 4 * std::mem::size_of::<Vertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut pidx: Vec<u32> = Vec::with_capacity(MAX_PART_QUADS as usize * 12);
+        for q in 0..MAX_PART_QUADS {
+            let b: u32 = q * 4;
+            pidx.extend_from_slice(&[b, b + 1, b + 2, b, b + 2, b + 3, b, b + 2, b + 1, b, b + 3, b + 2]);
+        }
+        let part_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("part ibuf"),
+            contents: unsafe {
+                std::slice::from_raw_parts(
+                    pidx.as_ptr() as *const u8,
+                    pidx.len() * std::mem::size_of::<u32>(),
+                )
+            },
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let ui_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ui vbuf"),
+            size: (UI_MAX_VERTS * 12) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        Renderer {
+            window,
+            surface,
+            device,
+            queue,
+            config,
+            pipeline,
+            bind_group,
+            uniform_buf,
+            depth_tex,
+            depth_view,
+            chunks: Vec::new(),
+            hit_pipeline,
+            hit_uniform,
+            hit_bind_group,
+            ui_pipeline,
+            ui_uniform,
+            ui_bind_group,
+            ui_vbuf,
+            part_vbuf,
+            part_ibuf,
+            part_count: 0,
+            mostrar_cruz: false,
+            hud_bloque: None,
+            hud_uniform,
+            hud_bg,
+            hud_vbuf,
+            chunks_fog: Vec::new(),
+            fog_uniform,
+            fog_bg,
+            hit_tex_bg,
+            hit_flat_bg,
+            hit_face_vbuf,
+            model_pipeline,
+            model_uniform,
+            model_bind_group,
+            model_tex_bgl,
+            model_bg: None,
+            model_vbuf,
+        }
+    }
+
+    // Sube la piel (char.png) que usan los modelos de personaje.
+    pub fn pon_piel(&mut self, w: u32, h: u32, rgba: &[u8]) {
+        let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("piel"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &tex,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(w * 4),
+                rows_per_image: Some(h),
+            },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+        // El original usa GL_NEAREST (9728) para la piel
+        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("piel sampler"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        self.model_bg = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("piel bg"),
+            layout: &self.model_tex_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
+            ],
+        }));
+    }
+
+    // Sube una malla a la GPU como chunk
+    fn chunk_desde(&self, verts: &[Vertex], indices: &[u32]) -> Chunk {
+        let vbuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("chunk vbuf"),
+            contents: unsafe {
+                std::slice::from_raw_parts(
+                    verts.as_ptr() as *const u8,
+                    verts.len() * std::mem::size_of::<Vertex>(),
+                )
+            },
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let ibuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("chunk ibuf"),
+            contents: unsafe {
+                std::slice::from_raw_parts(
+                    indices.as_ptr() as *const u8,
+                    indices.len() * std::mem::size_of::<u32>(),
+                )
+            },
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        Chunk { vbuf, ibuf, icount: indices.len() as u32 }
+    }
+
+    pub fn build_chunks(&mut self, level: &Level) {
+        self.chunks.clear();
+        self.chunks_fog.clear();
+        let nx = crate::world::WIDTH / CHUNK;
+        let ny = crate::world::HEIGHT / CHUNK;
+        for cy in 0..ny {
+            for cx in 0..nx {
+                for capa in [0u8, 1] {
+                    let (verts, indices) = build_chunk_mesh(level, cx, cy, capa);
+                    let c = self.chunk_desde(&verts, &indices);
+                    if capa == 0 {
+                        self.chunks.push(c);
+                    } else {
+                        self.chunks_fog.push(c);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn rebuild_chunk(&mut self, level: &Level, cx: usize, cy: usize) {
+        let nx = crate::world::WIDTH / CHUNK;
+        let i = cy * nx + cx;
+        for capa in [0u8, 1] {
+            let (verts, indices) = build_chunk_mesh(level, cx, cy, capa);
+            let c = self.chunk_desde(&verts, &indices);
+            if capa == 0 {
+                if i < self.chunks.len() {
+                    self.chunks[i] = c;
+                }
+            } else if i < self.chunks_fog.len() {
+                self.chunks_fog[i] = c;
+            }
+        }
+    }
+
+    // Sube mallas ya construidas (sirve para versiones con otro Level)
+    pub fn subir_chunks(&mut self, mallas: Vec<(Vec<Vertex>, Vec<u32>)>) {
+        self.chunks.clear();
+        self.chunks_fog.clear();
+        for (verts, indices) in mallas {
+            if indices.is_empty() {
+                continue;
+            }
+            let vbuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("chunk vbuf"),
+                contents: unsafe {
+                    std::slice::from_raw_parts(
+                        verts.as_ptr() as *const u8,
+                        verts.len() * std::mem::size_of::<Vertex>(),
+                    )
+                },
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let ibuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("chunk ibuf"),
+                contents: unsafe {
+                    std::slice::from_raw_parts(
+                        indices.as_ptr() as *const u8,
+                        indices.len() * std::mem::size_of::<u32>(),
+                    )
+                },
+                usage: wgpu::BufferUsages::INDEX,
+            });
+            self.chunks.push(Chunk { vbuf, ibuf, icount: indices.len() as u32 });
+        }
+    }
+
+    // Particulas: reescribe el buffer persistente. Los indices ya estan
+    // precalculados (12 por quad, doble cara).
+    pub fn set_particulas(&mut self, verts: &[Vertex]) {
+        let n = verts.len().min(MAX_PART_QUADS as usize * 4);
+        let quads = (n / 4) as u32;
+        if quads == 0 {
+            self.part_count = 0;
+            return;
+        }
+        self.queue.write_buffer(&self.part_vbuf, 0, unsafe {
+            std::slice::from_raw_parts(verts.as_ptr() as *const u8, n * std::mem::size_of::<Vertex>())
+        });
+        self.part_count = quads * 12;
+    }
+
+    pub fn render(&mut self, eye: [f32; 3], yaw: f32, pitch: f32, hit: Option<((i32, i32, i32), (i32, i32, i32))>, fps: Option<u32>, modelos: &[[f32; 5]]) {
+        // El original hace glTranslatef(0,0,-0.3) antes de rotar: la camara va 0.3
+        // bloques por delante del punto del jugador, en la direccion de la vista.
+        // Tanto rd-132211 como la familia nueva lo hacen igual; sin esto el suelo
+        // sale corrido 0.3 bloques respecto al original.
+        let pitch = pitch.clamp(-1.55, 1.55);
+        let (sy_c, cy_c) = yaw.sin_cos();
+        let (sp_c, cp_c) = pitch.sin_cos();
+        let eye = [
+            eye[0] + sy_c * cp_c * 0.3,
+            eye[1] + sp_c * 0.3,
+            eye[2] - cy_c * cp_c * 0.3,
+        ];
+        let view_proj = mat_mul(&perspective(70.0f32.to_radians(), self.config.width as f32 / self.config.height as f32, 0.05, 1000.0), &look_at(eye, yaw, pitch));
+        // Pasada de niebla de rd-132211: GL_EXP, densidad 0.2, color (14,11,10).
+        let fu = Uniforms {
+            view_proj,
+            fog_color: [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0],
+            camera_pos: [eye[0], eye[1], eye[2], 1.0],
+            fog_density: 0.2,
+            fog_exp: 1.0,
+            _pad: [0.0; 2],
+        };
+        self.queue.write_buffer(&self.fog_uniform, 0, unsafe {
+            std::slice::from_raw_parts(&fu as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
+        });
+        let u = Uniforms {
+            view_proj,
+            fog_color: [0.5, 0.8, 1.0, 1.0],
+            camera_pos: [eye[0], eye[1], eye[2], 1.0],
+            fog_density: 0.0,
+            fog_exp: 0.0,
+            _pad: [0.0; 2],
+        };
+        self.queue.write_buffer(&self.uniform_buf, 0, unsafe {
+            std::slice::from_raw_parts(&u as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
+        });
+        // Overlay 2D (FPS con F3 y cruz de mira): geometria ya en clip space
+        let mut ui_count = 0u32;
+        let mut ui_verts: Vec<f32> = Vec::new();
+        if let Some(f) = fps {
+            let text = format!("FPS {}", f);
+            ui_verts.extend(ui_text_quads(&text, self.config.width, self.config.height));
+        }
+        if self.mostrar_cruz {
+            ui_verts.extend(cruz_quads(self.config.width, self.config.height));
+        }
+        if !ui_verts.is_empty() {
+            let n = (ui_verts.len() / 3) as u32;
+            if (n as usize) <= UI_MAX_VERTS {
+                self.queue.write_buffer(&self.ui_vbuf, 0, unsafe {
+                    std::slice::from_raw_parts(ui_verts.as_ptr() as *const u8, ui_verts.len() * 4)
+                });
+                let color = [1.0f32, 1.0, 1.0, 1.0];
+                self.queue.write_buffer(&self.ui_uniform, 0, unsafe {
+                    std::slice::from_raw_parts(color.as_ptr() as *const u8, 16)
+                });
+                ui_count = n;
+            }
+        }
+        // HUD: cubo del bloque elegido (el drawGui del original)
+        let hud_count = match self.hud_bloque {
+            Some(id) => {
+                let verts = hud_cubo_vertices(id, self.config.width, self.config.height);
+                self.queue.write_buffer(&self.hud_vbuf, 0, unsafe {
+                    std::slice::from_raw_parts(
+                        verts.as_ptr() as *const u8,
+                        verts.len() * std::mem::size_of::<Vertex>(),
+                    )
+                });
+                verts.len() as u32
+            }
+            None => 0,
+        };
+        let frame = match self.surface.get_current_texture() {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+        // Si el frame real cambió de tamaño (HiDPI/resize), recrear el depth buffer
+        let sz = frame.texture.size();
+        if sz.width != self.depth_tex.size().width || sz.height != self.depth_tex.size().height {
+            self.depth_tex = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("depth"),
+                size: sz,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            self.depth_view = self.depth_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        }
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("enc") });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.5, g: 0.8, b: 1.0, a: 1.0 }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            for c in &self.chunks {
+                if c.icount == 0 { continue; }
+                pass.set_vertex_buffer(0, c.vbuf.slice(..));
+                pass.set_index_buffer(c.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..c.icount, 0, 0..1);
+            }
+            // Capa 1: las caras con bloque encima, con la niebla del original.
+            if !self.chunks_fog.is_empty() {
+                pass.set_bind_group(0, &self.fog_bg, &[]);
+                for c in &self.chunks_fog {
+                    if c.icount == 0 { continue; }
+                    pass.set_vertex_buffer(0, c.vbuf.slice(..));
+                    pass.set_index_buffer(c.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..c.icount, 0, 0..1);
+                }
+                pass.set_bind_group(0, &self.bind_group, &[]);
+            }
+            if self.part_count > 0 {
+                pass.set_vertex_buffer(0, self.part_vbuf.slice(..));
+                pass.set_index_buffer(self.part_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..self.part_count, 0, 0..1);
+            }
+            // Resaltado del bloque apuntado (renderHit original): la cara con la
+            // textura del bloque y su brillo, sumada en aditivo con el alfa pulsante.
+            if let Some(((hx, hy, hz), n)) = hit {
+                #[repr(C)]
+                struct HitU {
+                    view_proj: [[f32; 4]; 4],
+                    model: [[f32; 4]; 4],
+                    color: [f32; 4],
+                }
+                // Original: glColor4f(1,1,1, 0.4 + 0.2*sin(ms/100)), alfa entre 0.2 y
+                // 0.6, sumado a la cara (SRC_ALPHA, ONE): sube entre +51 y +153 de
+                // los 255 de cada canal. Nada de reducir el alfa a la mitad.
+                let t = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as f64
+                    / 100.0;
+                let alpha = (0.4 + 0.2 * t.sin()) as f32;
+                // Los vertices van ya en coordenadas de mundo: modelo identidad.
+                let ident = [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ];
+                let hu = HitU { view_proj, model: ident, color: [1.0, 1.0, 1.0, alpha] };
+                self.queue.write_buffer(&self.hit_uniform, 0, unsafe {
+                    std::slice::from_raw_parts(&hu as *const HitU as *const u8, std::mem::size_of::<HitU>())
+                });
+                let verts = hit_face_vertices((hx, hy, hz), n);
+                self.queue.write_buffer(&self.hit_face_vbuf, 0, unsafe {
+                    std::slice::from_raw_parts(verts.as_ptr() as *const u8, std::mem::size_of_val(&verts[..]))
+                });
+                pass.set_pipeline(&self.hit_pipeline);
+                pass.set_bind_group(0, &self.hit_bind_group, &[]);
+                pass.set_bind_group(1, &self.hit_flat_bg, &[]);
+                pass.set_vertex_buffer(0, self.hit_face_vbuf.slice(..));
+                pass.draw(0..6, 0..1);
+            }
+            // Modelos de personaje (zombis de rd-132328): pos+uv, ya en mundo
+            if !modelos.is_empty() {
+                if let Some(bg) = &self.model_bg {
+                    self.queue.write_buffer(&self.model_uniform, 0, unsafe {
+                        std::slice::from_raw_parts(view_proj.as_ptr() as *const u8, 64)
+                    });
+                    self.queue.write_buffer(&self.model_vbuf, 0, unsafe {
+                        std::slice::from_raw_parts(
+                            modelos.as_ptr() as *const u8,
+                            modelos.len() * 5 * 4,
+                        )
+                    });
+                    pass.set_pipeline(&self.model_pipeline);
+                    pass.set_bind_group(0, &self.model_bind_group, &[]);
+                    pass.set_bind_group(1, bg, &[]);
+                    pass.set_vertex_buffer(0, self.model_vbuf.slice(..));
+                    pass.draw(0..modelos.len() as u32, 0..1);
+                }
+            }
+            if ui_count > 0 {
+                pass.set_pipeline(&self.ui_pipeline);
+                pass.set_bind_group(0, &self.ui_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.ui_vbuf.slice(..));
+                pass.draw(0..ui_count, 0..1);
+            }
+        }
+        // El original limpia el z-buffer antes de la GUI (drawGui), asi que el
+        // cubo va en su propio pase con la profundidad limpia y el color encima.
+        if hud_count > 0 {
+            let ident = [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ];
+            let hu = Uniforms {
+                view_proj: ident,
+                fog_color: [0.5, 0.8, 1.0, 1.0],
+                camera_pos: [0.0; 4],
+                fog_density: 0.0,
+                fog_exp: 0.0,
+                _pad: [0.0; 2],
+            };
+            self.queue.write_buffer(&self.hud_uniform, 0, unsafe {
+                std::slice::from_raw_parts(
+                    &hu as *const Uniforms as *const u8,
+                    std::mem::size_of::<Uniforms>(),
+                )
+            });
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("hud pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.hud_bg, &[]);
+            pass.set_vertex_buffer(0, self.hud_vbuf.slice(..));
+            pass.draw(0..hud_count, 0..1);
+        }
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
+    }
+}
+
+// Proyeccion con profundidad INVERSA (reversed-Z): near -> 1, far -> 0.
+// Con float32 la precision deja de desplomarse con la distancia, que es justo
+// donde el resaltado (1 mm delante de la cara) se peleaba con el bloque.
+// Requiere depth_compare Greater/GreaterEqual y limpiar la profundidad a 0.0.
+pub fn perspective(fov_y: f32, aspect: f32, near: f32, far: f32) -> [[f32; 4]; 4] {
+    let f = 1.0 / (fov_y / 2.0).tan();
+    [
+        [f / aspect, 0.0, 0.0, 0.0],
+        [0.0, f, 0.0, 0.0],
+        [0.0, 0.0, near / (far - near), -1.0],
+        [0.0, 0.0, near * far / (far - near), 0.0],
+    ]
+}
+
+pub fn look_at(eye: [f32; 3], yaw: f32, pitch: f32) -> [[f32; 4]; 4] {
+    let (sy, cy) = yaw.sin_cos();
+    // Limitar pitch para no mirar exactamente arriba/abajo (evita NaN en cross)
+    let pitch = pitch.clamp(-1.55, 1.55);
+    let (sp, cp) = pitch.sin_cos();
+    let fwd = [sy * cp, sp, -cy * cp];
+    let up = [0.0, 1.0, 0.0];
+    let right = normalize(cross(fwd, up));
+    let upv = cross(right, fwd);
+    [
+        [right[0], upv[0], -fwd[0], 0.0],
+        [right[1], upv[1], -fwd[1], 0.0],
+        [right[2], upv[2], -fwd[2], 0.0],
+        [-dot(right, eye), -dot(upv, eye), dot(fwd, eye), 1.0],
+    ]
+}
+
+fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+fn normalize(v: [f32; 3]) -> [f32; 3] {
+    let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    if l < 1e-6 {
+        return [1.0, 0.0, 0.0];
+    }
+    [v[0] / l, v[1] / l, v[2] / l]
+}
+
+pub fn mat_mul(a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    let mut r = [[0.0f32; 4]; 4];
+    for c in 0..4 {
+        for row in 0..4 {
+            r[c][row] = a[0][row] * b[c][0] + a[1][row] * b[c][1] + a[2][row] * b[c][2] + a[3][row] * b[c][3];
+        }
+    }
+    r
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Vertex {
+    pub pos: [f32; 3],
+    pub uv: [f32; 2],
+    pub shade: f32,
+}
+
+impl Vertex {
+    pub const ATTRIBUTES: [wgpu::VertexAttribute; 3] =
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32];
+
+    pub fn layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBUTES,
+        }
+    }
+}
+
+const MAX_PART_QUADS: u32 = 512;
+
+pub const ATLAS_SIZE: usize = 256;
+pub const TILE: usize = 16;
+pub const TILES_PER_ROW: usize = ATLAS_SIZE / TILE;
+
+fn hash2(x: usize, y: usize, seed: u32) -> u32 {
+    let mut h = (x as u32).wrapping_mul(0x8da6b343)
+        ^ (y as u32).wrapping_mul(0xd8163841)
+        ^ seed.wrapping_mul(0xcb1ab1df);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2c1b3c6d);
+    h ^= h >> 12;
+    h
+}
+
+// Carga el terrain.png ORIGINAL desde la propia instalacion local del juego
+// (tu copia legitima de rd-132211). No se copia ningun asset al proyecto:
+// solo si el archivo existe en tu PC se usa; si no, se usa el atlas procedural.
+pub fn load_original_atlas() -> Option<Vec<u8>> {
+    let appdata = std::env::var("APPDATA").ok()?;
+    let jar = format!("{}/.minecraft/versions/rd-132211/rd-132211.jar", appdata);
+    let data = std::fs::read(&jar).ok()?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data)).ok()?;
+    let mut entry = archive.by_name("terrain.png").ok()?;
+    let mut png_bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut png_bytes).ok()?;
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let (w, h) = (reader.info().width as usize, reader.info().height as usize);
+    // Tras EXPAND la salida es 8-bit RGB/RGBA/gray: reserva 4 bytes/pixel de sobra
+    let mut raw = vec![0u8; w * h * 4];
+    let out = reader.next_frame(&mut raw).ok()?;
+    let (w, h) = (out.width as usize, out.height as usize);
+    let bpp = out.buffer_size() / (w * h);
+    let mut rgba = vec![0u8; w * h * 4];
+    let ct = out.color_type;
+    for i in 0..w * h {
+        let (r, g, b, a) = match ct {
+            png::ColorType::Grayscale => { let v = raw[i]; (v, v, v, 255) }
+            png::ColorType::GrayscaleAlpha => { let v = raw[i * 2]; (v, v, v, raw[i * 2 + 1]) }
+            png::ColorType::Rgb => { (raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2], 255) }
+            png::ColorType::Rgba => { (raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2], raw[i * 4 + 3]) }
+            _ => (0, 0, 0, 255),
+        };
+        let _ = bpp;
+        rgba[i * 4] = r;
+        rgba[i * 4 + 1] = g;
+        rgba[i * 4 + 2] = b;
+        rgba[i * 4 + 3] = a;
+    }
+    if w == 256 && h == 256 { Some(rgba) } else { None }
+}
+
+// Atlas desde una ruta concreta (RD_ATLAS): vale un .jar del que se saca
+// terrain.png, o un .png suelto. Asi el jugador puede decir de donde coger las
+// texturas si las tiene en una instalacion que no es la de %APPDATA%.
+pub fn cargar_atlas_de_ruta(ruta: &str) -> Option<(u32, u32, Vec<u8>)> {
+    let datos = std::fs::read(ruta).ok()?;
+    let png_bytes = if datos.starts_with(b"PK") {
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(datos)).ok()?;
+        let mut entry = archive.by_name("terrain.png").ok()?;
+        let mut v = Vec::new();
+        std::io::Read::read_to_end(&mut entry, &mut v).ok()?;
+        v
+    } else {
+        datos
+    };
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let (w, h) = (reader.info().width as usize, reader.info().height as usize);
+    let mut raw = vec![0u8; w * h * 4];
+    let out = reader.next_frame(&mut raw).ok()?;
+    let (w, h) = (out.width as usize, out.height as usize);
+    let mut rgba = vec![0u8; w * h * 4];
+    for i in 0..w * h {
+        let (r, g, b, a) = match out.color_type {
+            png::ColorType::Grayscale => { let v = raw[i]; (v, v, v, 255) }
+            png::ColorType::GrayscaleAlpha => { let v = raw[i * 2]; (v, v, v, raw[i * 2 + 1]) }
+            png::ColorType::Rgb => (raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2], 255),
+            png::ColorType::Rgba => (raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2], raw[i * 4 + 3]),
+            _ => (0, 0, 0, 255),
+        };
+        rgba[i * 4] = r;
+        rgba[i * 4 + 1] = g;
+        rgba[i * 4 + 2] = b;
+        rgba[i * 4 + 3] = a;
+    }
+    Some((w as u32, h as u32, rgba))
+}
+
+// Saca un PNG de un jar de una version concreta (instalacion local del usuario)
+// y lo devuelve como RGBA de 8 bits. Sirve para terrain.png y para char.png.
+pub fn cargar_png_del_jar(version: &str, nombre: &str) -> Option<(u32, u32, Vec<u8>)> {
+    let appdata = std::env::var("APPDATA").ok()?;
+    let jar = format!("{}/.minecraft/versions/{v}/{v}.jar", appdata, v = version);
+    let data = std::fs::read(&jar).ok()?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data)).ok()?;
+    let mut entry = archive.by_name(nombre).ok()?;
+    let mut png_bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut png_bytes).ok()?;
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let (w, h) = (reader.info().width as usize, reader.info().height as usize);
+    let mut raw = vec![0u8; w * h * 4];
+    let out = reader.next_frame(&mut raw).ok()?;
+    let (w, h) = (out.width as usize, out.height as usize);
+    let mut rgba = vec![0u8; w * h * 4];
+    for i in 0..w * h {
+        let (r, g, b, a) = match out.color_type {
+            png::ColorType::Grayscale => { let v = raw[i]; (v, v, v, 255) }
+            png::ColorType::GrayscaleAlpha => { let v = raw[i * 2]; (v, v, v, raw[i * 2 + 1]) }
+            png::ColorType::Rgb => (raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2], 255),
+            png::ColorType::Rgba => (raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2], raw[i * 4 + 3]),
+            _ => (0, 0, 0, 255),
+        };
+        rgba[i * 4] = r;
+        rgba[i * 4 + 1] = g;
+        rgba[i * 4 + 2] = b;
+        rgba[i * 4 + 3] = a;
+    }
+    Some((w as u32, h as u32, rgba))
+}
+
+// Textura de REEMPLAZO: la usa el juego cuando el equipo no tiene ninguna copia
+// de la version original (no es de Mojang: los colores y el ruido son nuestros).
+// Es jugable y se ve decente en vez del tablero magenta de depuracion, que queda
+// solo si se pide con RD_ATLAS_DEBUG=1.
+pub fn generate_atlas() -> Vec<u8> {
+    // 0 = hierba, 1 = piedra (los dos que usa rd-132211); el resto, tonos variados
+    // para que las otras versiones no salgan de un solo color.
+    const BASE: [(i32, i32, i32); 16] = [
+        (95, 159, 53),
+        (128, 128, 128),
+        (134, 96, 67),
+        (163, 122, 84),
+        (150, 62, 52),
+        (196, 196, 196),
+        (86, 122, 176),
+        (206, 186, 74),
+        (74, 122, 58),
+        (170, 170, 170),
+        (58, 58, 58),
+        (120, 90, 150),
+        (150, 110, 90),
+        (90, 150, 160),
+        (200, 140, 120),
+        (110, 110, 120),
+    ];
+    let debug = std::env::var_os("RD_ATLAS_DEBUG").is_some();
+    let mut data = vec![0u8; ATLAS_SIZE * ATLAS_SIZE * 4];
+    for ty in 0..TILES_PER_ROW {
+        for tx in 0..TILES_PER_ROW {
+            let tile = ty * TILES_PER_ROW + tx;
+            let (br, bg, bb) = if tile < 16 { BASE[tile] } else { (110, 110, 120) };
+            for py in 0..TILE {
+                for px in 0..TILE {
+                    let x = tx * TILE + px;
+                    let y = ty * TILE + py;
+                    let i = (y * ATLAS_SIZE + x) * 4;
+                    if debug {
+                        let (r, g, b) = if (px / 4 + py / 4) % 2 == 0 { (0, 0, 0) } else { (255, 0, 255) };
+                        data[i] = r;
+                        data[i + 1] = g;
+                        data[i + 2] = b;
+                        data[i + 3] = 255;
+                        continue;
+                    }
+                    // ruido fijo por texel: el mundo se ve con textura y no liso
+                    let h = (hash2(x, y, 0x9e37_79b9) % 41) as i32 - 20;
+                    data[i] = (br + h).clamp(0, 255) as u8;
+                    data[i + 1] = (bg + h).clamp(0, 255) as u8;
+                    data[i + 2] = (bb + h).clamp(0, 255) as u8;
+                    data[i + 3] = 255;
+                }
+            }
+        }
+    }
+    data
+}
+
+// Genera la malla de un chunk de 16x16 (x,y) x 64 (z). Solo caras visibles.
+// Coordenadas de render: X=x, Y=z (arriba), Z=y.
+// capa 0 = caras a plena luz, capa 1 = caras con bloque solido encima en su
+// columna (Tile.render del original las parte con la comparacion `br == c`).
+pub fn build_chunk_mesh(level: &Level, cx: usize, cy: usize, capa: u8) -> (Vec<Vertex>, Vec<u32>) {
+    let mut verts: Vec<Vertex> = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    // (dx, dy, dz del vecino, factor de cara, posicion donde se muestrea getBrightness,
+    //  4 esquinas en (x, z, y) locales del bloque)
+    // Factores de Tile.render del original: el eje vertical vale 1.0 y los dos
+    // horizontales 0.8 y 0.6. En el original el eje vertical es la "y"; aqui es la z.
+    let faces: [(i32, i32, i32, f32, (i32, i32, i32), [[f32; 3]; 4]); 6] = [
+        (0, 0, 1, 1.0, (0, 0, 0), [[0.0, 1.0, 0.0], [0.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 0.0]]),
+        (0, 0, -1, 1.0, (0, 0, -1), [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]]),
+        (1, 0, 0, 0.6, (1, 0, 0), [[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0], [1.0, 0.0, 1.0]]),
+        (-1, 0, 0, 0.6, (-1, 0, 0), [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 1.0], [0.0, 1.0, 0.0]]),
+        (0, 1, 0, 0.8, (0, 1, 0), [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0]]),
+        (0, -1, 0, 0.8, (0, -1, 0), [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]),
+    ];
+    let uvs = [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]];
+    for lx in 0..CHUNK {
+        for ly in 0..CHUNK {
+            let x = cx * CHUNK + lx;
+            let y = cy * CHUNK + ly;
+            for z in 0..crate::world::DEPTH as i32 {
+                let b = level.get(x as i32, y as i32, z);
+                if b == AIR {
+                    continue;
+                }
+                // Tile por altura como el Chunk original: capa superior (z==top) = pasto,
+                // resto = roca. En el terrain.png original: tile 0 = verde (pasto), tile 1 = gris (roca).
+                let top = (crate::world::DEPTH * 2 / 3) as i32;
+                let tile = if z == top { 0.0 } else { 1.0 };
+                // UV como el original: 0.0624375 (= 16/256 menos un pelo) en vez del
+                // 1/16 exacto. Ese margen evita que, al muestrear, el borde de la cara
+                // agarre la ultima columna del tile vecino del atlas (la roca gris),
+                // que es lo que ensuciaba el pasto a distancia.
+                let u0 = tile / 16.0;
+                let u1 = u0 + 0.0624375;
+                let v0 = 0.0;
+                let v1 = 0.0624375;
+                for (face, f) in faces.iter().enumerate() {
+                    let (dx, dy, dz, factor, (ox, oy, oz), corners) = *f;
+                    if level.get(x as i32 + dx, y as i32 + dy, z + dz) != AIR {
+                        continue;
+                    }
+                    let brillo = level.brightness(x as i32 + ox, y as i32 + oy, z + oz);
+                    if (capa == 0) != (brillo >= 1.0) {
+                        continue;
+                    }
+                    let shade = factor * brillo;
+                    let base = verts.len() as u32;
+                    for (ci, c) in corners.iter().enumerate() {
+                        let u = if uvs[ci][0] > 0.5 { u1 } else { u0 };
+                        let v = if uvs[ci][1] > 0.5 { v1 } else { v0 };
+                        verts.push(Vertex {
+                            pos: [x as f32 + c[0], z as f32 + c[1], y as f32 + c[2]],
+                            uv: [u, v],
+                            shade,
+                        });
+                    }
+                    let _ = face;
+                    idx.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+                }
+            }
+        }
+    }
+    (verts, idx)
+}

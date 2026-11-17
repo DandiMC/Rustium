@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Premain-Class: rustium.bench.Agent
+Can-Retransform-Classes: true
+

@@ -1,0 +1,43 @@
+/target
+level.dat
+*.log
+*.raw
+*.class
+
+# Salidas de compilacion: se regeneran (dist/ lo escribe installer/build.ps1)
+/dist/
+
+# Galeria de capturas del launcher: material de entrega, no forma parte del
+# launcher ni de su instalador.
+/web/
+
+# Ruta del linker de esta maquina; cada PC usa la suya.
+/.cargo/config.toml
+
+# Notas de analisis: material de trabajo, no forma parte del launcher.
+/analisis/*.md
+/analisis/cinco/*.md
+
+# Material de analisis, pesado y reproducible: jars y nativos descomprimidos,
+# capturas de las mediciones y el descompilador.
+/analisis/mcmod/
+/analisis/capturas/
+/analisis/all/
+/analisis/orig_build/
+/analisis/herramientas/
+/analisis/agent/rustbench.jar
+
+# Codigo y texturas de Mojang: aqui solo se usan para comparar en local, no se
+# publican. Las fuentes descomprimidas de cada version y los volcados del
+# descompilador se quedan fuera del repo (el guion y las conclusiones si van).
+/analisis/src/
+/analisis/cinco/a/
+/analisis/cinco/b/
+/analisis/cinco/rd-*.txt
+/analisis/atlas/terrain.png
+/analisis/atlas/atlas_zoom.png
+/analisis/atlas/tiles_0_7_zoom.png
+/analisis/ref/*.class
+
+# Ajustes locales de las herramientas
+.claude/settings.local.json
