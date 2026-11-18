@@ -1003,28 +1003,64 @@ fn digest_of(body: &str) -> Option<String> {
     None
 }
 
-/// The slice of the release JSON that describes the installer, from its own
-/// `browser_download_url` up to the next asset: the url, the size and the digest
-/// then all come from the same asset. The `.exe` wins, so a notes file or a zip
-/// published next to it never gets taken for the installer, and only https is
+/// Every object inside the release's `"assets": [ … ]` array, cut out by counting
+/// braces and skipping what is inside strings. Each asset is handed over whole, so
+/// its `size` and its `digest` are read from the same object no matter where GitHub
+/// prints them: `digest` comes before `browser_download_url`, and looking forward
+/// from the url alone never saw it.
+fn asset_objects(body: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let Some(at) = body.find("\"assets\"") else {
+        return out;
+    };
+    let Some(open) = body[at..].find('[') else {
+        return out;
+    };
+    let base = at + open;
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    let mut in_str = false;
+    let mut escape = false;
+    for (i, &c) in body[base..].as_bytes().iter().enumerate() {
+        if in_str {
+            if escape {
+                escape = false;
+            } else if c == b'\\' {
+                escape = true;
+            } else if c == b'"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match c {
+            b'"' => in_str = true,
+            b'{' => {
+                if depth == 0 {
+                    start = i;
+                }
+                depth += 1;
+            }
+            b'}' => {
+                if depth > 0 {
+                    depth -= 1;
+                    if depth == 0 {
+                        out.push(&body[base + start..base + i + 1]);
+                    }
+                }
+            }
+            b']' if depth == 0 => break,
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The asset that describes the installer. The `.exe` wins, so a notes file or a
+/// zip published next to it never gets taken for the installer, and only https is
 /// accepted.
 fn installer_asset(body: &str) -> Option<(&str, String)> {
-    let mut starts = Vec::new();
-    let mut from = 0;
-    while let Some(at) = body[from..].find("\"browser_download_url\"") {
-        starts.push(from + at);
-        from += at + 22;
-    }
     let mut fallback: Option<(&str, String)> = None;
-    for (i, &start) in starts.iter().enumerate() {
-        let end = starts.get(i + 1).copied().unwrap_or(body.len());
-        // Widen back to this object's opening brace, so a key published before the
-        // url is seen too, and stop at the brace that closes it: the next asset's
-        // size never leaks into this one.
-        let head = body[..start].rfind('{').unwrap_or(start);
-        let head = if body[head..start].contains('}') { start } else { head };
-        let tail = body[head..end].rfind('}').map(|i| head + i + 1).unwrap_or(end);
-        let asset = &body[head..tail];
+    for asset in asset_objects(body) {
         let Some(url) = json_field(asset, "browser_download_url").filter(|u| https_ok(u)) else {
             continue;
         };
@@ -3508,5 +3544,31 @@ mod tests {
         let u = parse_release(notes_only).expect("release");
         assert_eq!(u.setup_url.as_deref(), Some("https://x/notes.txt"));
         assert!(u.setup_sha256.is_none());
+    }
+
+    #[test]
+    fn github_prints_the_digest_before_the_url() {
+        // Field order copied from a live release: `size` and `digest` come before
+        // `browser_download_url`, so reading forward from the url finds neither.
+        let body = r#"{"tag_name":"v0.1.2","html_url":"https://github.com/DandiMC/Rustium/releases/tag/v0.1.2",
+        "assets":[{"url":"https://api.github.com/repos/DandiMC/Rustium/releases/assets/1",
+        "name":"Rustium-0.1.2-setup.exe","content_type":"application/octet-stream",
+        "state":"uploaded","size":10416774,
+        "digest":"sha256:e4b6dfc935c6911a32c6379790a78240b5ff18b6067ee6f39363ffc8c5947726",
+        "download_count":0,"created_at":"2026-11-18T16:12:27Z",
+        "browser_download_url":"https://github.com/DandiMC/Rustium/releases/download/v0.1.2/Rustium-0.1.2-setup.exe"}],
+        "tarball_url":"https://api.github.com/repos/DandiMC/Rustium/tarball/v0.1.2",
+        "body":"{\"note\":\"a brace } and a quote \\\" inside\"}"}"#;
+        let u = parse_release(body).expect("release");
+        assert_eq!(
+            u.setup_url.as_deref(),
+            Some("https://github.com/DandiMC/Rustium/releases/download/v0.1.2/Rustium-0.1.2-setup.exe")
+        );
+        assert_eq!(u.setup_size, 10416774);
+        assert_eq!(
+            u.setup_sha256.as_deref(),
+            Some("e4b6dfc935c6911a32c6379790a78240b5ff18b6067ee6f39363ffc8c5947726")
+        );
+        assert!(is_newer(&u.version, "0.1.0"));
     }
 }
