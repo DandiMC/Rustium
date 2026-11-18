@@ -31,6 +31,9 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\rustium.ico
+; Apache 2.0: the licence text travels with every copy, and the page makes the
+; attribution visible before the first install.
+LicenseFile=..\LICENSE
 ; Icon of setup.exe itself (the pixel R).
 SetupIconFile=..\assets\rustium.ico
 ArchitecturesAllowed=x64compatible
@@ -53,8 +56,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "..\target\x86_64-pc-windows-gnu\release\rustium.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\rubydung-rs.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
-; Optional: drop a README or licence next to the executables.
-; Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
+; Apache 2.0 asks for the licence and the attribution notice to be handed to
+; every recipient, so they are installed next to the executables.
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE"; Flags: ignoreversion
+Source: "..\NOTICE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\rustium.ico"

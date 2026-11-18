@@ -203,7 +203,10 @@ fn texts(l: Lang) -> Texts {
                     it draws its own replacement texture.\n\n\
                     Your Minecraft licence applies to your own copy; this launcher does not modify or \
                     redistribute it. The only network request is an optional version check against the \
-                    project's release list, which sends no information about you.",
+                    project's release list, which sends no information about you.\n\n\
+                    Rustium is Copyright (c) 2026 DandiMC and is distributed under the Apache License \
+                    2.0; the LICENSE and NOTICE files that come with the program must travel with any \
+                    copy of it.",
             detected: "detected",
             manual: "chosen by hand",
             tex_found: "  Textures: {path} ({source})",
@@ -258,7 +261,10 @@ fn texts(l: Lang) -> Texts {
                     textura de reemplazo.\n\n\
                     La licencia de Minecraft se aplica a tu copia; este launcher no la modifica ni la \
                     redistribuye. La única petición de red es una comprobación opcional de versión contra la \
-                    lista de versiones del proyecto, que no envía ninguna información sobre ti.",
+                    lista de versiones del proyecto, que no envía ninguna información sobre ti.\n\n\
+                    Rustium es Copyright (c) 2026 DandiMC y se distribuye bajo la licencia Apache 2.0; \
+                    los archivos LICENSE y NOTICE que acompañan al programa deben conservarse en \
+                    cualquier copia.",
             detected: "detectada",
             manual: "ruta elegida a mano",
             tex_found: "  Texturas: {path} ({source})",
@@ -313,7 +319,10 @@ fn texts(l: Lang) -> Texts {
                     sua própria textura substituta.\n\n\
                     A licença do Minecraft aplica-se à tua cópia; este launcher não a modifica nem a \
                     redistribui. O único pedido de rede é uma verificação opcional de versão contra a lista \
-                    de versões do projeto, que não envia informação sobre ti.",
+                    de versões do projeto, que não envia informação sobre ti.\n\n\
+                    O Rustium é Copyright (c) 2026 DandiMC e é distribuído ao abrigo da licença \
+                    Apache 2.0; os ficheiros LICENSE e NOTICE que acompanham o programa devem ser \
+                    mantidos em qualquer cópia.",
             detected: "detetada",
             manual: "caminho escolhido à mão",
             tex_found: "  Texturas: {path} ({source})",
@@ -368,7 +377,10 @@ fn texts(l: Lang) -> Texts {
                     aucune, dessine sa propre texture de remplacement.\n\n\
                     Votre licence Minecraft s'applique à votre propre copie ; ce launcher ne la modifie pas \
                     et ne la redistribue pas. La seule requête réseau est une vérification facultative de \
-                    version auprès de la liste des versions du projet, qui n'envoie rien sur vous.",
+                    version auprès de la liste des versions du projet, qui n'envoie rien sur vous.\n\n\
+                    Rustium est Copyright (c) 2026 DandiMC et est distribué sous la licence Apache \
+                    2.0 ; les fichiers LICENSE et NOTICE fournis avec le programme doivent être \
+                    conservés avec toute copie.",
             detected: "détectée",
             manual: "chemin choisi à la main",
             tex_found: "  Textures : {path} ({source})",
@@ -423,7 +435,10 @@ fn texts(l: Lang) -> Texts {
                     keine, zeichnet es eine eigene Ersatztextur.\n\n\
                     Deine Minecraft-Lizenz gilt für deine eigene Kopie; dieser Launcher verändert sie nicht \
                     und gibt sie nicht weiter. Die einzige Netzwerkanfrage ist eine optionale \
-                    Versionsprüfung gegen die Versionsliste des Projekts, die nichts über dich sendet.",
+                    Versionsprüfung gegen die Versionsliste des Projekts, die nichts über dich sendet.\n\n\
+                    Rustium ist Copyright (c) 2026 DandiMC und wird unter der Apache-Lizenz 2.0 \
+                    verbreitet; die Dateien LICENSE und NOTICE neben dem Programm müssen bei jeder \
+                    Kopie erhalten bleiben.",
             detected: "gefunden",
             manual: "Pfad von Hand gewählt",
             tex_found: "  Texturen: {path} ({source})",
