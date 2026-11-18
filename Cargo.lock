@@ -2639,7 +2639,7 @@ dependencies = [
 
 [[package]]
 name = "rubydung-rs"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "eframe",
  "png 0.17.16",

@@ -60,6 +60,36 @@ const CARAS: [(i32, i32, i32, usize, [[f32; 5]; 4]); 6] = [
     ]),
 ];
 
+/// Los dos planos cruzados del arbusto, tal cual los emite `Bush.render`: giros
+/// de 45 y 135 grados, centro del bloque, de suelo a techo, textura 15 y blanco
+/// (sin sombra). Devuelve 8 vertices: 4 por plano; el original los emite dos
+/// veces, uno por sentido, porque hay back-face culling.
+pub fn arbusto(x: f32, y: f32, z: f32) -> [([f32; 3], [f32; 2]); 8] {
+    let tex = 15u32;
+    let u0 = (tex % 16) as f32 / 16.0;
+    let v0 = (tex / 16) as f32 / 16.0;
+    let duv = 0.0624375f32;
+    let mut out = [([0.0f32; 3], [0.0f32; 2]); 8];
+    for r in 0..2usize {
+        let a = r as f32 * std::f32::consts::PI / 2.0 + std::f32::consts::FRAC_PI_4;
+        let xa = a.sin() * 0.5;
+        let za = a.cos() * 0.5;
+        let (x0, x1) = (x + 0.5 - xa, x + 0.5 + xa);
+        let (z0, z1) = (z + 0.5 - za, z + 0.5 + za);
+        let (y0, y1) = (y, y + 1.0);
+        let quad = [
+            ([x0, z0, y1], [u0 + duv, v0]),
+            ([x1, z1, y1], [u0, v0]),
+            ([x1, z1, y0], [u0, v0 + duv]),
+            ([x0, z0, y0], [u0 + duv, v0 + duv]),
+        ];
+        for (i, v) in quad.iter().enumerate() {
+            out[r * 4 + i] = *v;
+        }
+    }
+    out
+}
+
 pub fn construir(nivel: &Nivel, cx: usize, cy: usize) -> (Vec<Vertex>, Vec<u32>) {
     let mut verts = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
@@ -70,6 +100,24 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize) -> (Vec<Vertex>, Vec<u32>)
             for z in 0..DEPTH {
                 let id = nivel.get(x as i32, y as i32, z as i32);
                 if id == tiles::AIRE {
+                    continue;
+                }
+                if id == tiles::ARBUSTO {
+                    // Bush.render: solo en la capa iluminada; sus dos planos van y
+                    // vuelven (culling) y la textura tiene alfa que el shader corta.
+                    if nivel.is_lit(x as i32, y as i32, z as i32) {
+                        let base = verts.len() as u32;
+                        for (pos, uv) in arbusto(x as f32, y as f32, z as f32) {
+                            verts.push(Vertex { pos, uv, shade: 1.0 });
+                        }
+                        for q in 0..2u32 {
+                            let b = base + q * 4;
+                            idx.extend_from_slice(&[
+                                b, b + 1, b + 2, b, b + 2, b + 3,
+                                b + 2, b + 1, b, b + 3, b + 2, b,
+                            ]);
+                        }
+                    }
                     continue;
                 }
                 for (dx, dy, dz, cara, esquinas) in CARAS.iter() {
@@ -98,4 +146,27 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize) -> (Vec<Vertex>, Vec<u32>)
         }
     }
     (verts, idx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn el_arbusto_son_dos_planos_cruzados() {
+        let v = arbusto(10.0, 20.0, 30.0);
+        let d = std::f32::consts::FRAC_1_SQRT_2 * 0.5;
+        // Primer plano, de 45 grados: de suelo a techo, esquina (x0, z0) y (x1, z1)
+        assert!((v[0].0[0] - (10.5 - d)).abs() < 1e-5);
+        assert!((v[0].0[1] - (30.5 - d)).abs() < 1e-5);
+        assert!((v[0].0[2] - 21.0).abs() < 1e-5);
+        assert!((v[2].0[2] - 20.0).abs() < 1e-5);
+        // UV: tile 15, u de 0.9375 a 0.9999375, v de 0 a 0.0624375
+        assert!((v[0].1[0] - 0.9999375).abs() < 1e-6);
+        assert!((v[0].1[1] - 0.0).abs() < 1e-6);
+        assert!((v[2].1[1] - 0.0624375).abs() < 1e-6);
+        // Segundo plano, a 135 grados: el mismo cuadrado cruzado
+        assert!((v[4].0[1] - (30.5 + d)).abs() < 1e-5);
+        assert!((v[6].0[1] - (30.5 - d)).abs() < 1e-5);
+    }
 }

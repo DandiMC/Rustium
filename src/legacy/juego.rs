@@ -340,7 +340,10 @@ impl ApplicationHandler for App {
                             "2" => self.pintura = tiles::TIERRA,
                             "3" => self.pintura = tiles::LADRILLO,
                             "4" => self.pintura = tiles::MADERA,
-                            "6" => self.pintura = tiles::ARBUSTO,
+                            // rd-160052 no define el tile Bush: su jar no lo tiene.
+                            "6" if self.version != "rd-160052" => {
+                                self.pintura = tiles::ARBUSTO
+                            }
                             // RubyDung: G suelta un zombi en la posicion del jugador
                             // (sin resetPos, a diferencia de los 10 iniciales)
                             "g" | "G" => {

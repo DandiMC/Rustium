@@ -43,6 +43,11 @@ fn vs_main(@location(0) pos: vec3<f32>, @location(1) uv: vec2<f32>, @location(2)
 @fragment
 fn fs_main(v: VOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, v.uv);
+    // GL_ALPHA_TEST con GL_GREATER 0.5: el original descarta el texel, no lo
+    // mezcla. Es lo que recorta las hojas del arbusto (tile 15 del atlas).
+    if (c.a < 0.5) {
+        discard;
+    }
     let dist = max(v.fogz, 0.0);
     var fog = 1.0 - exp(-dist * dist * u.fog_density * u.fog_density);
     if (u.fog_exp > 0.5) {
