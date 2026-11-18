@@ -40,8 +40,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Name it exactly like this so the in-app updater can find and run it.
 SetupMutex=RustiumSetupMutex
-; Pick the Windows language so a double-click never stops at a language picker.
+; Pick the Windows language so a double-click never stops at a language picker:
+; the detection alone only preselects the combo, ShowLanguageDialog=no is what
+; suppresses the dialog itself.
 LanguageDetectionMethod=uilanguage
+ShowLanguageDialog=no
 UsePreviousLanguage=no
 
 [Languages]
