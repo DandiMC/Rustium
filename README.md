@@ -14,7 +14,7 @@ copy already on your computer and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.1.1-setup.exe`.
+You only need **the installer**: `Rustium-0.1.2-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
