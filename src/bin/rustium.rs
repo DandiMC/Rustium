@@ -107,17 +107,6 @@ impl GameVersion {
         }
     }
 
-    /// One line about what the build brings, for the picker.
-    fn note(self) -> &'static str {
-        match self {
-            GameVersion::Rd132211 => "RubyDung",
-            GameVersion::Rd132328 => "+ zombis",
-            GameVersion::Rd20090515 => "+ particulas",
-            GameVersion::Rd160052 => "+ arbustos",
-            GameVersion::Rd161348 => "ultimo",
-        }
-    }
-
     /// The executable that runs this build.
     fn exe(self) -> &'static str {
         let win = cfg!(windows);
@@ -598,6 +587,113 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
     }
 }
 
+
+/// Novedades de las versiones del launcher 0.1.4, 0.1.5 y 0.1.6.
+/// (titulo, fecha, resumen, cuerpo)
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 3] {
+    match l {
+        Lang::En => [
+            (
+                "All five pre-classics are here",
+                "18 Nov 2026",
+                "rd-132211, rd-132328, rd-20090515, rd-160052 and rd-161348, with a picker and one executable per build.",
+                "The launcher now starts the five pre-classic builds Mojang published. The picker remembers the last one (game= in config.txt), every build has its own executable and rd-161348 shares its jar with rd-20090515. rd-131655 is missing because no jar was ever published.",
+            ),
+            (
+                "The 20090515 bush",
+                "18 Nov 2026",
+                "Two crossed quads, leaf texture and alpha cutout, just like Bush.render.",
+                "The bush is no longer a cube: it draws the original's two quads at 45 and 135 degrees, unlit, and the shader cuts texels below 0.5 alpha (the jar's GL_ALPHA_TEST). rd-160052 has no Bush tile, so it ignores the 6 key.",
+            ),
+            (
+                "The zombies dance again",
+                "19 Nov 2026",
+                "Arms, legs and head turn in radians, like Cube.render; the picker drops its notes.",
+                "The zombie model kept its angles in radians and the port treated them as degrees: the limbs moved 57 times less and looked stiff. Arms, legs and head now have the same dance as the Java original, and positions are interpolated between ticks so they no longer snap. The per-version notes leave the picker and move to News, where they belong.",
+            ),
+        ],
+        Lang::Es => [
+            (
+                "Las cinco pre-clásicas, en el launcher",
+                "18 nov 2026",
+                "rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348, con selector y un ejecutable por versión.",
+                "El launcher ya arranca las cinco versiones pre-clásicas que Mojang publicó. El selector recuerda la última elegida (game= en config.txt), cada build tiene su propio ejecutable y rd-161348 comparte jar con rd-20090515. rd-131655 no aparece porque nunca hubo un jar publicado.",
+            ),
+            (
+                "El arbusto del 20090515",
+                "18 nov 2026",
+                "Dos planos cruzados, textura de hojas y recorte por alfa, como Bush.render.",
+                "El arbusto ya no es un cubo: dibuja los dos planos cruzados a 45° y 135° del original, sin sombra, y el shader descarta los píxeles con alfa menor que 0.5 (el GL_ALPHA_TEST del jar). rd-160052 no tiene el tile Bush, así que ignora la tecla 6.",
+            ),
+            (
+                "Los zombis ya bailan como en el original",
+                "19 nov 2026",
+                "Brazos, piernas y cabeza giran en radianes, como Cube.render; el selector deja de llevar notas.",
+                "El modelo del zombi guardaba los ángulos en radianes y el port los trataba como grados: las extremidades se movían 57 veces menos y parecían tiesas. Ahora brazos, piernas y cabeza tienen el mismo baile que el Java original, y la posición se interpola entre ticks para que no den tirones. Las notas de cada versión salen del selector y pasan a Novedades, que es donde tienen que estar.",
+            ),
+        ],
+        Lang::Pt => [
+            (
+                "As cinco pré-clássicas, no launcher",
+                "18 nov 2026",
+                "rd-132211, rd-132328, rd-20090515, rd-160052 e rd-161348, com seletor e um executável por versão.",
+                "O launcher já inicia as cinco versões pré-clássicas que a Mojang publicou. O seletor lembra a última escolhida (game= em config.txt), cada build tem o seu próprio executável e a rd-161348 partilha o jar com a rd-20090515. A rd-131655 não aparece porque nunca houve um jar publicado.",
+            ),
+            (
+                "O arbusto da 20090515",
+                "18 nov 2026",
+                "Dois planos cruzados, textura de folhas e recorte por alfa, como Bush.render.",
+                "O arbusto já não é um cubo: desenha os dois planos cruzados a 45° e 135° do original, sem sombra, e o shader descarta os píxeis com alfa inferior a 0.5 (o GL_ALPHA_TEST do jar). A rd-160052 não tem o tile Bush, por isso ignora a tecla 6.",
+            ),
+            (
+                "Os zombis já dançam como no original",
+                "19 nov 2026",
+                "Braços, pernas e cabeça giram em radianos, como Cube.render; o seletor deixa de ter notas.",
+                "O modelo do zombi guardava os ângulos em radianos e o port tratava-os como graus: os membros moviam-se 57 vezes menos e pareciam rígidos. Agora braços, pernas e cabeça têm a mesma dança que o Java original, e a posição é interpolada entre ticks para não dar sacões. As notas de cada versão saem do seletor e passam para Novidades, que é onde pertencem.",
+            ),
+        ],
+        Lang::Fr => [
+            (
+                "Les cinq pré-classiques, dans le launcher",
+                "18 nov. 2026",
+                "rd-132211, rd-132328, rd-20090515, rd-160052 et rd-161348, avec un sélecteur et un exécutable par version.",
+                "Le launcher démarre maintenant les cinq versions pré-classiques publiées par Mojang. Le sélecteur retient la dernière (game= dans config.txt), chaque build a son propre exécutable et rd-161348 partage son jar avec rd-20090515. rd-131655 est absente car aucun jar n'a jamais été publié.",
+            ),
+            (
+                "Le buisson de 20090515",
+                "18 nov. 2026",
+                "Deux plans croisés, texture de feuilles et découpe alpha, comme Bush.render.",
+                "Le buisson n'est plus un cube : il dessine les deux plans croisés à 45° et 135° de l'original, sans ombrage, et le shader écarte les texels sous 0.5 d'alpha (le GL_ALPHA_TEST du jar). rd-160052 n'a pas le tile Bush, donc elle ignore la touche 6.",
+            ),
+            (
+                "Les zombies dansent à nouveau",
+                "19 nov. 2026",
+                "Bras, jambes et tête tournent en radians, comme Cube.render ; le sélecteur n'a plus de notes.",
+                "Le modèle du zombie gardait ses angles en radians et le port les traitait comme des degrés : les membres bougeaient 57 fois moins et semblaient raides. Bras, jambes et tête ont maintenant la même danse que le Java original, et la position est interpolée entre les ticks pour éviter les à-coups. Les notes par version quittent le sélecteur pour Novedades, leur place.",
+            ),
+        ],
+        Lang::De => [
+            (
+                "Alle fünf Pre-Classics im Launcher",
+                "18. Nov. 2026",
+                "rd-132211, rd-132328, rd-20090515, rd-160052 und rd-161348, mit Auswahl und einer EXE pro Build.",
+                "Der Launcher startet jetzt die fünf von Mojang veröffentlichten Pre-Classic-Versionen. Die Auswahl merkt sich die letzte (game= in config.txt), jeder Build hat seine eigene EXE und rd-161348 teilt sich das Jar mit rd-20090515. rd-131655 fehlt, weil nie ein Jar veröffentlicht wurde.",
+            ),
+            (
+                "Der Busch von 20090515",
+                "18. Nov. 2026",
+                "Zwei gekreuzte Flächen, Blatttextur und Alpha-Cutout, wie Bush.render.",
+                "Der Busch ist kein Würfel mehr: Er zeichnet die beiden gekreuzten Flächen des Originals bei 45° und 135°, ohne Beleuchtung, und der Shader verwirft Texel unter 0.5 Alpha (das GL_ALPHA_TEST des Jars). rd-160052 hat kein Bush-Tile und ignoriert daher die Taste 6.",
+            ),
+            (
+                "Die Zombies tanzen wieder",
+                "19. Nov. 2026",
+                "Arme, Beine und Kopf drehen sich in Radianten, wie Cube.render; die Auswahl verliert ihre Notizen.",
+                "Das Zombie-Modell speicherte seine Winkel in Radianten, der Port behandelte sie als Grad: Die Gliedmaßen bewegten sich 57-mal weniger und wirkten steif. Arme, Beine und Kopf haben jetzt denselben Tanz wie das Java-Original, und die Position wird zwischen Ticks interpoliert, damit nichts springt. Die Notizen pro Version verlassen die Auswahl und wandern zu Neuigkeiten, wo sie hingehören.",
+            ),
+        ],
+    }
+}
 
 fn ui_texts(l: Lang) -> UiTexts {
     match l {
@@ -2397,7 +2493,7 @@ mod ui {
         dl_done: Option<PathBuf>,
         dl_err: Option<String>,
         starting_setup: bool,
-        news_open: [bool; 2],
+        news_open: [bool; 5],
         bench: Option<BenchRun>,
         bench_fps: Option<u32>,
         bench_java: Option<u32>,
@@ -2464,7 +2560,7 @@ mod ui {
                 dl_done: None,
                 dl_err: None,
                 starting_setup: false,
-                news_open: [std::env::var("RUSTIUM_NEWS_OPEN").is_ok(); 2],
+                news_open: [std::env::var("RUSTIUM_NEWS_OPEN").is_ok(); 5],
                 bench: None,
                 bench_fps: None,
                 bench_java: None,
@@ -3084,17 +3180,13 @@ mod ui {
                                         .width(190.0)
                                         .show_ui(ui, |ui| {
                                             for v in GameVersion::ALL {
-                                                let label =
-                                                    format!("{}  ·  {}", v.id(), v.note());
-                                                ui.selectable_value(&mut sel, v, label);
+                                                ui.selectable_value(&mut sel, v, v.id());
                                             }
                                         });
                                     if sel != self.opts.game {
                                         self.opts.game = sel;
                                         save_config(self.lang, &self.insts[1..], sel);
                                     }
-                                    ui.add_space(8.0);
-                                    ui.label(RichText::new(sel.note()).size(12.0).color(SOFT));
                                 });
                                 ui.add_space(8.0);
                                 ui.horizontal(|ui| {
@@ -3278,6 +3370,20 @@ mod ui {
                                             u.see_less,
                                             Art::World,
                                         );
+                                        for (i, item) in version_news(self.lang).iter().enumerate() {
+                                            ui.add_space(12.0);
+                                            news_card(
+                                                ui,
+                                                item.0,
+                                                item.1,
+                                                item.2,
+                                                item.3,
+                                                &mut self.news_open[2 + i],
+                                                u.see_more,
+                                                u.see_less,
+                                                Art::Launcher,
+                                            );
+                                        }
                                         ui.add_space(12.0);
                                         ui.label(RichText::new(more_news).size(12.0).color(MUTED));
                                     });

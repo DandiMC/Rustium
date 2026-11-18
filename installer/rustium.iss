@@ -11,7 +11,7 @@
 ; also where the launcher keeps its config (lang=...) and downloaded updates.
 
 #define MyAppName "Rustium"
-#define MyAppVersion "0.1.5"
+#define MyAppVersion "0.1.6"
 #define MyAppPublisher "DandiMC"
 #define MyAppExeName "Rustium.exe"
 

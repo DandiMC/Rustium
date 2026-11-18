@@ -331,10 +331,13 @@ impl ApplicationHandler for App {
             e.y + fwd[2] * 0.3,
         ];
 
-        // Modelos de todos los zombis en un solo lote
+        // Modelos de todos los zombis en un solo lote. `a` es la fraccion de tick
+        // que sobra, como el partialTicks del original: sin ella la posicion salta
+        // a 60 Hz aunque se dibuje a 150 y el caminar se ve a tirones.
+        let a = (self.tick_acc * 60.0).clamp(0.0, 1.0);
         let mut verts: Vec<[f32; 5]> = Vec::with_capacity(self.zombis.len() * 216);
         for z in &self.zombis {
-            z.vertices(1.0, &mut verts);
+            z.vertices(a, &mut verts);
         }
 
         let fps = if self.show_fps { Some(self.fps) } else { None };

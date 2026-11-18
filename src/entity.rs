@@ -360,14 +360,18 @@ impl Zombie {
         let py = self.e.yo + (self.e.y - self.e.yo) * a;
         let pz = self.e.zo + (self.e.z - self.e.zo) * a;
 
-        let head_yr = ((time * 0.83).sin()) as f32;
-        let head_xr = time.sin() as f32 * 0.8;
-        let arm0_xr = ((time * 0.6662 + std::f64::consts::PI).sin() as f32) * 2.0;
-        let arm0_zr = ((time * 0.2312).sin() as f32 + 1.0) * 1.0;
-        let arm1_xr = ((time * 0.6662).sin() as f32) * 2.0;
-        let arm1_zr = ((time * 0.2812).sin() as f32 - 1.0) * 1.0;
-        let leg0_xr = ((time * 0.6662).sin() as f32) * 1.4;
-        let leg1_xr = ((time * 0.6662 + std::f64::consts::PI).sin() as f32) * 1.4;
+        // El original guarda estos valores en RADIANES: Cube.render los multiplica
+        // por 57.29578 al llamar a glRotatef. Nuestros helpers rot_x/rot_y/rot_z
+        // reciben grados, asi que hay que convertirlos; si se pasan tal cual, el
+        // zombi mueve los brazos 57 veces menos y se queda tieso.
+        let head_yr = (((time * 0.83).sin()) as f32).to_degrees();
+        let head_xr = (time.sin() as f32 * 0.8).to_degrees();
+        let arm0_xr = ((((time * 0.6662 + std::f64::consts::PI).sin()) as f32) * 2.0).to_degrees();
+        let arm0_zr = ((((time * 0.2312).sin()) as f32 + 1.0) * 1.0).to_degrees();
+        let arm1_xr = ((((time * 0.6662).sin()) as f32) * 2.0).to_degrees();
+        let arm1_zr = ((((time * 0.2812).sin()) as f32 - 1.0) * 1.0).to_degrees();
+        let leg0_xr = ((((time * 0.6662).sin()) as f32) * 1.4).to_degrees();
+        let leg1_xr = ((((time * 0.6662 + std::f64::consts::PI).sin()) as f32) * 1.4).to_degrees();
 
         // Transformacion comun: traslacion + escala + giro del zombi.
         // En el original: scale(1,-1,1), scale(size), translate(0,yy,0),

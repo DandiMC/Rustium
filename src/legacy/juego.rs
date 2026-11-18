@@ -487,11 +487,14 @@ impl ApplicationHandler for App {
             }
         }
 
-        // Zombis con el modelo de la piel (solo los que estan a la luz)
+        // Zombis con el modelo de la piel (solo los que estan a la luz). La
+        // posicion se interpola con la fraccion de tick que sobra, como el
+        // partialTicks del original.
+        let a = (self.tick_acc * 60.0).clamp(0.0, 1.0);
         let mut mv: Vec<[f32; 5]> = Vec::new();
         for z in &self.zombis {
             if self.nivel.is_lit(z.e.x as i32, z.e.y as i32, z.e.z as i32) {
-                z.vertices(1.0, &mut mv);
+                z.vertices(a, &mut mv);
             }
         }
 
