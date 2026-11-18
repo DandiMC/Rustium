@@ -14,7 +14,7 @@ copy already on your computer and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.1.0-setup.exe`.
+You only need **the installer**: `Rustium-0.1.1-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -75,7 +75,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.1.0-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.1.1-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 
