@@ -77,12 +77,82 @@ const BENCH_SPAWN: f32 = 0.5;
 
 type R<T> = Result<T, String>;
 
+/// Las cinco versiones pre-clasicas que trae el launcher, en orden de fecha.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum GameVersion {
+    Rd132211,
+    Rd132328,
+    Rd20090515,
+    Rd160052,
+    Rd161348,
+}
+
+impl GameVersion {
+    const ALL: [GameVersion; 5] = [
+        GameVersion::Rd132211,
+        GameVersion::Rd132328,
+        GameVersion::Rd20090515,
+        GameVersion::Rd160052,
+        GameVersion::Rd161348,
+    ];
+
+    /// The build name, as the original version is called everywhere else.
+    fn id(self) -> &'static str {
+        match self {
+            GameVersion::Rd132211 => "rd-132211",
+            GameVersion::Rd132328 => "rd-132328",
+            GameVersion::Rd20090515 => "rd-20090515",
+            GameVersion::Rd160052 => "rd-160052",
+            GameVersion::Rd161348 => "rd-161348",
+        }
+    }
+
+    /// One line about what the build brings, for the picker.
+    fn note(self) -> &'static str {
+        match self {
+            GameVersion::Rd132211 => "RubyDung",
+            GameVersion::Rd132328 => "+ zombis",
+            GameVersion::Rd20090515 => "+ particulas",
+            GameVersion::Rd160052 => "+ arbustos",
+            GameVersion::Rd161348 => "ultimo",
+        }
+    }
+
+    /// The executable that runs this build.
+    fn exe(self) -> &'static str {
+        let win = cfg!(windows);
+        match self {
+            GameVersion::Rd132211 => {
+                if win { "rubydung-rs.exe" } else { "rubydung-rs" }
+            }
+            GameVersion::Rd132328 => {
+                if win { "rd132328.exe" } else { "rd132328" }
+            }
+            GameVersion::Rd20090515 => {
+                if win { "rd20090515.exe" } else { "rd20090515" }
+            }
+            GameVersion::Rd160052 => {
+                if win { "rd160052.exe" } else { "rd160052" }
+            }
+            GameVersion::Rd161348 => {
+                if win { "rd161348.exe" } else { "rd161348" }
+            }
+        }
+    }
+
+    fn from_id(s: &str) -> Option<Self> {
+        GameVersion::ALL.iter().copied().find(|v| v.id() == s.trim())
+    }
+}
+
 #[derive(Clone)]
 struct Options {
     dir_minecraft: PathBuf,
     /// Texture path chosen by hand (a .jar with terrain.png inside, or a .png).
     atlas: Option<PathBuf>,
     lang: Lang,
+    /// Which pre-classic build the Play button starts.
+    game: GameVersion,
     status: bool,
     help: bool,
     console: bool,
@@ -788,6 +858,15 @@ struct Instance {
     path: String,
 }
 
+/// The build chosen last time, so the picker survives a restart.
+fn saved_game() -> Option<GameVersion> {
+    let txt = std::fs::read_to_string(config_path()?).ok()?;
+    txt.lines()
+        .map(str::trim)
+        .find_map(|l| l.strip_prefix("game="))
+        .and_then(GameVersion::from_id)
+}
+
 fn saved_instances() -> Vec<Instance> {
     let Some(p) = config_path() else { return Vec::new() };
     let Ok(txt) = std::fs::read_to_string(&p) else { return Vec::new() };
@@ -808,12 +887,12 @@ fn saved_instances() -> Vec<Instance> {
 }
 
 /// Language and instances share one tiny file, so writing either keeps both.
-fn save_config(l: Lang, insts: &[Instance]) {
+fn save_config(l: Lang, insts: &[Instance], game: GameVersion) {
     let Some(p) = config_path() else { return };
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let mut out = format!("lang={}\n", l.code());
+    let mut out = format!("lang={}\ngame={}\n", l.code(), game.id());
     for i in insts {
         // A dash marks an entry that has no asset of its own, so an instance
         // created without a path is still there on the next start.
@@ -1349,7 +1428,7 @@ fn run(opts: &Options) -> R<()> {
     if opts.status {
         return Ok(());
     }
-    launch_game(det.path.as_deref(), &t)
+    launch_game(det.path.as_deref(), &t, opts.game)
 }
 
 // ---------------------------------------------------------------- arguments
@@ -1359,6 +1438,7 @@ fn options() -> R<Options> {
         dir_minecraft: minecraft_dir()?,
         atlas: None,
         lang: Lang::En,
+        game: GameVersion::Rd132211,
         status: false,
         help: false,
         console: false,
@@ -1368,6 +1448,12 @@ fn options() -> R<Options> {
     while i < args.len() {
         match args[i].as_str() {
             "--status" | "--estado" => opts.status = true,
+            "--game" | "--juego" => {
+                i += 1;
+                let id = args.get(i).ok_or("--game needs a build (rd-132211, rd-132328, rd-20090515, rd-160052, rd-161348)")?;
+                opts.game = GameVersion::from_id(id)
+                    .ok_or_else(|| format!("unknown build: {id}"))?;
+            }
             "--console" => opts.console = true,
             "--atlas" => {
                 i += 1;
@@ -1395,6 +1481,11 @@ fn options() -> R<Options> {
     } else {
         detect_lang()
     };
+    if !args.iter().any(|a| a == "--game" || a == "--juego") {
+        if let Some(g) = saved_game() {
+            opts.game = g;
+        }
+    }
     Ok(opts)
 }
 
@@ -1525,13 +1616,15 @@ fn detect_atlas(opts: &Options) -> Detection {
 
 // ---------------------------------------------------------------------- game
 
-fn launch_game(atlas: Option<&Path>, t: &Texts) -> R<()> {
-    let exe = find_game(t)?;
+fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion) -> R<()> {
+    let exe = find_game(t, game)?;
     say!();
     say!("{}", fill(&t.starting, "{path}", &exe.display().to_string()));
     let mut cmd = std::process::Command::new(&exe);
     cmd.current_dir(std::env::current_dir().map_err(|e| e.to_string())?);
-    if let Some(r) = atlas {
+    // Each build reads its own terrain.png from its own jar; only the original
+    // rd-132211 port takes the atlas the picker detected by hand.
+    if let (Some(r), GameVersion::Rd132211) = (atlas, game) {
         cmd.env("RD_ATLAS", r);
     }
     let status = cmd
@@ -1767,8 +1860,8 @@ fn measure_java() -> Option<u32> {
     Some(median(&mut tail))
 }
 
-fn find_game(t: &Texts) -> R<PathBuf> {
-    let name = if cfg!(windows) { "rubydung-rs.exe" } else { "rubydung-rs" };
+fn find_game(t: &Texts, game: GameVersion) -> R<PathBuf> {
+    let name = game.exe();
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(d) = exe.parent() {
@@ -2593,7 +2686,9 @@ mod ui {
         /// Runs the port at four angles and keeps the average frame rate.
         fn start_bench(&mut self) {
             let t = texts(self.lang);
-            let Ok(exe) = find_game(&t) else { return };
+            // The benchmark measures the rd-132211 port against the Java original,
+            // so it always starts that build, whatever the picker says.
+            let Ok(exe) = find_game(&t, GameVersion::Rd132211) else { return };
             let (tx, rx) = channel();
             self.bench = Some(BenchRun { rx, fps: Vec::new() });
             self.bench_fps = None;
@@ -2655,7 +2750,7 @@ mod ui {
             self.adding = false;
             self.n_name.clear();
             self.n_path.clear();
-            save_config(self.lang, &self.insts[1..]);
+            save_config(self.lang, &self.insts[1..], self.opts.game);
             self.select_instance();
         }
 
@@ -2794,7 +2889,7 @@ mod ui {
                 });
             if elegido != self.lang {
                 self.lang = elegido;
-                save_config(elegido, &self.insts[1..]);
+                save_config(elegido, &self.insts[1..], self.opts.game);
                 let t2 = texts(elegido);
                 // Old messages were written in the old language: drop them.
                 self.log.clear();
@@ -2976,6 +3071,32 @@ mod ui {
 
                             if tab == Tab::Home {
                                 ui.add_space(2.0);
+                                // Build picker: the five pre-classic versions the
+                                // launcher ships, each with its own exe.
+                                ui.horizontal(|ui| {
+                                    ui.label(disp(l_ver, 11.0).color(MUTED));
+                                    ui.add_space(6.0);
+                                    let mut sel = self.opts.game;
+                                    egui::ComboBox::from_id_salt("pick-version")
+                                        .selected_text(
+                                            RichText::new(sel.id()).size(14.0).color(TEXT),
+                                        )
+                                        .width(190.0)
+                                        .show_ui(ui, |ui| {
+                                            for v in GameVersion::ALL {
+                                                let label =
+                                                    format!("{}  ·  {}", v.id(), v.note());
+                                                ui.selectable_value(&mut sel, v, label);
+                                            }
+                                        });
+                                    if sel != self.opts.game {
+                                        self.opts.game = sel;
+                                        save_config(self.lang, &self.insts[1..], sel);
+                                    }
+                                    ui.add_space(8.0);
+                                    ui.label(RichText::new(sel.note()).size(12.0).color(SOFT));
+                                });
+                                ui.add_space(8.0);
                                 ui.horizontal(|ui| {
                                     if hero_button(ui, t.play, 210.0, 54.0, !busy).clicked() {
                                         self.play();
@@ -3053,7 +3174,7 @@ mod ui {
 
                                 ui.add_space(12.0);
                                 ui.horizontal(|ui| {
-                                    stat_card(ui, l_ver, GAME_VERSION, TEXT, 140.0);
+                                    stat_card(ui, l_ver, self.opts.game.id(), TEXT, 140.0);
                                     ui.add_space(10.0);
                                     stat_card(
                                         ui,

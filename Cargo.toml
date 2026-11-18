@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -12,6 +12,23 @@ path = "src/main.rs"
 [[bin]]
 name = "rustium"
 path = "src/bin/rustium.rs"
+
+# Versiones pre-clasicas portadas, una por build original
+[[bin]]
+name = "rd132328"
+path = "src/bin/rd132328.rs"
+
+[[bin]]
+name = "rd160052"
+path = "src/bin/rd160052.rs"
+
+[[bin]]
+name = "rd20090515"
+path = "src/bin/rd20090515.rs"
+
+[[bin]]
+name = "rd161348"
+path = "src/bin/rd161348.rs"
 
 [dependencies]
 winit = "0.30"

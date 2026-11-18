@@ -133,8 +133,12 @@ fn hit_face_vertices((bx, by, bz): (i32, i32, i32), n: (i32, i32, i32)) -> [Vert
     // textura de arriba: parecia una capa blanca puesta encima del bloque.
     let shade = 1.0;
     let uv = [0.0, 0.0];
-    // 1 mm hacia fuera por la normal, en coords de render (X=x, Y=z, Z=y)
-    let off = [n.0 as f32 * 0.001, n.2 as f32 * 0.001, n.1 as f32 * 0.001];
+    // El original dibuja la cara EN el plano del bloque: init() deja
+    // glDepthFunc(GL_LEQUAL), asi que el empate con la cara del chunk pasa. El
+    // port compara con GreaterEqual por la profundidad inversa: mismo empate, sin
+    // desplazamiento. Cualquier milimitro hacia fuera se ve como un filo blanco al
+    // mirar la cara de canto.
+    let off = [0.0, 0.0, 0.0];
     let mut p = [Vertex { pos: [0.0; 3], uv, shade }; 4];
     for (ci, c) in corners.iter().enumerate() {
         p[ci] = Vertex {

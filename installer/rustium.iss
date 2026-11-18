@@ -4,14 +4,14 @@
 ; (or:  "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\rustium.iss)
 ;
 ; The resulting setup.exe goes into dist\ and is the file to attach to a GitHub
-; release. Both executables must end up in the SAME folder, because the launcher
-; looks for rubydung-rs.exe next to itself.
+; release. Every build must end up in the SAME folder, because the launcher looks
+; for the exe of the selected version next to itself.
 ;
 ; Installs per user (no administrator prompt) into %LOCALAPPDATA%\Rustium, which is
 ; also where the launcher keeps its config (lang=...) and downloaded updates.
 
 #define MyAppName "Rustium"
-#define MyAppVersion "0.1.3"
+#define MyAppVersion "0.1.4"
 #define MyAppPublisher "DandiMC"
 #define MyAppExeName "Rustium.exe"
 
@@ -58,6 +58,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Keep the release build in target\x86_64-pc-windows-gnu\release\ before compiling.
 Source: "..\target\x86_64-pc-windows-gnu\release\rustium.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\rubydung-rs.exe"; DestDir: "{app}"; Flags: ignoreversion
+; One exe per pre-classic build, so the picker can start any of them.
+Source: "..\target\x86_64-pc-windows-gnu\release\rd132328.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\rd20090515.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\rd160052.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\rd161348.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Apache 2.0 asks for the licence and the attribution notice to be handed to
 ; every recipient, so they are installed next to the executables.

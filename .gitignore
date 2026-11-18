@@ -41,3 +41,6 @@ level.dat
 
 # Ajustes locales de las herramientas
 .claude/settings.local.json
+
+# Debug traces written by the games when RD_INPUT_LOG is set
+input_log*.txt

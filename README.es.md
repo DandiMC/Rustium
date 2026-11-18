@@ -1,8 +1,9 @@
 # Rustium
 
-Launcher y port a Rust de la primera versión de Minecraft (rd-132211), sin cuenta de
-Microsoft y sin descargar nada de Mojang: lee las texturas de la copia que ya tengas
-en el ordenador y, si no hay ninguna, dibuja las suyas.
+Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-132211,
+rd-132328, rd-20090515, rd-160052 y rd-161348), sin cuenta de Microsoft y sin
+descargar nada de Mojang: lee las texturas de la copia que ya tengas en el ordenador
+y, si no hay ninguna, dibuja las suyas.
 
 *[Read in English](README.md)*
 
@@ -14,14 +15,29 @@ en el ordenador y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.1.3-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.1.4-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
-- Los dos ejecutables (`Rustium.exe` y `rubydung-rs.exe`) van dentro del instalador ya
+- `Rustium.exe` y un ejecutable de juego por versión van dentro del instalador ya
   compilados y enlazados en estático: las únicas DLLs que usan son las del propio
   Windows.
 - `.minecraft` es opcional. Java solo se usa si pulsas "Measure FPS".
+
+## Las versiones
+
+El selector encima de «Jugar» arranca cualquiera de las cinco versiones pre-clásicas:
+
+| versión | qué trae |
+|---|---|
+| rd-132211 | el mundo de RubyDung: césped, piedra y el velo que pulsa en el bloque que miras |
+| rd-132328 | el primer móvil, los zombis, con su piel de Steve |
+| rd-20090515 | partículas, más bloques y el cubo del bloque en la esquina |
+| rd-160052 | el mismo motor, un build anterior |
+| rd-161348 | el último build pre-clásico (su jar es el mismo que el de rd-20090515) |
+
+rd-131655 (el «Cave game tech test») nunca tuvo jar publicado, así que no hay nada que
+portar de él: las cinco de arriba son las versiones pre-clásicas que Mojang publicó.
 
 ## Para compilar desde el código
 
@@ -56,26 +72,27 @@ Apunta cargo al GCC bueno con una variable de entorno, sin tocar el repo:
 
 ```bash
 CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="C:/mingw64/bin/x86_64-w64-mingw32-gcc.exe" \
-cargo build --release --target x86_64-pc-windows-gnu --bin rustium --bin rubydung-rs
+cargo build --release --target x86_64-pc-windows-gnu --bins
 ```
 
 Cambia esa ruta por la de tu MinGW-W64 (en el PC de desarrollo está en
 `C:\m\bin\x86_64-w64-mingw32-gcc.exe`). También vale un `.cargo/config.toml` local con
 la misma ruta; no se versiona porque es de cada máquina.
 
-Los ejecutables quedan en `target/x86_64-pc-windows-gnu/release/` y los dos tienen que
-estar en la misma carpeta, porque el launcher busca `rubydung-rs.exe` al lado.
+Los ejecutables quedan en `target/x86_64-pc-windows-gnu/release/` y todos tienen que
+estar en la misma carpeta, porque el launcher busca el .exe de la versión elegida al
+lado.
 
 ### Instalador
 
-Con los dos `.exe` ya compilados y [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+Con los `.exe` ya compilados y [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 instalado:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.1.1-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.1.4-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 
