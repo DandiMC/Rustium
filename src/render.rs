@@ -300,7 +300,51 @@ fn hud_textura(id: u8, cara: usize) -> u32 {
     }
 }
 
+// El arbusto no es un cubo: Bush.render dibuja dos planos cruzados de suelo a
+// techo. El drawGui del original llama al mismo render, asi que en la esquina
+// tiene que salir la planta y no una cara de bloque con textura de hojas.
+fn hud_arbusto_vertices(width: u32, height: u32) -> Vec<Vertex> {
+    let sh = 240.0f32;
+    let sw = width as f32 * 240.0 / height.max(1) as f32;
+    let tex = 15u32;
+    let u0 = (tex % 16) as f32 / 16.0;
+    let v0 = (tex / 16) as f32 / 16.0;
+    let duv = 0.0624375f32;
+    let mut out = Vec::with_capacity(2 * 2 * 6);
+    for r in 0..2usize {
+        let a = r as f32 * std::f32::consts::PI / 2.0 + std::f32::consts::FRAC_PI_4;
+        let xa = a.sin() * 0.5;
+        let za = a.cos() * 0.5;
+        // Mismas coordenadas que Bush.render para el bloque en (-2, 0, 0).
+        let (x0, x1) = (-2.0 + 0.5 - xa, -2.0 + 0.5 + xa);
+        let (z0, z1) = (0.0 + 0.5 - za, 0.0 + 0.5 + za);
+        let (y0, y1) = (0.0, 1.0);
+        // Orden de Tile.renderFace/Bush.render: u1/v0, u0/v0, u0/v1, u1/v1.
+        let quad = [
+            ([x0, y1, z0], [u0 + duv, v0]),
+            ([x1, y1, z1], [u0, v0]),
+            ([x1, y0, z1], [u0, v0 + duv]),
+            ([x0, y0, z0], [u0 + duv, v0 + duv]),
+        ];
+        let mut p = [[0.0f32; 3]; 4];
+        let mut uv = [[0.0f32; 2]; 4];
+        for (i, (pos, t)) in quad.iter().enumerate() {
+            p[i] = hud_proyecta(*pos, sw, sh);
+            uv[i] = *t;
+        }
+        // El original emite cada plano dos veces, en los dos sentidos, porque el
+        // espejo de la GUI invierte la orientacion y hay back-face culling.
+        for e in [0usize, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2] {
+            out.push(Vertex { pos: p[e], uv: uv[e], shade: 1.0 });
+        }
+    }
+    out
+}
+
 fn hud_cubo_vertices(id: u8, width: u32, height: u32) -> Vec<Vertex> {
+    if id == 6 {
+        return hud_arbusto_vertices(width, height);
+    }
     let sh = 240.0f32;
     let sw = width as f32 * 240.0 / height.max(1) as f32;
     let duv = 0.0624375f32;

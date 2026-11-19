@@ -405,7 +405,13 @@ impl ApplicationHandler for App {
                             // RubyDung: G suelta un zombi en la posicion del jugador
                             // (sin resetPos, a diferencia de los 10 iniciales)
                             "g" | "G" => {
-                                let z = Zombie::new(&self.nivel, self.jugador.x, self.jugador.y, self.jugador.z);
+                                let mut z = Zombie::new(&self.nivel, self.jugador.x, self.jugador.y, self.jugador.z);
+                                // El constructor del Java legacy llama a setPos, que
+                                // recoloca tambien la caja (bb). El constructor
+                                // compartido solo cambia x/y/z, asi que sin esto el
+                                // zombi de G conservaba la caja del resetPos aleatorio
+                                // y saltaba a otro punto en el primer tick.
+                                z.e.set_pos(self.jugador.x, self.jugador.y, self.jugador.z);
                                 self.zombis.push(z);
                             }
                             _ => {

@@ -287,8 +287,9 @@ pub struct Zombie {
 impl Zombie {
     pub fn new(level: &dyn Mundo, x: f32, y: f32, z: f32) -> Self {
         let mut e = Entity::new(level);
-        // El original machaca la posicion despues de resetPos y deja la caja como
-        // quedó; se replica tal cual.
+        // rd-132328 asigna x/y/z directamente despues de resetPos y deja la caja
+        // como estaba; su original hace lo mismo. El legacy, en cambio, llama a
+        // setPos (que tambien mueve la caja); su G lo fija en legacy/juego.rs.
         e.x = x;
         e.y = y;
         e.z = z;
