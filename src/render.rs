@@ -1238,17 +1238,18 @@ impl Renderer {
     }
 
     pub fn render(&mut self, eye: [f32; 3], yaw: f32, pitch: f32, hit: Option<((i32, i32, i32), (i32, i32, i32))>, fps: Option<u32>, modelos: &[[f32; 5]]) {
-        // El original hace glTranslatef(0,0,-0.3) antes de rotar: la camara va 0.3
-        // bloques por delante del punto del jugador, en la direccion de la vista.
-        // Tanto rd-132211 como la familia nueva lo hacen igual; sin esto el suelo
-        // sale corrido 0.3 bloques respecto al original.
+        // El original hace glTranslatef(0,0,-0.3) antes de rotar. Eso NO adelanta
+        // la camara: la deja 0.3 bloques DETRAS del ojo (con yaw 0, en +z). Se
+        // comprobo moviendo la camara del Java 0.6 y viendo que el zombi coincide
+        // pixel a pixel con el port. Antes se sumaba 0.3 hacia delante y todo el
+        // mundo salia 0.6 bloques desplazado respecto al original.
         let pitch = pitch.clamp(-1.55, 1.55);
         let (sy_c, cy_c) = yaw.sin_cos();
         let (sp_c, cp_c) = pitch.sin_cos();
         let eye = [
-            eye[0] + sy_c * cp_c * 0.3,
-            eye[1] + sp_c * 0.3,
-            eye[2] - cy_c * cp_c * 0.3,
+            eye[0] - sy_c * cp_c * 0.3,
+            eye[1] - sp_c * 0.3,
+            eye[2] + cy_c * cp_c * 0.3,
         ];
         let view_proj = mat_mul(&perspective(70.0f32.to_radians(), self.config.width as f32 / self.config.height as f32, 0.05, 1000.0), &look_at(eye, yaw, pitch));
         // Pasada de niebla de rd-132211: GL_EXP, densidad 0.2, color (14,11,10).

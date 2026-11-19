@@ -2639,9 +2639,10 @@ dependencies = [
 
 [[package]]
 name = "rubydung-rs"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "eframe",
+ "flate2",
  "png 0.17.16",
  "pollster",
  "ureq",

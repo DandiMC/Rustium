@@ -594,102 +594,102 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
     match l {
         Lang::En => [
             (
-                "All five pre-classics are here",
+                "The first five versions",
                 "18 Nov 2026",
-                "rd-132211, rd-132328, rd-20090515, rd-160052 and rd-161348, with a picker and one executable per build.",
-                "The launcher now starts the five pre-classic builds Mojang published. The picker remembers the last one (game= in config.txt), every build has its own executable and rd-161348 shares its jar with rd-20090515. rd-131655 is missing because no jar was ever published.",
+                "All five early Minecraft versions are now one click away.",
+                "Pick any of them from the list and press Play. Each one opens in its own window, and the launcher remembers the last version you used. rd-131655 is not included because Mojang never published its file.",
             ),
             (
-                "The 20090515 bush",
+                "The bushes look right again",
                 "18 Nov 2026",
-                "Two crossed quads, leaf texture and alpha cutout, just like Bush.render.",
-                "The bush is no longer a cube: it draws the original's two quads at 45 and 135 degrees, unlit, and the shader cuts texels below 0.5 alpha (the jar's GL_ALPHA_TEST). rd-160052 has no Bush tile, so it ignores the 6 key.",
+                "The bushes of 15 May 2009 have their leaves and crossed shape back.",
+                "They used to look like a square green block. Now they are drawn with two crossed planes and their leaves, just like the original game, and you can place one with the 6 key.",
             ),
             (
-                "The zombies dance again",
+                "The characters dance again",
                 "19 Nov 2026",
-                "Arms, legs and head turn in radians, like Cube.render; the picker drops its notes.",
-                "The zombie model kept its angles in radians and the port treated them as degrees: the limbs moved 57 times less and looked stiff. Arms, legs and head now have the same dance as the Java original, and positions are interpolated between ticks so they no longer snap. The per-version notes leave the picker and move to News, where they belong.",
+                "Zombies move their arms, legs and head like in the original Minecraft.",
+                "They used to look stiff because their movement was almost invisible. Now they walk and dance as smoothly as the original, without jerking.",
             ),
         ],
         Lang::Es => [
             (
-                "Las cinco pre-clásicas, en el launcher",
+                "Las cinco primeras versiones",
                 "18 nov 2026",
-                "rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348, con selector y un ejecutable por versión.",
-                "El launcher ya arranca las cinco versiones pre-clásicas que Mojang publicó. El selector recuerda la última elegida (game= en config.txt), cada build tiene su propio ejecutable y rd-161348 comparte jar con rd-20090515. rd-131655 no aparece porque nunca hubo un jar publicado.",
+                "Ya puedes jugar las cinco primeras versiones de Minecraft desde el mismo launcher.",
+                "Elige cualquiera en la lista y pulsa Jugar. Cada una se abre en su propia ventana y el launcher recuerda la última que usaste. La rd-131655 no está porque Mojang nunca publicó su archivo.",
             ),
             (
-                "El arbusto del 20090515",
+                "Los arbustos vuelven a verse bien",
                 "18 nov 2026",
-                "Dos planos cruzados, textura de hojas y recorte por alfa, como Bush.render.",
-                "El arbusto ya no es un cubo: dibuja los dos planos cruzados a 45° y 135° del original, sin sombra, y el shader descarta los píxeles con alfa menor que 0.5 (el GL_ALPHA_TEST del jar). rd-160052 no tiene el tile Bush, así que ignora la tecla 6.",
+                "En la versión del 15 de mayo de 2009, los arbustos recuperan sus hojas y su forma cruzada.",
+                "Antes parecían un bloque verde cuadrado. Ahora se dibujan con dos planos cruzados y sus hojas, igual que en el juego original, y puedes colocar uno con la tecla 6.",
             ),
             (
-                "Los zombis ya bailan como en el original",
+                "Los personajes ya bailan",
                 "19 nov 2026",
-                "Brazos, piernas y cabeza giran en radianes, como Cube.render; el selector deja de llevar notas.",
-                "El modelo del zombi guardaba los ángulos en radianes y el port los trataba como grados: las extremidades se movían 57 veces menos y parecían tiesas. Ahora brazos, piernas y cabeza tienen el mismo baile que el Java original, y la posición se interpola entre ticks para que no den tirones. Las notas de cada versión salen del selector y pasan a Novedades, que es donde tienen que estar.",
+                "Los zombis mueven los brazos, las piernas y la cabeza como en el Minecraft original.",
+                "Antes parecían rígidos porque su movimiento casi no se notaba. Ahora caminan y bailan con la misma soltura que el original, sin dar tirones.",
             ),
         ],
         Lang::Pt => [
             (
-                "As cinco pré-clássicas, no launcher",
+                "As cinco primeiras versões",
                 "18 nov 2026",
-                "rd-132211, rd-132328, rd-20090515, rd-160052 e rd-161348, com seletor e um executável por versão.",
-                "O launcher já inicia as cinco versões pré-clássicas que a Mojang publicou. O seletor lembra a última escolhida (game= em config.txt), cada build tem o seu próprio executável e a rd-161348 partilha o jar com a rd-20090515. A rd-131655 não aparece porque nunca houve um jar publicado.",
+                "Já podes jogar as cinco primeiras versões de Minecraft a partir do mesmo launcher.",
+                "Escolhe qualquer uma na lista e carrega em Jogar. Cada uma abre na sua própria janela e o launcher lembra a última que usaste. A rd-131655 não está porque a Mojang nunca publicou o ficheiro.",
             ),
             (
-                "O arbusto da 20090515",
+                "Os arbustos voltaram a parecer certos",
                 "18 nov 2026",
-                "Dois planos cruzados, textura de folhas e recorte por alfa, como Bush.render.",
-                "O arbusto já não é um cubo: desenha os dois planos cruzados a 45° e 135° do original, sem sombra, e o shader descarta os píxeis com alfa inferior a 0.5 (o GL_ALPHA_TEST do jar). A rd-160052 não tem o tile Bush, por isso ignora a tecla 6.",
+                "Na versão de 15 de maio de 2009, os arbustos voltam a ter as folhas e a forma cruzada.",
+                "Antes pareciam um bloco verde quadrado. Agora são desenhados com dois planos cruzados e as suas folhas, tal como no jogo original, e podes colocar um com a tecla 6.",
             ),
             (
-                "Os zombis já dançam como no original",
+                "Os personagens voltaram a dançar",
                 "19 nov 2026",
-                "Braços, pernas e cabeça giram em radianos, como Cube.render; o seletor deixa de ter notas.",
-                "O modelo do zombi guardava os ângulos em radianos e o port tratava-os como graus: os membros moviam-se 57 vezes menos e pareciam rígidos. Agora braços, pernas e cabeça têm a mesma dança que o Java original, e a posição é interpolada entre ticks para não dar sacões. As notas de cada versão saem do seletor e passam para Novidades, que é onde pertencem.",
+                "Os zombis mexem os braços, as pernas e a cabeça como no Minecraft original.",
+                "Antes pareciam rígidos porque o movimento quase não se notava. Agora andam e dançam com a mesma naturalidade do original, sem solavancos.",
             ),
         ],
         Lang::Fr => [
             (
-                "Les cinq pré-classiques, dans le launcher",
+                "Les cinq premières versions",
                 "18 nov. 2026",
-                "rd-132211, rd-132328, rd-20090515, rd-160052 et rd-161348, avec un sélecteur et un exécutable par version.",
-                "Le launcher démarre maintenant les cinq versions pré-classiques publiées par Mojang. Le sélecteur retient la dernière (game= dans config.txt), chaque build a son propre exécutable et rd-161348 partage son jar avec rd-20090515. rd-131655 est absente car aucun jar n'a jamais été publié.",
+                "Tu peux maintenant jouer aux cinq premières versions de Minecraft depuis le même launcher.",
+                "Choisis-en une dans la liste et appuie sur Jouer. Chacune s'ouvre dans sa propre fenêtre et le launcher retient la dernière utilisée. rd-131655 n'est pas incluse car Mojang n'a jamais publié son fichier.",
             ),
             (
-                "Le buisson de 20090515",
+                "Les buissons ont retrouvé leur aspect",
                 "18 nov. 2026",
-                "Deux plans croisés, texture de feuilles et découpe alpha, comme Bush.render.",
-                "Le buisson n'est plus un cube : il dessine les deux plans croisés à 45° et 135° de l'original, sans ombrage, et le shader écarte les texels sous 0.5 d'alpha (le GL_ALPHA_TEST du jar). rd-160052 n'a pas le tile Bush, donc elle ignore la touche 6.",
+                "Dans la version du 15 mai 2009, les buissons ont retrouvé leurs feuilles et leur forme croisée.",
+                "Avant, ils ressemblaient à un bloc vert carré. Maintenant, ils sont dessinés avec deux plans croisés et leurs feuilles, comme dans le jeu original, et tu peux en poser un avec la touche 6.",
             ),
             (
-                "Les zombies dansent à nouveau",
+                "Les personnages dansent à nouveau",
                 "19 nov. 2026",
-                "Bras, jambes et tête tournent en radians, comme Cube.render ; le sélecteur n'a plus de notes.",
-                "Le modèle du zombie gardait ses angles en radians et le port les traitait comme des degrés : les membres bougeaient 57 fois moins et semblaient raides. Bras, jambes et tête ont maintenant la même danse que le Java original, et la position est interpolée entre les ticks pour éviter les à-coups. Les notes par version quittent le sélecteur pour Novedades, leur place.",
+                "Les zombies bougent les bras, les jambes et la tête comme dans le Minecraft original.",
+                "Avant, ils semblaient raides car leur mouvement était presque invisible. Maintenant, ils marchent et dansent aussi naturellement que dans l'original, sans à-coups.",
             ),
         ],
         Lang::De => [
             (
-                "Alle fünf Pre-Classics im Launcher",
+                "Die ersten fünf Versionen",
                 "18. Nov. 2026",
-                "rd-132211, rd-132328, rd-20090515, rd-160052 und rd-161348, mit Auswahl und einer EXE pro Build.",
-                "Der Launcher startet jetzt die fünf von Mojang veröffentlichten Pre-Classic-Versionen. Die Auswahl merkt sich die letzte (game= in config.txt), jeder Build hat seine eigene EXE und rd-161348 teilt sich das Jar mit rd-20090515. rd-131655 fehlt, weil nie ein Jar veröffentlicht wurde.",
+                "Du kannst jetzt alle fünf frühen Minecraft-Versionen aus einem Launcher spielen.",
+                "Wähle eine aus der Liste und drücke Spielen. Jede öffnet sich in einem eigenen Fenster und der Launcher merkt sich die letzte. rd-131655 fehlt, weil Mojang ihre Datei nie veröffentlicht hat.",
             ),
             (
-                "Der Busch von 20090515",
+                "Die Büsche sehen wieder richtig aus",
                 "18. Nov. 2026",
-                "Zwei gekreuzte Flächen, Blatttextur und Alpha-Cutout, wie Bush.render.",
-                "Der Busch ist kein Würfel mehr: Er zeichnet die beiden gekreuzten Flächen des Originals bei 45° und 135°, ohne Beleuchtung, und der Shader verwirft Texel unter 0.5 Alpha (das GL_ALPHA_TEST des Jars). rd-160052 hat kein Bush-Tile und ignoriert daher die Taste 6.",
+                "In der Version vom 15. Mai 2009 haben die Büsche wieder ihre Blätter und ihre gekreuzte Form.",
+                "Früher sahen sie wie ein grüner quadratischer Block aus. Jetzt werden sie mit zwei gekreuzten Flächen und ihren Blättern gezeichnet, wie im Original, und du kannst mit der Taste 6 einen setzen.",
             ),
             (
-                "Die Zombies tanzen wieder",
+                "Die Figuren tanzen wieder",
                 "19. Nov. 2026",
-                "Arme, Beine und Kopf drehen sich in Radianten, wie Cube.render; die Auswahl verliert ihre Notizen.",
-                "Das Zombie-Modell speicherte seine Winkel in Radianten, der Port behandelte sie als Grad: Die Gliedmaßen bewegten sich 57-mal weniger und wirkten steif. Arme, Beine und Kopf haben jetzt denselben Tanz wie das Java-Original, und die Position wird zwischen Ticks interpoliert, damit nichts springt. Die Notizen pro Version verlassen die Auswahl und wandern zu Neuigkeiten, wo sie hingehören.",
+                "Zombies bewegen Arme, Beine und Kopf wie im originalen Minecraft.",
+                "Früher wirkten sie steif, weil ihre Bewegung fast unsichtbar war. Jetzt laufen und tanzen sie so locker wie im Original, ohne Ruckeln.",
             ),
         ],
     }
@@ -709,13 +709,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             tab_news: "News",
             news_title: "WHAT'S NEW",
             n1_title: "Rustium is now available",
-            n1_short: "The launcher and the port of the first Minecraft version are ready, with no Microsoft account and nothing downloaded from Mojang.",
+            n1_short: "The launcher and the first Minecraft version are ready, with no account and nothing downloaded from Mojang.",
             n1_date: "16 Nov 2026",
-            n1_body: "Rustium is here! The launcher and the port of the first Minecraft version, rd-132211, work end to end. No Microsoft account and nothing downloaded from Mojang: it reads the textures of the copy you already own and, if it finds none, draws its own. Pick one of five languages, create your instances and let it tell you when a new version is out.",
+            n1_body: "Rustium is here. Open the launcher, pick a language and play the first Minecraft version without creating an account. It uses the graphics from your own copy of the game and, if it finds none, draws its own.",
             n2_title: "The first Minecraft version is now in Rustium!",
-            n2_short: "Identical to the original, with a far higher frame rate and the same feel.",
+            n2_short: "The first Minecraft version is now playable in Rustium, with the same feel as the original and a much higher frame rate.",
             n2_date: "16 Nov 2026",
-            n2_body: "The first Minecraft version is now in Rustium! Identical to the original, with a far higher frame rate and the same feel. Just like the original you can press R to jump back to the spawn point, build walls and corridors, fall forever into the void and, on top of that, press F3 to see your FPS.",
+            n2_body: "The first Minecraft version is now in Rustium. It plays like the original: press R to return to the start, build walls and corridors, fall into the void and press F3 to see your frame rate.",
             update_available: "Version {version} is available",
             update_now: "Update to {version}",
             update_downloading: "Downloading... {pct}%",
@@ -754,13 +754,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             tab_news: "Novedades",
             news_title: "NOVEDADES",
             n1_title: "¡Rustium ya está disponible!",
-            n1_short: "El launcher y el port de la primera versión de Minecraft ya funcionan, sin cuenta de Microsoft y sin descargar nada de Mojang.",
+            n1_short: "El launcher y la primera versión de Minecraft ya funcionan, sin cuenta y sin descargar nada de Mojang.",
             n1_date: "16 nov 2026",
-            n1_body: "¡Rustium ya está aquí! El launcher y el port de la primera versión de Minecraft, rd-132211, funcionan de punta a punta. Nada de cuenta de Microsoft y nada descargado de Mojang: lee las texturas de la copia que ya tienes y, si no encuentra ninguna, dibuja la suya propia. Elige entre cinco idiomas, crea tus instancias y deja que te avise cuando haya versión nueva.",
+            n1_body: "Rustium ya está aquí. Abre el launcher, elige idioma y juega a la primera versión de Minecraft sin crear ninguna cuenta. Usa los gráficos de tu propia copia del juego y, si no encuentra ninguna, dibuja los suyos.",
             n2_title: "¡La primera versión de Minecraft ya está en Rustium!",
-            n2_short: "Idéntica al original, con un rendimiento muchísimo más alto y sin perder la esencia del juego.",
+            n2_short: "La primera versión de Minecraft ya se puede jugar en Rustium, con la misma sensación que el original y muchos más fotogramas por segundo.",
             n2_date: "16 nov 2026",
-            n2_body: "¡La primera versión de Minecraft ya está en Rustium! Idéntica al original, con un rendimiento muchísimo más alto y sin perder la esencia del juego. Igual que en el original puedes pulsar R para volver al punto de inicio, levantar construcciones y pasillos, caer infinitamente en el vacío y, ahora además, presionar F3 para ver tus FPS.",
+            n2_body: "La primera versión de Minecraft ya está en Rustium. Se juega igual que el original: puedes volver al inicio con R, construir muros y pasillos, caer al vacío y ver los fotogramas por segundo con F3.",
             update_available: "Hay una versión nueva: {version}",
             update_now: "Actualizar a {version}",
             update_downloading: "Descargando... {pct}%",
@@ -799,13 +799,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             tab_news: "Novidades",
             news_title: "NOVIDADES",
             n1_title: "O Rustium já está disponível!",
-            n1_short: "O launcher e o port da primeira versão do Minecraft já funcionam, sem conta Microsoft e sem descarregar nada da Mojang.",
+            n1_short: "O launcher e a primeira versão de Minecraft já funcionam, sem conta e sem descarregar nada da Mojang.",
             n1_date: "16 nov 2026",
-            n1_body: "O Rustium chegou! O launcher e o port da primeira versão do Minecraft, rd-132211, funcionam de ponta a ponta. Sem conta Microsoft e sem nada descarregado da Mojang: lê as texturas da cópia que já tens e, se não encontrar nenhuma, desenha a sua. Escolhe entre cinco idiomas, cria as tuas instâncias e deixa que te avise quando houver versão nova.",
+            n1_body: "O Rustium já chegou. Abre o launcher, escolhe o idioma e joga a primeira versão de Minecraft sem criar conta. Usa os gráficos da tua própria cópia do jogo e, se não encontrar nenhum, desenha os seus.",
             n2_title: "A primeira versão do Minecraft já está no Rustium!",
-            n2_short: "Idêntica ao original, com um desempenho muito mais alto e sem perder a essência do jogo.",
+            n2_short: "A primeira versão de Minecraft já se pode jogar no Rustium, com a mesma sensação do original e muitos mais fotogramas por segundo.",
             n2_date: "16 nov 2026",
-            n2_body: "A primeira versão do Minecraft já está no Rustium! Idêntica ao original, com um desempenho muito mais alto e sem perder a essência do jogo. Tal como no original podes premir R para voltares ao ponto de início, construir paredes e corredores, cair infinitamente no vazio e, agora também, premir F3 para veres os teus FPS.",
+            n2_body: "A primeira versão de Minecraft já está no Rustium. Joga-se como o original: podes voltar ao início com R, construir muros e corredores, cair no vazio e ver os fotogramas por segundo com F3.",
             update_available: "Há uma versão nova: {version}",
             update_now: "Atualizar para {version}",
             update_downloading: "A transferir... {pct}%",
@@ -844,13 +844,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             tab_news: "Nouveautés",
             news_title: "NOUVEAUTÉS",
             n1_title: "Rustium est maintenant disponible !",
-            n1_short: "Le launcher et le port de la première version de Minecraft fonctionnent, sans compte Microsoft et rien de téléchargé chez Mojang.",
+            n1_short: "Le launcher et la première version de Minecraft fonctionnent, sans compte et sans rien télécharger de Mojang.",
             n1_date: "16 nov. 2026",
-            n1_body: "Rustium est là ! Le launcher et le port de la première version de Minecraft, rd-132211, fonctionnent de bout en bout. Pas de compte Microsoft et rien de téléchargé chez Mojang : il lit les textures de la copie que vous possédez déjà et, s'il n'en trouve aucune, dessine la sienne. Cinq langues, vos propres instances et une alerte dès qu'une nouvelle version sort.",
+            n1_body: "Rustium est là. Ouvre le launcher, choisis une langue et joue à la première version de Minecraft sans créer de compte. Il utilise les graphismes de ta propre copie du jeu et, s'il n'en trouve aucun, dessine les siens.",
             n2_title: "La première version de Minecraft est dans Rustium !",
-            n2_short: "Identique à l'original, avec un rendement bien plus élevé et sans perdre l'esprit du jeu.",
+            n2_short: "La première version de Minecraft est maintenant jouable dans Rustium, avec les mêmes sensations que l'original et beaucoup plus d'images par seconde.",
             n2_date: "16 nov. 2026",
-            n2_body: "La première version de Minecraft est dans Rustium ! Identique à l'original, avec un rendement bien plus élevé et sans perdre l'esprit du jeu. Comme dans l'original, vous pouvez appuyer sur R pour revenir au point de départ, bâtir murs et couloirs, tomber à l'infini dans le vide et, en plus, appuyer sur F3 pour voir vos FPS.",
+            n2_body: "La première version de Minecraft est maintenant dans Rustium. Elle se joue comme l'original : appuie sur R pour revenir au départ, construis des murs et des couloirs, tombe dans le vide et appuie sur F3 pour voir les images par seconde.",
             update_available: "Une nouvelle version est disponible : {version}",
             update_now: "Mettre à jour vers {version}",
             update_downloading: "Téléchargement... {pct}%",
@@ -889,13 +889,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             tab_news: "Neuigkeiten",
             news_title: "NEUIGKEITEN",
             n1_title: "Rustium ist jetzt verfügbar!",
-            n1_short: "Der Launcher und der Port der ersten Minecraft-Version sind fertig, ohne Microsoft-Konto und ohne Download von Mojang.",
+            n1_short: "Der Launcher und die erste Minecraft-Version funktionieren, ohne Konto und ohne Download von Mojang.",
             n1_date: "16. Nov. 2026",
-            n1_body: "Rustium ist da! Der Launcher und der Port der ersten Minecraft-Version, rd-132211, funktionieren von Anfang bis Ende. Kein Microsoft-Konto und nichts von Mojang geladen: er liest die Texturen der Kopie, die du bereits hast, und zeichnet, wenn er keine findet, eine eigene. Fünf Sprachen, eigene Instanzen und ein Hinweis, sobald eine neue Version erscheint.",
+            n1_body: "Rustium ist da. Öffne den Launcher, wähle eine Sprache und spiele die erste Minecraft-Version, ohne ein Konto zu erstellen. Er nutzt die Grafik deiner eigenen Spielkopie und zeichnet eigene, wenn er keine findet.",
             n2_title: "Die erste Minecraft-Version ist jetzt in Rustium!",
-            n2_short: "Identisch zum Original, mit deutlich höherer Leistung und ohne den Charakter des Spiels zu verlieren.",
+            n2_short: "Die erste Minecraft-Version ist jetzt in Rustium spielbar, mit demselben Gefühl wie das Original und viel mehr Bildern pro Sekunde.",
             n2_date: "16. Nov. 2026",
-            n2_body: "Die erste Minecraft-Version ist jetzt in Rustium! Identisch zum Original, mit deutlich höherer Leistung und ohne den Charakter des Spiels zu verlieren. Wie im Original kannst du mit R zum Startpunkt zurückspringen, Wände und Gänge bauen, endlos ins Leere fallen und jetzt zusätzlich mit F3 deine FPS anzeigen.",
+            n2_body: "Die erste Minecraft-Version ist jetzt in Rustium. Sie spielt sich wie das Original: Mit R kehrst du zum Start zurück, du baust Wände und Gänge, fällst ins Leere und siehst mit F3 die Bilder pro Sekunde.",
             update_available: "Version {version} ist verfügbar",
             update_now: "Auf {version} aktualisieren",
             update_downloading: "Wird geladen... {pct}%",
@@ -2577,17 +2577,18 @@ mod ui {
             }
         }
 
-        /// Opening: black, the Rustium R springs in, then the black and the letter
-        /// dissolve together and the launcher is simply there.
+        /// Opening: black, the Rustium R springs in and hops once, then the
+        /// letter and the black dissolve together and the launcher is there.
         fn splash(&self, ctx: &egui::Context) {
             if std::env::var("RUSTIUM_NOSPLASH").is_ok() {
                 return;
             }
-            // The letter arrives by IN, sits still on black until HOLD, and by
+            // The letter lands by IN, hops up and back down until HOLD, and by
             // TOTAL the black and the letter have both gone.
-            const IN: f32 = 0.55;
-            const HOLD: f32 = 1.05;
-            const TOTAL: f32 = 1.70;
+            const IN: f32 = 0.50;
+            const HOP: f32 = 0.42;
+            const HOLD: f32 = 1.30;
+            const TOTAL: f32 = 1.85;
             let e = self.t0.elapsed().as_secs_f32();
             if e >= TOTAL {
                 return;
@@ -2617,6 +2618,15 @@ mod ui {
             if alpha == 0 {
                 return;
             }
+            // After landing it hops up and falls back once. The hop ends well
+            // before the fade, so the letter and the black leave together.
+            let hop_t = ((e - IN) / HOP).clamp(0.0, 1.0);
+            let hop = if e > IN {
+                -(hop_t * std::f32::consts::PI).sin() * 38.0 * (1.0 - hop_t * 0.35)
+            } else {
+                0.0
+            };
+            let center = rect.center() + egui::vec2(0.0, hop);
             let tint = |a: u8| {
                 Color32::from_rgba_unmultiplied(MAGENTA.r(), MAGENTA.g(), MAGENTA.b(), a)
             };
@@ -2624,11 +2634,13 @@ mod ui {
             for (i, base) in [9u8, 7, 5].iter().enumerate() {
                 let a = (*base as f32 * grow * out).round() as u8;
                 if a > 0 {
-                    p.circle_filled(rect.center(), size * (0.86 - i as f32 * 0.16), tint(a));
+                    p.circle_filled(center, size * (0.86 - i as f32 * 0.16), tint(a));
                 }
             }
-            let g = p.layout_no_wrap("R".to_owned(), pixel(ctx, size), MAGENTA);
-            p.galley(rect.center() - g.size() * 0.5, g, tint(alpha));
+            // Lay the glyph out with the faded colour: egui uses the galley's
+            // own colour, so an opaque glyph would survive the fade and pop out.
+            let g = p.layout_no_wrap("R".to_owned(), pixel(ctx, size), tint(alpha));
+            p.galley(center - g.size() * 0.5, g, tint(alpha));
         }
 
         fn refresh(&mut self) {
@@ -3368,7 +3380,7 @@ mod ui {
                                             &mut self.news_open[1],
                                             u.see_more,
                                             u.see_less,
-                                            Art::World,
+                                            Art::Launcher,
                                         );
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             ui.add_space(12.0);
@@ -3381,7 +3393,11 @@ mod ui {
                                                 &mut self.news_open[2 + i],
                                                 u.see_more,
                                                 u.see_less,
-                                                Art::Launcher,
+                                                match i {
+                                                    1 => Art::Bush,
+                                                    2 => Art::Zombies,
+                                                    _ => Art::World,
+                                                },
                                             );
                                         }
                                         ui.add_space(12.0);
@@ -3466,33 +3482,43 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
             });
     }
 
-    /// Card art is painted here on purpose: the launcher ships no Mojang
-    /// artwork, so the news pictures are drawn with plain shapes.
+    /// The picture used by the news card: the Rustium icon for launcher news
+    /// and real captures from the port for the version news. Stored as raw RGB
+    /// (or painted) so the launcher needs no decoder.
     #[derive(Clone, Copy)]
     enum Art {
         Launcher,
         World,
+        Bush,
+        Zombies,
     }
 
-    /// The screenshot used by the news card. Stored as raw RGB (width, height,
-    /// then the pixels) so the launcher needs no image decoder.
-    fn news_shot(ctx: &egui::Context) -> egui::TextureHandle {
-        let id = egui::Id::new("news-shot");
+    fn news_shot(
+        ctx: &egui::Context,
+        name: &str,
+        bytes: &'static [u8],
+    ) -> egui::TextureHandle {
+        let id = egui::Id::new(("news-shot", name));
         if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
             return t;
         }
-        let bytes: &[u8] = include_bytes!("../../assets/news_game.rgb");
         let w = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
         let h = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
         let img = egui::ColorImage::from_rgb([w, h], &bytes[8..8 + w * h * 3]);
-        let tex = ctx.load_texture("news-shot", img, egui::TextureOptions::LINEAR);
+        let tex = ctx.load_texture(name, img, egui::TextureOptions::LINEAR);
         ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
         tex
     }
 
     fn art_thumb(ui: &mut egui::Ui, art: Art, w: f32, h: f32) {
-        if matches!(art, Art::World) {
-            let shot = news_shot(ui.ctx());
+        if !matches!(art, Art::Launcher) {
+            let (name, bytes): (&str, &'static [u8]) = match art {
+                Art::World => ("news-world", include_bytes!("../../assets/news_game.rgb")),
+                Art::Bush => ("news-bush", include_bytes!("../../assets/news_bush.rgb")),
+                Art::Zombies => ("news-zombies", include_bytes!("../../assets/news_zombies.rgb")),
+                Art::Launcher => unreachable!(),
+            };
+            let shot = news_shot(ui.ctx(), name, bytes);
             ui.add(
                 egui::Image::from_texture(egui::load::SizedTexture::new(
                     shot.id(),
@@ -3503,10 +3529,12 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
             );
             return;
         }
+        // La tarjeta de Rustium vuelve a llevar su icono (la ventana con la R),
+        // como antes: las capturas del juego son solo para las novedades de
+        // versiones.
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
         let p = ui.painter().with_clip_rect(rect);
         p.rect_filled(rect, 12.0, Color32::from_rgb(58, 16, 44));
-        // A soft highlight so the thumb matches the glass cards.
         for (i, a) in [12u8, 9, 6].iter().enumerate() {
             p.circle_filled(
                 rect.left_top() + egui::vec2(w * 0.26, h * 0.22),
@@ -3514,29 +3542,17 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                 Color32::from_rgba_unmultiplied(MAGENTA.r(), MAGENTA.g(), MAGENTA.b(), *a),
             );
         }
-        match art {
-            Art::Launcher => {
-                let win = egui::Rect::from_center_size(
-                    rect.center() + egui::vec2(0.0, 6.0),
-                    egui::vec2(w * 0.60, h * 0.58),
-                );
-                p.rect_filled(win, 8.0, Color32::from_rgb(26, 14, 28));
-                for (i, c) in [MAGENTA, AMBER, GREEN].iter().enumerate() {
-                    p.circle_filled(
-                        win.left_top() + egui::vec2(11.0 + i as f32 * 9.5, 9.0),
-                        2.6,
-                        *c,
-                    );
-                }
-                // The Rustium R instead of a play glyph, in the same magenta.
-                let c = win.center() + egui::vec2(0.0, 8.0);
-                let g = p.layout_no_wrap("R".to_owned(), pixel(ui.ctx(), h * 0.28), MAGENTA);
-                p.galley(c - g.size() * 0.5, g, MAGENTA);
-            }
-            // The world card shows the picture itself, so there is nothing to
-            // paint on top of it.
-            Art::World => {}
+        let win = egui::Rect::from_center_size(
+            rect.center() + egui::vec2(0.0, 6.0),
+            egui::vec2(w * 0.60, h * 0.58),
+        );
+        p.rect_filled(win, 8.0, Color32::from_rgb(26, 14, 28));
+        for (i, c) in [MAGENTA, AMBER, GREEN].iter().enumerate() {
+            p.circle_filled(win.left_top() + egui::vec2(11.0 + i as f32 * 9.5, 9.0), 2.6, *c);
         }
+        let c = win.center() + egui::vec2(0.0, 8.0);
+        let g = p.layout_no_wrap("R".to_owned(), pixel(ui.ctx(), h * 0.28), MAGENTA);
+        p.galley(c - g.size() * 0.5, g, MAGENTA);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3558,11 +3574,15 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
             .inner_margin(egui::Margin::symmetric(16, 16))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
+                // The picture and the margins are already spoken for; the text
+                // column must use what is left, or a long body widens the card
+                // past the window and the right edge gets clipped.
+                let text_w = (ui.available_width() - 176.0 - 16.0 - 8.0).max(220.0);
                 ui.horizontal_top(|ui| {
                     art_thumb(ui, art, 176.0, 108.0);
                     ui.add_space(16.0);
                     ui.vertical(|ui| {
-                        ui.set_max_width((ui.available_width() - 8.0).max(220.0));
+                        ui.set_max_width(text_w);
                         ui.horizontal(|ui| {
                             ui.label(disp(title, 19.0).color(TEXT));
                             ui.with_layout(
@@ -3588,7 +3608,7 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                         // Spring only while opening; closing eases out evenly so
                         // it never snaps at the end.
                         let e = if *open { ease_out_back(t) } else { smooth_step(t) };
-                        let w = ui.available_width();
+                        let w = text_w;
                         let body = egui::FontId::proportional(13.0);
                         let gs = ui.painter().layout(short.to_owned(), body.clone(), SOFT, w);
                         let gf = ui.painter().layout(full.to_owned(), body, SOFT, w);

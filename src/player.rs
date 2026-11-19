@@ -31,7 +31,9 @@ impl Player {
             if n.len() == 3 {
                 p.x = n[0];
                 p.y = n[1];
-                p.z = n[2];
+                // RD_POS da la altura del OJO, como el careo del Java; la caja
+                // esta centrada 0.72 por debajo del ojo.
+                p.z = n[2] - 0.72;
             }
         }
         if let Ok(v) = std::env::var("RD_ROT") {
@@ -56,7 +58,7 @@ impl Player {
             if n.len() == 3 {
                 self.x = n[0];
                 self.y = n[1];
-                self.z = n[2];
+                self.z = n[2] - 0.72;
                 self.xd = 0.0;
                 self.yd = 0.0;
                 self.zd = 0.0;
@@ -74,17 +76,20 @@ impl Player {
     // Igual que resetPos del original: x/z aleatorios en el plano, y(de ellos)=depth+10
     // -> en nuestro eje vertical: z = DEPTH + 10 (siempre sobre el terreno).
     pub fn reset_pos(&mut self, _level: &Level) {
-        let f = spawn_fraction();
-        // Misma formula que el original, sin desplazamientos extra: con la misma
-        // fraccion los dos caen en el mismo bloque y a la misma altura.
-        self.x = crate::world::WIDTH as f32 * f;
-        self.y = crate::world::HEIGHT as f32 * f;
+        // resetPos del original: DOS Math.random() independientes, uno para x y
+        // otro para el fondo. Con una sola fraccion el jugador salia siempre en
+        // la diagonal x == y.
+        let fx = spawn_fraction();
+        let fy = spawn_fraction();
+        self.x = crate::world::WIDTH as f32 * fx;
+        self.y = crate::world::HEIGHT as f32 * fy;
         self.z = crate::world::DEPTH as f32 + 10.0;
     }
 
-    // Camara arriba de la caja del jugador (caja de 1.8 ≈ 2 bloques): ojo a z+0.9
+    // El original pone el ojo en bb.y0 + 1.62; nuestra caja (1.8 de alto) tiene
+    // el centro en bb.y0 + 0.9, asi que el ojo queda 0.72 sobre el centro.
     pub fn eye_pos(&self) -> (f32, f32, f32) {
-        (self.x, self.z + 0.9, self.y)
+        (self.x, self.z + 0.72, self.y)
     }
 
     // turn(x, y) del original: yRot += x*0.15; xRot -= y*0.15; clamp +-90
@@ -126,7 +131,7 @@ impl Player {
         }
     }
 
-    fn bbox(&self) -> BlockBox {
+    pub fn bbox(&self) -> BlockBox {
         BlockBox {
             x0: self.x - 0.3,
             x1: self.x + 0.3,

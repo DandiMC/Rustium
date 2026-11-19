@@ -151,10 +151,13 @@ impl Entity {
         e
     }
 
-    // resetPos del original: x aleatoria, y (vertical) = depth + 10, z aleatoria.
+    // resetPos del original: x aleatoria en todo el ancho, y (vertical) a
+    // depth + 10, z aleatoria en todo el fondo. Antes la profundidad se sorteaba
+    // solo hasta 64 en vez de 256, asi que jugador y zombis aparecian siempre en
+    // una franja estrecha del mapa.
     pub fn reset_pos(&mut self, _level: &dyn Mundo) {
         let x = randf() * crate::world::WIDTH as f32;
-        let y = randf() * crate::world::DEPTH as f32;
+        let y = randf() * crate::world::HEIGHT as f32;
         self.set_pos(x, y, crate::world::DEPTH as f32 + 10.0);
     }
 
@@ -334,7 +337,12 @@ impl Zombie {
             self.e.zd = 0.12;
         }
         let accel = if self.e.on_ground { 0.02 } else { 0.005 };
-        self.e.move_relative(xa, za, accel);
+        // moveRelative del original recibe (strafe, avance): el zombi le pasa
+        // (sin(rot), cos(rot)). Nuestro move_relative recibe (avance, strafe) y
+        // su avance con yaw 0 apunta a -profundidad, asi que hay que invertir el
+        // avance. Antes se pasaban (sin, cos) y el zombi caminaba de lado,
+        // perpendicular a su cuerpo.
+        self.e.move_relative(-za, xa, accel);
         self.e.zd -= 0.005;
         let (xd, yd, zd) = (self.e.xd, self.e.yd, self.e.zd);
         self.e.mover(xd, yd, zd, level);
@@ -354,6 +362,12 @@ impl Zombie {
     // del original y la interpolacion `a` entre el tick anterior y el actual.
     pub fn vertices(&self, a: f32, out: &mut Vec<[f32; 5]>) {
         let time = (now_nanos() as f64 / 1.0e9) * 10.0 * self.speed as f64 + self.time_offs as f64;
+        self.vertices_at(time, a, out);
+    }
+
+    /// Igual que `vertices`, pero con el tiempo de animacion fijado. Se usa en
+    /// el arnes de careo para comparar la misma pose contra el original.
+    pub fn vertices_at(&self, time: f64, a: f32, out: &mut Vec<[f32; 5]>) {
         let size = 0.058333334f32;
         let yy = (-((time * 0.6662).sin().abs()) as f32) * 5.0 - 23.0;
         let px = self.e.xo + (self.e.x - self.e.xo) * a;

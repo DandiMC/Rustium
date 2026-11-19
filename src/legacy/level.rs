@@ -9,6 +9,10 @@
 use super::perlin;
 use super::tiles;
 use crate::world::BlockBox;
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::io::{Read, Write};
 
 pub const WIDTH: usize = 256;
 pub const HEIGHT: usize = 256;
@@ -39,6 +43,8 @@ impl Nivel {
     }
 
     fn idx(&self, x: usize, y: usize, z: usize) -> usize {
+        // Java usa (alto * height + profundidad) * width + x; aqui x/y son
+        // horizontales y z la altura, asi que el orden equivalente es este.
         (z * HEIGHT + y) * WIDTH + x
     }
 
@@ -227,53 +233,26 @@ fn crc32(datos: &[u8]) -> u32 {
 }
 
 impl Nivel {
+    // GZIP normal, como el DataOutputStream(GZIPOutputStream) del original:
+    // cualquier lector de gzip (Java incluido) puede abrirlo.
     pub fn save(&self) -> std::io::Result<()> {
-        let mut out: Vec<u8> = Vec::with_capacity(self.blocks.len() + 64);
-        out.extend_from_slice(&[0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff]);
-        let mut resto: &[u8] = &self.blocks;
-        while !resto.is_empty() {
-            let n = resto.len().min(65535);
-            let ultimo = n == resto.len();
-            out.push(if ultimo { 1 } else { 0 });
-            out.extend_from_slice(&(n as u16).to_le_bytes());
-            out.extend_from_slice(&(!(n as u16)).to_le_bytes());
-            out.extend_from_slice(&resto[..n]);
-            resto = &resto[n..];
-        }
-        out.extend_from_slice(&crc32(&self.blocks).to_le_bytes());
-        out.extend_from_slice(&(self.blocks.len() as u32).to_le_bytes());
-        std::fs::write("level.dat", &out)
+        let file = std::fs::File::create("level.dat")?;
+        let mut gz = GzEncoder::new(std::io::BufWriter::new(file), Compression::default());
+        gz.write_all(&self.blocks)?;
+        gz.finish()?.flush()
     }
 
-    // Solo bloques "stored"; null si el fichero no es nuestro formato.
+    // Lee cualquier level.dat gzip (tambien los del Java original).
     pub fn load(&mut self) -> Option<()> {
-        let datos = std::fs::read("level.dat").ok()?;
-        if datos.len() < 18 || datos[0] != 0x1f || datos[1] != 0x8b || datos[2] != 8 {
+        let file = std::fs::File::open("level.dat").ok()?;
+        let mut data = Vec::with_capacity(self.blocks.len());
+        GzDecoder::new(std::io::BufReader::new(file))
+            .read_to_end(&mut data)
+            .ok()?;
+        if data.len() != self.blocks.len() {
             return None;
         }
-        let mut bloques = Vec::with_capacity(self.blocks.len());
-        let mut i = 10;
-        while i + 5 <= datos.len() {
-            let cab = datos[i];
-            if cab & 6 != 0 {
-                // bloque comprimido de verdad: hace falta un inflate
-                return None;
-            }
-            let n = u16::from_le_bytes([datos[i + 1], datos[i + 2]]) as usize;
-            let ini = i + 5;
-            if ini + n > datos.len() {
-                return None;
-            }
-            bloques.extend_from_slice(&datos[ini..ini + n]);
-            i = ini + n;
-            if cab & 1 == 1 {
-                break;
-            }
-        }
-        if bloques.len() != self.blocks.len() {
-            return None;
-        }
-        self.blocks = bloques;
+        self.blocks.copy_from_slice(&data);
         Some(())
     }
 }

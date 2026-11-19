@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -36,6 +36,7 @@ wgpu = "25"
 pollster = "0.4"
 png = "0.17"
 zip = "2"
+flate2 = "1"
 # Solo para preguntar si hay una version nueva del launcher (una lectura)
 ureq = "2.10"
 # Interfaz del launcher (misma familia wgpu 25 / winit 0.30 que el juego)

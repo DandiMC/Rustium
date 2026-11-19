@@ -1,5 +1,11 @@
 // Mundo voxel 256x256x64, calcado en la estructura de rd-132211 (RubyDung).
 
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Read, Write};
+
 pub const WIDTH: usize = 256;
 pub const HEIGHT: usize = 256;
 pub const DEPTH: usize = 64;
@@ -120,11 +126,10 @@ impl Level {
             blocks,
             light_depths: vec![0; WIDTH * HEIGHT],
         };
-        for x in 0..WIDTH as i32 {
-            for y in 0..HEIGHT as i32 {
-                level.update_light_depth(x, y);
-            }
-        }
+        level.recalc_light();
+        // El original carga level.dat justo despues de generar y de calcular la
+        // luz; si el fichero no existe o no mide lo mismo, se queda el mundo nuevo.
+        level.load();
         // RD_DUMP=1 vuelca bloques y luces como el Java parcheado (careo)
         if std::env::var("RD_DUMP").is_ok() {
             let _ = std::fs::write("bloques_port.raw", &level.blocks);
@@ -135,6 +140,14 @@ impl Level {
             let _ = std::fs::write("luces_port.raw", &luces);
         }
         level
+    }
+
+    fn recalc_light(&mut self) {
+        for x in 0..WIDTH as i32 {
+            for y in 0..HEIGHT as i32 {
+                self.update_light_depth(x, y);
+            }
+        }
     }
 
     // calcLightDepths del original, para una sola columna: baja desde el techo
@@ -151,6 +164,8 @@ impl Level {
     }
 
     fn idx(x: usize, y: usize, z: usize) -> usize {
+        // Java usa (alto * height + profundidad) * width + x; aqui x/y son
+        // horizontales y z la altura, asi que el orden equivalente es este.
         (z * HEIGHT + y) * WIDTH + x
     }
 
@@ -230,6 +245,31 @@ impl Level {
         v = v.wrapping_mul(0x2545_F491);
         v ^= v >> 13;
         v & 3
+    }
+
+    /// Original: Level.load() lee el array de bloques de un level.dat gzip.
+    /// Si el fichero no existe, no es gzip o no tiene el tamano exacto, se
+    /// conserva el mundo recien generado y se devuelve false.
+    pub fn load(&mut self) -> bool {
+        let Ok(file) = File::open("level.dat") else {
+            return false;
+        };
+        let mut data = Vec::with_capacity(self.blocks.len());
+        let mut gz = GzDecoder::new(BufReader::new(file));
+        if gz.read_to_end(&mut data).is_err() || data.len() != self.blocks.len() {
+            return false;
+        }
+        self.blocks.copy_from_slice(&data);
+        self.recalc_light();
+        true
+    }
+
+    /// Original: Level.save() escribe el array de bloques en level.dat, gzip.
+    pub fn save(&self) -> std::io::Result<()> {
+        let file = File::create("level.dat")?;
+        let mut gz = GzEncoder::new(BufWriter::new(file), Compression::default());
+        gz.write_all(&self.blocks)?;
+        gz.finish()?.flush()
     }
 
     fn generate(blocks: &mut [u8]) {

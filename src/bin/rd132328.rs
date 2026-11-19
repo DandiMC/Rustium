@@ -41,6 +41,11 @@ struct App {
     fps: u32,
     show_fps: bool,
     tick_acc: f32,
+    // Arnes de careo: congelar la simulacion y fijar el tiempo de animacion.
+    freeze: bool,
+    fixed_time: Option<f64>,
+    // Solo careo: mantiene el rumbo de los zombis para comparar el caminar.
+    fixed_zombie_rot: Option<f32>,
 }
 
 impl App {
@@ -58,19 +63,53 @@ impl App {
     fn new() -> Self {
         let level = Level::new();
         let mut player = PlayerE::new(&level);
-        // Atajo de pruebas: RD132328_POS="x,y" aparece en esa columna (cayendo).
+        // Atajo de pruebas: RD132328_POS="x,fondo" aparece en esa columna
+        // (cayendo); con tres valores "x,fondo,alto" se fija la posicion exacta.
         // Sin la variable el spawn es aleatorio, como el original.
         if let Ok(s) = std::env::var("RD132328_POS") {
-            if let Some((a, b)) = s.split_once(',') {
-                if let (Ok(x), Ok(y)) = (a.trim().parse::<f32>(), b.trim().parse::<f32>()) {
-                    player.e.set_pos(x, y, world::DEPTH as f32 + 10.0);
-                }
+            let n: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            match n.len() {
+                2 => player.e.set_pos(n[0], n[1], world::DEPTH as f32 + 10.0),
+                3 => player.e.set_pos(n[0], n[1], n[2]),
+                _ => {}
             }
         }
-        // RubyDung.init del original: 100 zombis en (128, 0, 128)
-        let mut zombis = Vec::with_capacity(100);
-        for _ in 0..100 {
+        if let Ok(s) = std::env::var("RD132328_ROT") {
+            let n: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            if n.len() == 2 {
+                player.e.y_rot = n[0];
+                player.e.x_rot = n[1];
+            }
+        }
+        // RubyDung.init del original: 100 zombis en (128, 0, 128).
+        // RD132328_ZOMBIES y RD132328_ZOMBIE son solo para el careo: permiten
+        // dejar el mundo sin zombis o poner uno quieto en una pose concreta.
+        let n_zombis = std::env::var("RD132328_ZOMBIES")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(100);
+        let mut zombis = Vec::with_capacity(n_zombis + 1);
+        for _ in 0..n_zombis {
             zombis.push(Zombie::new(&level, 128.0, 128.0, 0.0));
+        }
+        if let Ok(s) = std::env::var("RD132328_ZOMBIE") {
+            let n: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            if n.len() >= 3 {
+                let mut z = Zombie::new(&level, n[0], n[1], n[2]);
+                z.e.set_pos(n[0], n[1], n[2]);
+                // Sin esto el render interpola desde el resetPos aleatorio.
+                z.e.xo = n[0];
+                z.e.yo = n[1];
+                z.e.zo = n[2];
+                z.rot = n.get(3).copied().unwrap_or(0.0);
+                z.time_offs = 0.0;
+                if let Ok(v) = std::env::var("RD132328_ROT_A") {
+                    if let Ok(a) = v.trim().parse::<f32>() {
+                        z.rot_a = a;
+                    }
+                }
+                zombis.push(z);
+            }
         }
         App {
             window: None,
@@ -89,26 +128,64 @@ impl App {
             fps: 0,
             show_fps: false,
             tick_acc: 0.0,
+            freeze: std::env::var_os("RD132328_FREEZE").is_some(),
+            fixed_time: std::env::var("RD132328_TIME").ok().and_then(|v| v.trim().parse().ok()),
+            fixed_zombie_rot: std::env::var("RD132328_ZOMBIE_ROT")
+                .ok()
+                .and_then(|v| v.trim().parse().ok()),
         }
     }
 
-    // Raycast desde el ojo del jugador (aqui la z de la entidad ya es el ojo).
-    fn raycast(&self) -> Option<((i32, i32, i32), (i32, i32, i32))> {
+    // Posicion interpolada del jugador, como moveCameraToPlayer(a) del original.
+    // Sin interpolar, la camara avanza a tirones de 60 Hz aunque se dibuje a 200.
+    fn camera_player(&self) -> ([f32; 3], [f32; 3], f32, f32) {
         let e = &self.player.e;
-        let mut pos = [e.x, e.y, e.z];
+        let a = (self.tick_acc * 60.0).clamp(0.0, 1.0);
+        let px = e.xo + (e.x - e.xo) * a;
+        let py = e.yo + (e.y - e.yo) * a;
+        let pz = e.zo + (e.z - e.zo) * a;
         let yaw = e.y_rot.to_radians();
         let pitch = e.x_rot.to_radians();
         let (sy, cy) = yaw.sin_cos();
         let (sp, cp) = pitch.sin_cos();
-        let mut d = [sy * cp, -cy * cp, sp];
-        let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
-        d = [d[0] / l, d[1] / l, d[2] / l];
+        // Direccion en coordenadas de mundo: x, fondo, alto.
+        let d = [sy * cp, -cy * cp, sp];
+        ([px, py, pz], d, yaw, pitch)
+    }
+
+    // pick() del original: la camara va 0.3 bloques DETRAS del ojo
+    // (glTranslatef(0,0,-0.3)) y OpenGL solo prueba los bloques dentro de
+    // player.bb.grow(3,3,3). Aqui se hace lo mismo con un DDA: se empieza en la
+    // camara y se para al salir de esa caja. Antes llegaba 6 bloques, asi que se
+    // podia romper mas lejos que en el original.
+    fn raycast(&self) -> Option<((i32, i32, i32), (i32, i32, i32))> {
+        let ([px, py, pz], d, _, _) = self.camera_player();
+        let eye = [px - d[0] * 0.3, py - d[1] * 0.3, pz - d[2] * 0.3];
+        self.raycast_from(eye, d)
+    }
+
+    fn raycast_from(
+        &self,
+        mut pos: [f32; 3],
+        d: [f32; 3],
+    ) -> Option<((i32, i32, i32), (i32, i32, i32))> {
+        let bb = self.player.e.bb;
+        let grow = 3.0f32;
+        let x0 = (bb.x0 - grow).floor() as i32;
+        let x1 = (bb.x1 + grow).floor() as i32;
+        let y0 = (bb.y0 - grow).floor() as i32;
+        let y1 = (bb.y1 + grow).floor() as i32;
+        let z0 = (bb.z0 - grow).floor() as i32;
+        let z1 = (bb.z1 + grow).floor() as i32;
         let mut normal = [0i32, 0, 0];
         let mut t = 0.0f32;
-        while t < 6.0 {
+        loop {
             let bx = pos[0].floor() as i32;
             let by = pos[1].floor() as i32;
             let bz = pos[2].floor() as i32;
+            if bx < x0 || bx > x1 || by < y0 || by > y1 || bz < z0 || bz > z1 {
+                return None;
+            }
             if self.level.is_solid(bx, by, bz) {
                 return Some(((bx, by, bz), (normal[0], normal[1], normal[2])));
             }
@@ -142,8 +219,48 @@ impl App {
                 pos[i] += d[i] * dt;
             }
             t += dt;
+            if t > 32.0 {
+                return None;
+            }
         }
-        None
+    }
+
+    // Arnes de careo: RD132328_FIJA=1 fija posicion y rotacion en cada frame.
+    fn careo_fijar(&mut self) {
+        if std::env::var_os("RD132328_FIJA").is_none() {
+            return;
+        }
+        if let Ok(s) = std::env::var("RD132328_POS") {
+            let n: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            if n.len() == 3 {
+                self.player.e.x = n[0];
+                self.player.e.y = n[1];
+                self.player.e.z = n[2];
+                self.player.e.xo = n[0];
+                self.player.e.yo = n[1];
+                self.player.e.zo = n[2];
+                self.player.e.xd = 0.0;
+                self.player.e.yd = 0.0;
+                self.player.e.zd = 0.0;
+                // La caja tambien va con la camara: el pick original limita a
+                // player.bb.grow(3), y sin esto el careo usaba la caja del spawn.
+                self.player.e.bb = world::BlockBox {
+                    x0: n[0] - 0.3,
+                    x1: n[0] + 0.3,
+                    y0: n[1] - 0.3,
+                    y1: n[1] + 0.3,
+                    z0: n[2] - 1.62,
+                    z1: n[2] + 0.18,
+                };
+            }
+        }
+        if let Ok(s) = std::env::var("RD132328_ROT") {
+            let n: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            if n.len() == 2 {
+                self.player.e.y_rot = n[0];
+                self.player.e.x_rot = n[1];
+            }
+        }
     }
 }
 
@@ -158,6 +275,15 @@ impl ApplicationHandler for App {
                 )
                 .unwrap(),
         );
+        // Mouse.setGrabbed(true) del original. Si el gestor de ventanas no lo
+        // permite todavia, se reintenta en el primer clic.
+        if window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+            window.set_cursor_visible(false);
+            self.grabbed = true;
+        }
+        // Esta version tiene su propio terrain.png (la hierba es un poco mas
+        // clara que en rd-132211); sin esto el renderer usaria el atlas viejo.
+        std::env::set_var("RD_ATLAS_VERSION", VERSION);
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
         renderer.build_chunks(&self.level);
         // Piel de los modelos: char.png de la version original instalada
@@ -195,17 +321,26 @@ impl ApplicationHandler for App {
                     self.show_fps = !self.show_fps;
                     return;
                 }
+                // Original: Return guarda el mundo en level.dat.
+                if state == ElementState::Pressed && logical_key == Key::Named(NamedKey::Enter) {
+                    let _ = self.level.save();
+                    self.log("SAVE level.dat");
+                    return;
+                }
                 let name = match &logical_key {
                     Key::Character(c) => c.to_string(),
                     Key::Named(NamedKey::Space) => " ".to_string(),
+                    // La tecla Windows izquierda (219) tambien salta, como el original.
                     Key::Named(NamedKey::Super) | Key::Named(NamedKey::Meta) => " ".to_string(),
+                    // El original acepta flechas ademas de WASD (200/208/203/205).
+                    Key::Named(NamedKey::ArrowUp) => "w".to_string(),
+                    Key::Named(NamedKey::ArrowDown) => "s".to_string(),
+                    Key::Named(NamedKey::ArrowLeft) => "a".to_string(),
+                    Key::Named(NamedKey::ArrowRight) => "d".to_string(),
                     _ => return,
                 };
                 match state {
                     ElementState::Pressed => {
-                        if name == "r" {
-                            self.player.e.reset_pos(&self.level);
-                        }
                         self.keys.insert(name);
                     }
                     ElementState::Released => {
@@ -215,11 +350,14 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if state == ElementState::Pressed {
+                    // El original agarra el raton en init(): el primer clic ya
+                    // rompe o coloca. Si el sistema no deja agarrarlo antes de
+                    // tener el foco, se agarra ahora pero el clic cuenta igual.
                     if !self.grabbed {
-                        let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
-                        window.set_cursor_visible(false);
-                        self.grabbed = true;
-                        return;
+                        if window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+                            window.set_cursor_visible(false);
+                            self.grabbed = true;
+                        }
                     }
                     if let Some(((bx, by, bz), normal)) = self.raycast() {
                         self.log(&format!("CLICK {:?} hit=({},{},{}) n=({},{},{})", button, bx, by, bz, normal.0, normal.1, normal.2));
@@ -276,6 +414,11 @@ impl ApplicationHandler for App {
         }
     }
 
+    // Original: destroy() guarda el mundo al cerrar el juego.
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        let _ = self.level.save();
+    }
+
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
@@ -292,8 +435,21 @@ impl ApplicationHandler for App {
         }
         self.tick_acc -= steps as f32 / 60.0;
         for _ in 0..steps {
-            for z in self.zombis.iter_mut() {
-                z.tick(&self.level);
+            if !self.freeze {
+                for z in self.zombis.iter_mut() {
+                    z.tick(&self.level);
+                }
+                if let Some(rot) = self.fixed_zombie_rot {
+                    for z in self.zombis.iter_mut() {
+                        z.rot = rot;
+                        z.rot_a = 0.0;
+                    }
+                }
+            }
+            // El original comprueba la R en cada tick: mantenida teletransporta
+            // sin parar, no solo al pulsarla.
+            if self.keys.contains("r") {
+                self.player.e.reset_pos(&self.level);
             }
             self.player.tick(&self.level, f, s, jump);
         }
@@ -313,23 +469,35 @@ impl ApplicationHandler for App {
                 "POS x={:.2} y={:.2} z={:.2} yRot={:.1} xRot={:.1} onGround={}",
                 e.x, e.y, e.z, e.y_rot, e.x_rot, e.on_ground
             ));
+            if let Some(z) = self.zombis.last() {
+                self.log(&format!(
+                    "Z x={:.2} y={:.2} z={:.2} rot={:.1} onGround={}",
+                    z.e.x, z.e.y, z.e.z, z.rot, z.e.on_ground
+                ));
+            }
         }
 
-        let hit = self.raycast();
-        let e = &self.player.e;
-        let yaw = e.y_rot.to_radians();
-        let pitch = e.x_rot.to_radians();
-        let (sy, cy) = yaw.sin_cos();
-        let (sp, cp) = pitch.sin_cos();
-        // moveCameraToPlayer del original: glTranslatef(0,0,-0.3) DESPUES de
-        // rotar, o sea el ojo va 0.3 por delante del punto del jugador.
-        // Coords de camara del motor: (x, arriba, fondo)
-        let fwd = [sy * cp, sp, -cy * cp];
-        let eye = [
-            e.x + fwd[0] * 0.3,
-            e.z + fwd[1] * 0.3,
-            e.y + fwd[2] * 0.3,
-        ];
+        self.careo_fijar();
+        // La camara del original interpola la posicion del jugador con `a`
+        // (moveCameraToPlayer(a)). El render anade el adelanto de 0.3; el pick usa
+        // la camara ya adelantada, por eso aqui se calcula aparte.
+        let ([px, py, pz], dir, yaw, pitch) = self.camera_player();
+        if std::env::var_os("RD132328_HIT_LOG").is_some() {
+            self.log(&format!(
+                "CAM x={:.2} y={:.2} z={:.2} dir={:?} bb=({:.2},{:.2},{:.2})-({:.2},{:.2},{:.2})",
+                px, py, pz, dir,
+                self.player.e.bb.x0, self.player.e.bb.y0, self.player.e.bb.z0,
+                self.player.e.bb.x1, self.player.e.bb.y1, self.player.e.bb.z1
+            ));
+        }
+        let hit = self.raycast_from(
+            [px - dir[0] * 0.3, py - dir[1] * 0.3, pz - dir[2] * 0.3],
+            dir,
+        );
+        let eye = [px, pz, py];
+        if std::env::var_os("RD132328_HIT_LOG").is_some() {
+            self.log(&format!("HIT {:?}", hit));
+        }
 
         // Modelos de todos los zombis en un solo lote. `a` es la fraccion de tick
         // que sobra, como el partialTicks del original: sin ella la posicion salta
@@ -337,7 +505,11 @@ impl ApplicationHandler for App {
         let a = (self.tick_acc * 60.0).clamp(0.0, 1.0);
         let mut verts: Vec<[f32; 5]> = Vec::with_capacity(self.zombis.len() * 216);
         for z in &self.zombis {
-            z.vertices(a, &mut verts);
+            if let Some(t) = self.fixed_time {
+                z.vertices_at(t, a, &mut verts);
+            } else {
+                z.vertices(a, &mut verts);
+            }
         }
 
         let fps = if self.show_fps { Some(self.fps) } else { None };

@@ -55,8 +55,21 @@ impl Jugador {
                 x_rot = b.trim().parse().unwrap_or(0.0);
             }
         }
-        // RD_POS="x,fondo,alto" coloca la camara donde diga (careo)
-        let (mut px, mut py, mut pz) = (WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0, DEPTH as f32 + 10.0);
+        // Como el resetPos del original: punto aleatorio del mapa. RD_SPAWN=f
+        // fija la fraccion (careo) y RD_POS="x,fondo,alto" manda del todo.
+        // Dos fracciones independientes, como los dos Math.random() del
+        // resetPos original (x y fondo no tienen por que coincidir).
+        let mut fraccion = || std::env::var("RD_SPAWN").ok()
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .map(|v| v.clamp(0.0, 1.0))
+            .unwrap_or_else(|| {
+                let n = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos()).unwrap_or(0) as f32;
+                n / 1_000_000_000.0
+            });
+        let (mut px, mut py, mut pz) =
+            (WIDTH as f32 * fraccion(), HEIGHT as f32 * fraccion(), DEPTH as f32 + 10.0);
         if let Ok(v) = std::env::var("RD_POS") {
             let n: Vec<f32> = v.split(',').filter_map(|t| t.trim().parse().ok()).collect();
             if n.len() == 3 {
@@ -81,6 +94,32 @@ impl Jugador {
             x0: self.x - 0.3, x1: self.x + 0.3,
             y0: self.y - 0.3, y1: self.y + 0.3,
             z0: self.z - 1.62, z1: self.z + 0.18,
+        }
+    }
+
+    // Arnes de careo: RD_FIJA=1 fija la camara en cada frame, como el parche
+    // del Java original que reescribe player.x/y/z antes de pick/render.
+    fn careo_fijar(&mut self) {
+        if std::env::var_os("RD_FIJA").is_none() {
+            return;
+        }
+        if let Ok(v) = std::env::var("RD_POS") {
+            let n: Vec<f32> = v.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            if n.len() == 3 {
+                self.x = n[0];
+                self.y = n[1];
+                self.z = n[2];
+                self.xd = 0.0;
+                self.yd = 0.0;
+                self.zd = 0.0;
+            }
+        }
+        if let Ok(v) = std::env::var("RD_ROT") {
+            let n: Vec<f32> = v.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            if n.len() == 2 {
+                self.y_rot = n[0];
+                self.x_rot = n[1];
+            }
         }
     }
 
@@ -163,7 +202,18 @@ struct App {
 
 impl App {
     fn new(version: &'static str) -> Self {
-        let nivel = Nivel::new(SPAWN_SEED);
+        // El original crea sus Random con la hora: el mundo cambia en cada
+        // arranque. RD_SEEDS fija los cuatro filtros para el careo y
+        // RD_SEED_FIJO conserva la semilla historica del port.
+        let seed = if std::env::var_os("RD_SEED_FIJO").is_some() {
+            SPAWN_SEED
+        } else {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as i64)
+                .unwrap_or(SPAWN_SEED)
+        };
+        let nivel = Nivel::new(seed);
         // RubyDung.init: 10 zombis en (128,0,128) con resetPos (posicion al azar
         // en todo el mundo). RD_ZOMBIS_CERCA los pone delante para poder verlos.
         let cerca = std::env::var("RD_ZOMBIS_CERCA").is_ok();
@@ -232,7 +282,7 @@ impl App {
     }
 
     fn raycast(&self) -> Option<((i32, i32, i32), (i32, i32, i32))> {
-        let mut pos = [self.jugador.x, self.jugador.y, self.jugador.z];
+        let (ex, ey, ez) = (self.jugador.x, self.jugador.y, self.jugador.z);
         let yaw = self.jugador.y_rot.to_radians();
         let pitch = self.jugador.x_rot.to_radians();
         let (sy, cy) = yaw.sin_cos();
@@ -240,11 +290,19 @@ impl App {
         let mut d = [sy * cp, -cy * cp, sp];
         let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
         d = [d[0] / l, d[1] / l, d[2] / l];
+        // La camara del original va 0.3 detras del ojo y pick() solo prueba
+        // player.bb.grow(3).
+        let mut pos = [ex - d[0] * 0.3, ey - d[1] * 0.3, ez - d[2] * 0.3];
+        let limit = self.jugador.bbox().expanded(3.0, 3.0, 3.0);
         let mut normal = [0i32, 0, 0];
-        // El original selecciona con GL (sin limite de distancia: alcanza hasta
-        // el far plane). Aqui se marcha hasta 200 bloques.
         let mut t = 0.0f32;
         while t < 200.0 {
+            if pos[0] < limit.x0 || pos[0] > limit.x1
+                || pos[1] < limit.y0 || pos[1] > limit.y1
+                || pos[2] < limit.z0 || pos[2] > limit.z1
+            {
+                return None;
+            }
             let bx = pos[0].floor() as i32;
             let by = pos[1].floor() as i32;
             let bz = pos[2].floor() as i32;
@@ -357,12 +415,32 @@ impl ApplicationHandler for App {
                         Key::Named(NamedKey::Space) => {
                             self.keys.insert(" ".to_string());
                         }
+                        Key::Named(NamedKey::ArrowUp) => {
+                            self.keys.insert("arrowup".to_string());
+                        }
+                        Key::Named(NamedKey::ArrowDown) => {
+                            self.keys.insert("arrowdown".to_string());
+                        }
+                        Key::Named(NamedKey::ArrowLeft) => {
+                            self.keys.insert("arrowleft".to_string());
+                        }
+                        Key::Named(NamedKey::ArrowRight) => {
+                            self.keys.insert("arrowright".to_string());
+                        }
                         _ => {}
                     }
                 } else if let Key::Character(c) = &logical_key {
                     self.keys.remove(c.as_str());
                 } else if let Key::Named(NamedKey::Space) = &logical_key {
                     self.keys.remove(" ");
+                } else if let Key::Named(NamedKey::ArrowUp) = &logical_key {
+                    self.keys.remove("arrowup");
+                } else if let Key::Named(NamedKey::ArrowDown) = &logical_key {
+                    self.keys.remove("arrowdown");
+                } else if let Key::Named(NamedKey::ArrowLeft) = &logical_key {
+                    self.keys.remove("arrowleft");
+                } else if let Key::Named(NamedKey::ArrowRight) = &logical_key {
+                    self.keys.remove("arrowright");
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -371,7 +449,8 @@ impl ApplicationHandler for App {
                         let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
                         window.set_cursor_visible(false);
                         self.grabbed = true;
-                        return;
+                        // El original arranca con el raton capturado: el primer
+                        // clic tambien rompe o coloca.
                     }
                     if let Some(((bx, by, bz), normal)) = self.raycast() {
                         match button {
@@ -419,8 +498,10 @@ impl ApplicationHandler for App {
         let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
         self.last = now;
 
-        let f: f32 = if self.keys.contains("w") { 1.0 } else { 0.0 } - if self.keys.contains("s") { 1.0 } else { 0.0 };
-        let s: f32 = if self.keys.contains("d") { 1.0 } else { 0.0 } - if self.keys.contains("a") { 1.0 } else { 0.0 };
+        let f: f32 = if self.keys.contains("w") || self.keys.contains("arrowup") { 1.0 } else { 0.0 }
+            - if self.keys.contains("s") || self.keys.contains("arrowdown") { 1.0 } else { 0.0 };
+        let s: f32 = if self.keys.contains("d") || self.keys.contains("arrowright") { 1.0 } else { 0.0 }
+            - if self.keys.contains("a") || self.keys.contains("arrowleft") { 1.0 } else { 0.0 };
         let jump = self.keys.contains(" ");
         self.tick_acc += dt;
         let mut steps = (self.tick_acc * 60.0) as i32;
@@ -445,6 +526,9 @@ impl ApplicationHandler for App {
             }
             self.jugador.tick(&self.nivel, f, s, jump);
         }
+        // Careo: la camara fija manda antes del pick (igual que el parche del
+        // original, que reescribe player.x/y/z dentro de render antes de pick).
+        self.jugador.careo_fijar();
         // RubyDung.pick: se recalcula cada frame
         self.hit = self.raycast();
 
@@ -470,11 +554,9 @@ impl ApplicationHandler for App {
             der[2] * fwd[0] - der[0] * fwd[2],
             der[0] * fwd[1] - der[1] * fwd[0],
         ];
-        let eye = [
-            self.jugador.x + fwd[0] * 0.3,
-            self.jugador.z + fwd[1] * 0.3,
-            self.jugador.y + fwd[2] * 0.3,
-        ];
+        // El renderer ya resta 0.3 detras del ojo (glTranslatef(0,0,-0.3) del
+        // original); no hay que adelantarlo aqui.
+        let eye = [self.jugador.x, self.jugador.z, self.jugador.y];
 
         // Particulas como quads de cara a la camara (malla dinamica)
         let mut pv: Vec<Vertex> = Vec::new();

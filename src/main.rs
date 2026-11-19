@@ -91,8 +91,9 @@ impl App {
     }
 
     fn raycast(&self) -> Option<((i32, i32, i32), (i32, i32, i32))> {
-        // Coordenadas de mundo puras: (x, y horizontales, z arriba)
-        let mut pos = [self.player.x, self.player.y, self.player.z + 0.9];
+        // Coordenadas de mundo puras: (x, y horizontales, z arriba). La camara
+        // del original va 0.3 detras del ojo y pick() solo prueba bb.grow(3).
+        let (ex, ey, ez) = self.player.eye_pos();
         let yaw = self.player.y_rot.to_radians();
         let pitch = self.player.x_rot.to_radians();
         let (sy, cy) = yaw.sin_cos();
@@ -100,9 +101,17 @@ impl App {
         let mut d = [sy * cp, -cy * cp, sp];
         let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
         d = [d[0] / l, d[1] / l, d[2] / l];
+        let mut pos = [ex - d[0] * 0.3, ey - d[1] * 0.3, ez - d[2] * 0.3];
+        let limit = self.player.bbox().expanded(3.0, 3.0, 3.0);
         let mut normal = [0i32, 0, 0];
         let mut t = 0.0f32;
         while t < 6.0 {
+            if pos[0] < limit.x0 || pos[0] > limit.x1
+                || pos[1] < limit.y0 || pos[1] > limit.y1
+                || pos[2] < limit.z0 || pos[2] > limit.z1
+            {
+                return None;
+            }
             let bx = pos[0].floor() as i32;
             let by = pos[1].floor() as i32;
             let bz = pos[2].floor() as i32;
@@ -194,9 +203,19 @@ impl ApplicationHandler for App {
                     self.log(&format!("FPS OVERLAY {}", self.show_fps));
                     return;
                 }
+                // Original: Return guarda el mundo en level.dat.
+                if state == ElementState::Pressed && logical_key == Key::Named(NamedKey::Enter) {
+                    let _ = self.level.save();
+                    self.log("SAVE level.dat");
+                    return;
+                }
                 let name = match &logical_key {
                     Key::Character(c) => c.to_string(),
                     Key::Named(NamedKey::Space) => " ".to_string(),
+                    Key::Named(NamedKey::ArrowUp) => "arrowup".to_string(),
+                    Key::Named(NamedKey::ArrowDown) => "arrowdown".to_string(),
+                    Key::Named(NamedKey::ArrowLeft) => "arrowleft".to_string(),
+                    Key::Named(NamedKey::ArrowRight) => "arrowright".to_string(),
                     // En el original la tecla Windows izquierda (219) tambien salta
                     Key::Named(NamedKey::Super) | Key::Named(NamedKey::Meta) => " ".to_string(),
                     _ => return,
@@ -228,7 +247,8 @@ impl ApplicationHandler for App {
                         let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
                         window.set_cursor_visible(false);
                         self.grabbed = true;
-                        return;
+                        // El original ya tiene el raton capturado al arrancar: el
+                        // primer clic tambien rompe/coloca, no solo agarra.
                     }
                     if let Some(((bx, by, bz), normal)) = self.raycast() {
                         self.log(&format!("CLICK {:?} hit=({},{},{}) n=({},{},{})", button, bx, by, bz, normal.0, normal.1, normal.2));
@@ -287,13 +307,20 @@ impl ApplicationHandler for App {
         }
     }
 
+    // Original: destroy() guarda el mundo al cerrar el juego.
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        let _ = self.level.save();
+    }
+
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
         self.last = now;
 
-        let f: f32 = if self.keys.contains("w") { 1.0 } else { 0.0 } - if self.keys.contains("s") { 1.0 } else { 0.0 };
-        let s: f32 = if self.keys.contains("d") { 1.0 } else { 0.0 } - if self.keys.contains("a") { 1.0 } else { 0.0 };
+        let f: f32 = if self.keys.contains("w") || self.keys.contains("arrowup") { 1.0 } else { 0.0 }
+            - if self.keys.contains("s") || self.keys.contains("arrowdown") { 1.0 } else { 0.0 };
+        let s: f32 = if self.keys.contains("d") || self.keys.contains("arrowright") { 1.0 } else { 0.0 }
+            - if self.keys.contains("a") || self.keys.contains("arrowleft") { 1.0 } else { 0.0 };
         let jump = self.keys.contains(" ");
         // El original simula a ritmo FIJO: Timer(60.0f) y en run() hace
         // "for (t = 0; t < timer.ticks; t++) tick();". Un tick por frame hacia que
