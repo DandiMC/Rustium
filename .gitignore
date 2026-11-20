@@ -42,5 +42,8 @@ level.dat
 # Ajustes locales de las herramientas
 .claude/settings.local.json
 
+# Launcher de desarrollo del creador: local, no se publica ni se empaqueta.
+/devlauncher/
+
 # Debug traces written by the games when RD_INPUT_LOG is set
 input_log*.txt

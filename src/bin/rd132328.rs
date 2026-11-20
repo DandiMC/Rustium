@@ -369,10 +369,10 @@ impl ApplicationHandler for App {
                             }
                             MouseButton::Left => {
                                 let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
-                                if !self.level.is_solid(nx, ny, nz) {
-                                    self.level.set(nx, ny, nz, world::GRASS);
-                                    self.log(&format!("PLACE ({},{},{})", nx, ny, nz));
-                                }
+                                // Fiel al original: sin comprobar solidez ni
+                                // colision con el jugador.
+                                self.level.set(nx, ny, nz, world::GRASS);
+                                self.log(&format!("PLACE ({},{},{})", nx, ny, nz));
                             }
                             _ => {}
                         }

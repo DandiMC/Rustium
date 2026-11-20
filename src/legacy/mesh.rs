@@ -64,6 +64,10 @@ const CARAS: [(i32, i32, i32, usize, [[f32; 5]; 4]); 6] = [
 /// de 45 y 135 grados, centro del bloque, de suelo a techo, textura 15 y blanco
 /// (sin sombra). Devuelve 8 vertices: 4 por plano; el original los emite dos
 /// veces, uno por sentido, porque hay back-face culling.
+///
+/// Ojo con los ejes: `Bush.render` usa (x, altura, fondo), pero aqui `x` e `y`
+/// son horizontales (y = fondo) y `z` es la altura. El vertice se guarda como
+/// [x, z, y], igual que las caras de `construir`.
 pub fn arbusto(x: f32, y: f32, z: f32) -> [([f32; 3], [f32; 2]); 8] {
     let tex = 15u32;
     let u0 = (tex % 16) as f32 / 16.0;
@@ -73,14 +77,14 @@ pub fn arbusto(x: f32, y: f32, z: f32) -> [([f32; 3], [f32; 2]); 8] {
     for r in 0..2usize {
         let a = r as f32 * std::f32::consts::PI / 2.0 + std::f32::consts::FRAC_PI_4;
         let xa = a.sin() * 0.5;
-        let za = a.cos() * 0.5;
+        let ya = a.cos() * 0.5;
         let (x0, x1) = (x + 0.5 - xa, x + 0.5 + xa);
-        let (z0, z1) = (z + 0.5 - za, z + 0.5 + za);
-        let (y0, y1) = (y, y + 1.0);
+        let (y0, y1) = (y + 0.5 - ya, y + 0.5 + ya);
+        let (z0, z1) = (z, z + 1.0);
         let quad = [
-            ([x0, z0, y1], [u0 + duv, v0]),
+            ([x0, z1, y0], [u0 + duv, v0]),
             ([x1, z1, y1], [u0, v0]),
-            ([x1, z1, y0], [u0, v0 + duv]),
+            ([x1, z0, y1], [u0, v0 + duv]),
             ([x0, z0, y0], [u0 + duv, v0 + duv]),
         ];
         for (i, v) in quad.iter().enumerate() {
@@ -156,17 +160,18 @@ mod tests {
     fn el_arbusto_son_dos_planos_cruzados() {
         let v = arbusto(10.0, 20.0, 30.0);
         let d = std::f32::consts::FRAC_1_SQRT_2 * 0.5;
-        // Primer plano, de 45 grados: de suelo a techo, esquina (x0, z0) y (x1, z1)
+        // Primer plano a 45 grados: vertical de z=30 a z=31, diagonal por el
+        // centro del bloque en x=10.5 y fondo=20.5.
         assert!((v[0].0[0] - (10.5 - d)).abs() < 1e-5);
-        assert!((v[0].0[1] - (30.5 - d)).abs() < 1e-5);
-        assert!((v[0].0[2] - 21.0).abs() < 1e-5);
-        assert!((v[2].0[2] - 20.0).abs() < 1e-5);
+        assert!((v[0].0[1] - 31.0).abs() < 1e-5);
+        assert!((v[0].0[2] - (20.5 - d)).abs() < 1e-5);
+        assert!((v[2].0[1] - 30.0).abs() < 1e-5);
         // UV: tile 15, u de 0.9375 a 0.9999375, v de 0 a 0.0624375
         assert!((v[0].1[0] - 0.9999375).abs() < 1e-6);
         assert!((v[0].1[1] - 0.0).abs() < 1e-6);
         assert!((v[2].1[1] - 0.0624375).abs() < 1e-6);
         // Segundo plano, a 135 grados: el mismo cuadrado cruzado
-        assert!((v[4].0[1] - (30.5 + d)).abs() < 1e-5);
-        assert!((v[6].0[1] - (30.5 - d)).abs() < 1e-5);
+        assert!((v[4].0[2] - (20.5 + d)).abs() < 1e-5);
+        assert!((v[6].0[2] - (20.5 - d)).abs() < 1e-5);
     }
 }

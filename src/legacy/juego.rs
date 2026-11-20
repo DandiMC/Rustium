@@ -474,9 +474,10 @@ impl ApplicationHandler for App {
                             // Boton izquierdo: colocar el bloque elegido
                             MouseButton::Left => {
                                 let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
-                                if !self.nivel.is_solid(nx, ny, nz) {
-                                    self.nivel.set(nx, ny, nz, self.pintura);
-                                }
+                                // RubyDung no comprueba solidez al colocar: el
+                                // setTile de la cara contigua sustituye lo que
+                                // hubiera (tambien un arbusto).
+                                self.nivel.set(nx, ny, nz, self.pintura);
                             }
                             _ => {}
                         }

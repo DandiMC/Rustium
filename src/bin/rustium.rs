@@ -563,11 +563,6 @@ struct UiTexts {
     upd_interrupted: &'static str,
     upd_over_cap: &'static str,
     upd_sha_mismatch: &'static str,
-    new_instance: &'static str,
-    inst_name: &'static str,
-    inst_create: &'static str,
-    inst_cancel: &'static str,
-    inst_hint: &'static str,
     see_more: &'static str,
     see_less: &'static str,
     measure_fps: &'static str,
@@ -588,9 +583,9 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher 0.1.4, 0.1.5 y 0.1.6.
+/// Novedades de las versiones del launcher (0.1.4 a 0.1.9).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 3] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 4] {
     match l {
         Lang::En => [
             (
@@ -610,6 +605,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "19 Nov 2026",
                 "Zombies move their arms, legs and head like in the original Minecraft.",
                 "They used to look stiff because their movement was almost invisible. Now they walk and dance as smoothly as the original, without jerking.",
+            ),
+            (
+                "The bushes stand up again",
+                "20 Nov 2026",
+                "In rd-20090515 and rd-161348 the bushes are upright again.",
+                "Their crossed planes were built with the depth axis as height, so they lay on their side. They now grow from the ground to the top of the block, exactly like the original.",
             ),
         ],
         Lang::Es => [
@@ -631,6 +632,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Los zombis mueven los brazos, las piernas y la cabeza como en el Minecraft original.",
                 "Antes parecían rígidos porque su movimiento casi no se notaba. Ahora caminan y bailan con la misma soltura que el original, sin dar tirones.",
             ),
+            (
+                "Los arbustos vuelven a crecer de pie",
+                "20 nov 2026",
+                "En rd-20090515 y rd-161348 los arbustos ya se ven verticales.",
+                "Sus dos planos cruzados usaban la profundidad como altura y quedaban tumbados. Ahora van del suelo al techo del bloque, igual que en el original.",
+            ),
         ],
         Lang::Pt => [
             (
@@ -650,6 +657,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "19 nov 2026",
                 "Os zombis mexem os braços, as pernas e a cabeça como no Minecraft original.",
                 "Antes pareciam rígidos porque o movimento quase não se notava. Agora andam e dançam com a mesma naturalidade do original, sem solavancos.",
+            ),
+            (
+                "Os arbustos voltam a crescer de pé",
+                "20 nov 2026",
+                "Em rd-20090515 e rd-161348 os arbustos já aparecem verticais.",
+                "Os dois planos cruzados usavam a profundidade como altura e ficavam deitados. Agora vão do chão ao topo do bloco, tal como no original.",
             ),
         ],
         Lang::Fr => [
@@ -671,6 +684,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Les zombies bougent les bras, les jambes et la tête comme dans le Minecraft original.",
                 "Avant, ils semblaient raides car leur mouvement était presque invisible. Maintenant, ils marchent et dansent aussi naturellement que dans l'original, sans à-coups.",
             ),
+            (
+                "Les buissons se tiennent à nouveau debout",
+                "20 nov. 2026",
+                "Dans rd-20090515 et rd-161348, les buissons sont de nouveau verticaux.",
+                "Leurs deux plans croisés utilisaient la profondeur comme hauteur et restaient couchés. Ils vont maintenant du sol au haut du bloc, comme dans l'original.",
+            ),
         ],
         Lang::De => [
             (
@@ -691,14 +710,97 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Zombies bewegen Arme, Beine und Kopf wie im originalen Minecraft.",
                 "Früher wirkten sie steif, weil ihre Bewegung fast unsichtbar war. Jetzt laufen und tanzen sie so locker wie im Original, ohne Ruckeln.",
             ),
+            (
+                "Die Büsche stehen wieder aufrecht",
+                "20. Nov. 2026",
+                "In rd-20090515 und rd-161348 stehen die Büsche wieder aufrecht.",
+                "Ihre zwei gekreuzten Flächen nutzten die Tiefe als Höhe und lagen deshalb flach. Jetzt reichen sie vom Boden bis zur Blockoberseite, genau wie im Original.",
+            ),
         ],
     }
+}
+
+/// Extra cards from `news.txt` next to the launcher (or in `%APPDATA%\Rustium`).
+/// The developer launcher writes that file, so news can be added without a
+/// rebuild. Each block is a short key=value list, blocks separated by `---`:
+///
+/// ```text
+/// lang=es
+/// title=El arbusto ya se ve de pie
+/// date=20 nov 2026
+/// summary=...
+/// body=...
+/// art=1
+/// ```
+///
+/// `version` is optional (e.g. `rd-20090515`) and `art`: 0 world, 1 bush,
+/// 2 zombies, 3 upright bushes, 4 first version. A malformed block is skipped,
+/// never fatal.
+fn load_local_news() -> Vec<(String, String, String, String, String, String, usize)> {
+    let mut paths = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            paths.push(dir.join("news.txt"));
+        }
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        paths.push(Path::new(&appdata).join("Rustium").join("news.txt"));
+    }
+    let Some(txt) = paths.iter().find_map(|p| std::fs::read_to_string(p).ok()) else {
+        return Vec::new();
+    };
+    let txt = txt.trim_start_matches('\u{feff}');
+    let mut blocks: Vec<Vec<&str>> = Vec::new();
+    let mut cur = Vec::new();
+    for line in txt.lines() {
+        if line.trim() == "---" {
+            blocks.push(std::mem::take(&mut cur));
+        } else {
+            cur.push(line);
+        }
+    }
+    blocks.push(cur);
+
+    let mut out = Vec::new();
+    for block in blocks {
+        let (mut lang, mut title, mut date, mut summary, mut body) =
+            ("", String::new(), String::new(), String::new(), String::new());
+        let mut version = String::new();
+        let mut art = 0usize;
+        for line in block {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let Some((k, v)) = line.split_once('=') else { continue };
+            match k.trim() {
+                "lang" => lang = v.trim(),
+                "title" => title = v.trim().to_string(),
+                "date" => date = v.trim().to_string(),
+                "summary" => summary = v.trim().to_string(),
+                "body" => body = v.trim().to_string(),
+                "version" => version = v.trim().to_string(),
+                "art" => art = v.trim().parse().unwrap_or(0).min(4),
+                _ => {}
+            }
+        }
+        if !lang.is_empty() && !title.is_empty() {
+            if body.is_empty() {
+                body = summary.clone();
+            }
+            out.push((lang.to_string(), title, date, summary, body, version, art));
+            if out.len() >= 12 {
+                break;
+            }
+        }
+    }
+    out
 }
 
 fn ui_texts(l: Lang) -> UiTexts {
     match l {
         Lang::En => UiTexts {
-            sidebar_instances: "INSTANCES",
+            sidebar_instances: "VERSIONS",
             instance_ready: "Ready",
             instance_replacement: "Replacement texture",
             version_label: "Launcher version",
@@ -736,14 +838,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "See less",
             measure_fps: "Measure FPS",
             bench_running: "Measuring... {step}/{total}",
-            new_instance: "New instance",
-            inst_name: "NAME",
-            inst_create: "Create",
-            inst_cancel: "Cancel",
-            inst_hint: "Pick the .jar or .png this instance uses, or leave it empty to find the copy on this computer.",
         },
         Lang::Es => UiTexts {
-            sidebar_instances: "INSTANCIAS",
+            sidebar_instances: "VERSIONES",
             instance_ready: "Listo",
             instance_replacement: "Textura de reemplazo",
             version_label: "Versión de Launcher",
@@ -781,14 +878,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Ver menos",
             measure_fps: "Medir FPS",
             bench_running: "Midiendo... {step}/{total}",
-            new_instance: "Nueva instancia",
-            inst_name: "NOMBRE",
-            inst_create: "Crear",
-            inst_cancel: "Cancelar",
-            inst_hint: "Elige el .jar o .png que usa esta instancia, o déjalo vacío para buscar la copia de este equipo.",
         },
         Lang::Pt => UiTexts {
-            sidebar_instances: "INSTÂNCIAS",
+            sidebar_instances: "VERSÕES",
             instance_ready: "Pronto",
             instance_replacement: "Textura substituta",
             version_label: "Versão do Launcher",
@@ -826,14 +918,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Ver menos",
             measure_fps: "Medir FPS",
             bench_running: "A medir... {step}/{total}",
-            new_instance: "Nova instância",
-            inst_name: "NOME",
-            inst_create: "Criar",
-            inst_cancel: "Cancelar",
-            inst_hint: "Escolhe o .jar ou .png desta instância, ou deixa vazio para procurar a cópia deste computador.",
         },
         Lang::Fr => UiTexts {
-            sidebar_instances: "INSTANCES",
+            sidebar_instances: "VERSIONS",
             instance_ready: "Prêt",
             instance_replacement: "Texture de remplacement",
             version_label: "Version du launcher",
@@ -871,14 +958,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Voir moins",
             measure_fps: "Mesurer les FPS",
             bench_running: "Mesure... {step}/{total}",
-            new_instance: "Nouvelle instance",
-            inst_name: "NOM",
-            inst_create: "Créer",
-            inst_cancel: "Annuler",
-            inst_hint: "Choisissez le .jar ou .png de cette instance, ou laissez vide pour chercher la copie de cet ordinateur.",
         },
         Lang::De => UiTexts {
-            sidebar_instances: "INSTANZEN",
+            sidebar_instances: "VERSIONEN",
             instance_ready: "Bereit",
             instance_replacement: "Ersatztextur",
             version_label: "Launcher-Version",
@@ -916,11 +998,6 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Weniger anzeigen",
             measure_fps: "FPS messen",
             bench_running: "Messung... {step}/{total}",
-            new_instance: "Neue Instanz",
-            inst_name: "NAME",
-            inst_create: "Erstellen",
-            inst_cancel: "Abbrechen",
-            inst_hint: "Wähle die .jar oder .png dieser Instanz oder lass es leer, um die Kopie auf diesem Rechner zu finden.",
         },
     }
 }
@@ -946,14 +1023,6 @@ fn saved_lang() -> Option<Lang> {
     None
 }
 
-/// One rail entry. An empty `path` means "find the copy on this computer",
-/// which is what the built-in instance does.
-#[derive(Clone)]
-struct Instance {
-    name: String,
-    path: String,
-}
-
 /// The build chosen last time, so the picker survives a restart.
 fn saved_game() -> Option<GameVersion> {
     let txt = std::fs::read_to_string(config_path()?).ok()?;
@@ -963,38 +1032,15 @@ fn saved_game() -> Option<GameVersion> {
         .and_then(GameVersion::from_id)
 }
 
-fn saved_instances() -> Vec<Instance> {
-    let Some(p) = config_path() else { return Vec::new() };
-    let Ok(txt) = std::fs::read_to_string(&p) else { return Vec::new() };
-    txt.lines()
-        .filter_map(|l| l.trim().strip_prefix("inst="))
-        .filter_map(|l| {
-            let (name, path) = l.split_once('\t').unwrap_or((l, "-"));
-            let name = name.trim();
-            let path = path.trim();
-            let path = if path == "-" { "" } else { path };
-            if name.is_empty() {
-                None
-            } else {
-                Some(Instance { name: name.to_string(), path: path.to_string() })
-            }
-        })
-        .collect()
-}
-
-/// Language and instances share one tiny file, so writing either keeps both.
-fn save_config(l: Lang, insts: &[Instance], game: GameVersion) {
+/// Language and the chosen build share one tiny file, so writing either keeps
+/// both. Older versions also wrote `inst=` lines for texture instances; they are
+/// simply ignored now that the rail lists the five versions themselves.
+fn save_config(l: Lang, game: GameVersion) {
     let Some(p) = config_path() else { return };
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let mut out = format!("lang={}\ngame={}\n", l.code(), game.id());
-    for i in insts {
-        // A dash marks an entry that has no asset of its own, so an instance
-        // created without a path is still there on the next start.
-        let path = if i.path.trim().is_empty() { "-" } else { i.path.trim() };
-        out.push_str(&format!("inst={}\t{}\n", i.name.replace('\t', " "), path));
-    }
+    let out = format!("lang={}\ngame={}\n", l.code(), game.id());
     let _ = std::fs::write(&p, out);
 }
 
@@ -1665,12 +1711,12 @@ fn push_copy(out: &mut Vec<PathBuf>, p: PathBuf) {
     }
 }
 
-/// Valid rd-132211 copies in the normal installation and in the instances of the
-/// most used launchers (each instance has its own .minecraft).
-fn installed_copies(base: &Path) -> Vec<PathBuf> {
+/// Valid copies of one build in the normal installation and in the instances of
+/// the most used launchers (each instance has its own .minecraft).
+fn installed_copies(base: &Path, id: &str) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
-    let jar = format!("{GAME_VERSION}.jar");
-    push_copy(&mut out, base.join("versions").join(GAME_VERSION).join(&jar));
+    let jar = format!("{id}.jar");
+    push_copy(&mut out, base.join("versions").join(id).join(&jar));
     let mut roots: Vec<PathBuf> = vec![base.join("instances")];
     if let Some(roaming) = base.parent() {
         for name in ["PrismLauncher", "MultiMC", "ATLauncher", "PolyMC"] {
@@ -1681,8 +1727,8 @@ fn installed_copies(base: &Path) -> Vec<PathBuf> {
         let Ok(entries) = std::fs::read_dir(&root) else { continue };
         for e in entries.flatten() {
             let dir = e.path();
-            push_copy(&mut out, dir.join("minecraft").join("versions").join(GAME_VERSION).join(&jar));
-            push_copy(&mut out, dir.join(".minecraft").join("versions").join(GAME_VERSION).join(&jar));
+            push_copy(&mut out, dir.join("minecraft").join("versions").join(id).join(&jar));
+            push_copy(&mut out, dir.join(".minecraft").join("versions").join(id).join(&jar));
         }
     }
     out
@@ -1699,7 +1745,7 @@ fn detect_atlas(opts: &Options) -> Detection {
             }
         };
     }
-    let mut copies = installed_copies(&opts.dir_minecraft);
+    let mut copies = installed_copies(&opts.dir_minecraft, GAME_VERSION);
     if !copies.is_empty() {
         return Detection { path: Some(copies.remove(0)), origin: "detected".to_string() };
     }
@@ -1710,6 +1756,16 @@ fn detect_atlas(opts: &Options) -> Detection {
     Detection { path: None, origin: String::new() }
 }
 
+/// True when this computer has the textures of that build (its own jar, or a
+/// loose terrain.png). The rail uses it for the ready/replacement dot without
+/// decoding the jar every frame; `Window::new` fills the cache once.
+fn version_textures(base: &Path, game: GameVersion) -> bool {
+    if !installed_copies(base, game.id()).is_empty() {
+        return true;
+    }
+    atlas_ok(&base.join("versions").join(game.id()).join("terrain.png"))
+}
+
 // ---------------------------------------------------------------------- game
 
 fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion) -> R<()> {
@@ -1717,7 +1773,15 @@ fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion) -> R<()> {
     say!();
     say!("{}", fill(&t.starting, "{path}", &exe.display().to_string()));
     let mut cmd = std::process::Command::new(&exe);
-    cmd.current_dir(std::env::current_dir().map_err(|e| e.to_string())?);
+    // level.dat is written next to the executable, so "Open folder" always
+    // shows the world that was just saved, whatever directory the launcher was
+    // started from (a shortcut, a terminal, another drive).
+    let game_dir = exe
+        .parent()
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::current_dir().ok())
+        .ok_or_else(|| "cannot find the game folder".to_string())?;
+    cmd.current_dir(game_dir);
     // Each build reads its own terrain.png from its own jar; only the original
     // rd-132211 port takes the atlas the picker detected by hand.
     if let (Some(r), GameVersion::Rd132211) = (atlas, game) {
@@ -2154,15 +2218,11 @@ mod ui {
     #[cfg(not(windows))]
     fn beep() {}
 
-    fn reveal(path: &Path) {
+    fn reveal_dir(dir: &Path) {
         #[cfg(windows)]
-        let _ = std::process::Command::new("explorer")
-            .arg(format!("/select,{}", path.display()))
-            .spawn();
+        let _ = std::process::Command::new("explorer").arg(dir).spawn();
         #[cfg(not(windows))]
-        if let Some(dir) = path.parent() {
-            let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
-        }
+        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
     }
 
     /// Pixel face for the wordmark and the big title (Press Start 2P, OFL).
@@ -2493,15 +2553,18 @@ mod ui {
         dl_done: Option<PathBuf>,
         dl_err: Option<String>,
         starting_setup: bool,
-        news_open: [bool; 5],
+        news_open: Vec<bool>,
+        /// (lang, title, date, summary, body, version, art code)
+        local_news: Vec<(String, String, String, String, String, String, usize)>,
         bench: Option<BenchRun>,
         bench_fps: Option<u32>,
         bench_java: Option<u32>,
-        insts: Vec<Instance>,
-        sel: usize,
-        adding: bool,
-        n_name: String,
-        n_path: String,
+        /// One flag per `GameVersion::ALL`, filled once so the rail can draw its
+        /// ready/replacement dots without decoding five jars every frame.
+        version_ready: Vec<bool>,
+        /// Where the selected build and its level.dat live; "Open folder" shows
+        /// this instead of the .minecraft textures folder.
+        game_dir: PathBuf,
         /// 0..1, restarted whenever the tab changes so the view eases in.
         fade: f32,
         shown_tab: Tab,
@@ -2536,10 +2599,19 @@ mod ui {
                 let _ = utx.send(check_update());
             });
 
-            let mut insts =
-                vec![Instance { name: GAME_VERSION.to_string(), path: String::new() }];
-            insts.extend(saved_instances());
-            let sel = 0;
+            let version_ready = GameVersion::ALL
+                .iter()
+                .map(|v| version_textures(&opts.dir_minecraft, *v))
+                .collect();
+            let game_dir = find_game(&t, opts.game)
+                .ok()
+                .and_then(|p| p.parent().map(Path::to_path_buf))
+                .or_else(|| {
+                    std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.parent().map(Path::to_path_buf))
+                })
+                .unwrap_or_default();
 
             Window {
                 opts,
@@ -2560,15 +2632,19 @@ mod ui {
                 dl_done: None,
                 dl_err: None,
                 starting_setup: false,
-                news_open: [std::env::var("RUSTIUM_NEWS_OPEN").is_ok(); 5],
+                // Debug hook: RUSTIUM_NEWS_OPEN starts with every card open so a
+                // screenshot shows the expanded layout without clicking each one.
+                news_open: if std::env::var("RUSTIUM_NEWS_OPEN").is_ok() {
+                    vec![true; 16]
+                } else {
+                    Vec::new()
+                },
+                local_news: load_local_news(),
                 bench: None,
                 bench_fps: None,
                 bench_java: None,
-                insts,
-                sel,
-                adding: std::env::var("RUSTIUM_ADDING").is_ok(),
-                n_name: String::new(),
-                n_path: String::new(),
+                version_ready,
+                game_dir,
                 fade: 0.0,
                 shown_tab: Tab::Home,
                 panel_text: "",
@@ -2830,42 +2906,9 @@ mod ui {
             });
         }
 
-        /// Points the launcher at the entry selected in the rail.
-        fn select_instance(&mut self) {
-            let path = self
-                .insts
-                .get(self.sel)
-                .map(|i| i.path.trim().to_string())
-                .unwrap_or_default();
-            if path.is_empty() {
-                self.opts.atlas = None;
-            } else {
-                self.opts.atlas = Some(PathBuf::from(&path));
-                self.path = path;
-            }
-            self.refresh();
-        }
-
-        fn create_instance(&mut self) {
-            let typed = self.n_name.trim().to_string();
-            let name = if typed.is_empty() {
-                format!("{} {}", GAME_VERSION, self.insts.len())
-            } else {
-                typed
-            };
-            self.insts.push(Instance { name, path: self.n_path.trim().to_string() });
-            self.sel = self.insts.len() - 1;
-            self.adding = false;
-            self.n_name.clear();
-            self.n_path.clear();
-            save_config(self.lang, &self.insts[1..], self.opts.game);
-            self.select_instance();
-        }
-
         fn sidebar(&mut self, ui: &mut egui::Ui) {
             let t = texts(self.lang);
             let u = ui_texts(self.lang);
-            let have = self.det.path.is_some();
 
             ui.add_space(4.0);
             pixel_text(ui, "RUSTIUM", 16.0, MAGENTA);
@@ -2874,91 +2917,32 @@ mod ui {
 
             ui.horizontal(|ui| {
                 ui.label(RichText::new(u.sidebar_instances).size(10.5).color(MUTED).strong());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let add = egui::Button::new(RichText::new("+").size(14.0).strong().color(TEXT))
-                        .fill(GLASS_HI)
-                        .stroke(egui::Stroke::new(1.0_f32, EDGE))
-                        .corner_radius(8)
-                        .min_size(egui::vec2(24.0, 22.0));
-                    if ui.add(add).on_hover_text(u.new_instance).clicked() {
-                        self.adding = !self.adding;
-                        self.n_name.clear();
-                        self.n_path.clear();
-                    }
-                });
             });
             ui.add_space(8.0);
 
-            if self.adding {
-                egui::Frame::NONE
-                    .fill(GLASS_HI)
-                    .stroke(egui::Stroke::new(1.0_f32, EDGE))
-                    .corner_radius(14)
-                    .inner_margin(egui::Margin::symmetric(14, 12))
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.label(RichText::new(u.new_instance).size(12.5).strong().color(TEXT));
-                        ui.add_space(7.0);
-                        ui.label(RichText::new(u.inst_name).size(10.5).color(MUTED));
-                        ui.add_space(3.0);
-                        field(ui, &mut self.n_name, GAME_VERSION);
-                        ui.add_space(8.0);
-                        ui.label(RichText::new(t.path_label).size(10.5).color(MUTED));
-                        ui.add_space(3.0);
-                        field(ui, &mut self.n_path, ".jar / .png");
-                        ui.add_space(7.0);
-                        ui.label(RichText::new(u.inst_hint).size(11.0).color(MUTED));
-                        ui.add_space(9.0);
-                        ui.horizontal(|ui| {
-                            let make = egui::Button::new(
-                                RichText::new(u.inst_create)
-                                    .size(12.5)
-                                    .color(Color32::from_rgb(24, 10, 20)),
-                            )
-                            .fill(MAGENTA)
-                            .corner_radius(9)
-                            .min_size(egui::vec2(72.0, 28.0));
-                            if ui.add(make).clicked() {
-                                self.create_instance();
-                            }
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new(u.inst_cancel).size(12.5).color(SOFT),
-                                    )
-                                    .fill(Color32::TRANSPARENT)
-                                    .corner_radius(9)
-                                    .min_size(egui::vec2(64.0, 28.0)),
-                                )
-                                .clicked()
-                            {
-                                self.adding = false;
-                            }
-                        });
-                    });
-                ui.add_space(10.0);
-            }
-
-            let mut pick: Option<usize> = None;
-            for (i, inst) in self.insts.iter().enumerate() {
-                let ok = if inst.path.trim().is_empty() {
-                    have
-                } else {
-                    atlas_ok(Path::new(&inst.path))
-                };
+            // The rail is the version picker: one list, no second combo box
+            // and no separate "new instance" dialog.
+            let mut pick: Option<GameVersion> = None;
+            for (i, v) in GameVersion::ALL.iter().enumerate() {
+                let ok = self.version_ready.get(i).copied().unwrap_or(false);
                 let (dot, sub) = if ok {
                     (GREEN, u.instance_ready)
                 } else {
                     (AMBER, u.instance_replacement)
                 };
-                if instance_row(ui, &inst.name, sub, dot, i == self.sel).clicked() {
-                    pick = Some(i);
+                if instance_row(ui, v.id(), sub, dot, *v == self.opts.game).clicked() {
+                    pick = Some(*v);
                 }
                 ui.add_space(8.0);
             }
-            if let Some(i) = pick {
-                self.sel = i;
-                self.select_instance();
+            if let Some(v) = pick {
+                self.opts.game = v;
+                save_config(self.lang, v);
+                if let Ok(p) = find_game(&t, v) {
+                    if let Some(dir) = p.parent() {
+                        self.game_dir = dir.to_path_buf();
+                    }
+                }
             }
 
             // Footer: reserved at the bottom so it never falls off a short window.
@@ -2997,7 +2981,7 @@ mod ui {
                 });
             if elegido != self.lang {
                 self.lang = elegido;
-                save_config(elegido, &self.insts[1..], self.opts.game);
+                save_config(elegido, self.opts.game);
                 let t2 = texts(elegido);
                 // Old messages were written in the old language: drop them.
                 self.log.clear();
@@ -3130,7 +3114,18 @@ mod ui {
             let u = ui_texts(self.lang);
             let (l_ver, l_tex, l_perf, more_news) = extra_texts(self.lang);
             let busy = self.busy;
-            let have = self.det.path.is_some();
+            // The texture status follows the build picked in the rail. Only
+            // rd-132211 takes a hand-picked atlas; the legacy builds read their
+            // own terrain.png from their jar.
+            let slot = GameVersion::ALL
+                .iter()
+                .position(|v| *v == self.opts.game)
+                .unwrap_or(0);
+            let have = if self.opts.game == GameVersion::Rd132211 {
+                self.det.path.is_some()
+            } else {
+                self.version_ready.get(slot).copied().unwrap_or(false)
+            };
             let detected = self.det.origin == "detected";
             let tab = self.tab;
 
@@ -3179,28 +3174,8 @@ mod ui {
 
                             if tab == Tab::Home {
                                 ui.add_space(2.0);
-                                // Build picker: the five pre-classic versions the
-                                // launcher ships, each with its own exe.
-                                ui.horizontal(|ui| {
-                                    ui.label(disp(l_ver, 11.0).color(MUTED));
-                                    ui.add_space(6.0);
-                                    let mut sel = self.opts.game;
-                                    egui::ComboBox::from_id_salt("pick-version")
-                                        .selected_text(
-                                            RichText::new(sel.id()).size(14.0).color(TEXT),
-                                        )
-                                        .width(190.0)
-                                        .show_ui(ui, |ui| {
-                                            for v in GameVersion::ALL {
-                                                ui.selectable_value(&mut sel, v, v.id());
-                                            }
-                                        });
-                                    if sel != self.opts.game {
-                                        self.opts.game = sel;
-                                        save_config(self.lang, &self.insts[1..], sel);
-                                    }
-                                });
-                                ui.add_space(8.0);
+                                // The version lives in the rail (one list), so the
+                                // home tab goes straight to playing.
                                 ui.horizontal(|ui| {
                                     if hero_button(ui, t.play, 210.0, 54.0, !busy).clicked() {
                                         self.play();
@@ -3208,10 +3183,8 @@ mod ui {
                                     if plain_button(ui, t.refresh, 120.0, !busy).clicked() {
                                         self.refresh();
                                     }
-                                    if plain_button(ui, u.folder, 150.0, self.det.path.is_some()).clicked() {
-                                        if let Some(p) = &self.det.path {
-                                            reveal(p);
-                                        }
+                                    if plain_button(ui, u.folder, 150.0, !self.game_dir.as_os_str().is_empty()).clicked() {
+                                        reveal_dir(&self.game_dir);
                                     }
                                     if plain_button(ui, t.how, 160.0, !busy).clicked() {
                                         self.show = if self.show == Some(t.how_text) {
@@ -3236,44 +3209,51 @@ mod ui {
                                     ui.horizontal(|ui| {
                                         ui.label(RichText::new(title).size(12.5).strong().color(color));
                                         ui.add_space(6.0);
+                                        let manual = self.opts.game == GameVersion::Rd132211 && !detected;
                                         let sub = if have {
-                                            if detected { t.found_src } else { t.manual_src }
+                                            if manual { t.manual_src } else { t.found_src }.to_string()
+                                        } else if self.opts.game == GameVersion::Rd132211 {
+                                            t.missing_src.to_string()
                                         } else {
-                                            t.missing_src
+                                            fill(&t.tex_none, "{version}", self.opts.game.id())
+                                                .trim()
+                                                .to_string()
                                         };
-                                        ui.label(RichText::new(sub).size(12.5).color(SOFT));
+                                        ui.label(RichText::new(&sub).size(12.5).color(SOFT));
                                     });
-                                    if !have {
+                                    if !have && self.opts.game == GameVersion::Rd132211 {
                                         ui.add_space(4.0);
                                         ui.label(RichText::new(t.missing_hint).size(12.5).color(SOFT));
                                     }
-                                    ui.add_space(10.0);
-                                    ui.label(RichText::new(t.path_label).size(11.0).color(MUTED));
-                                    ui.add_space(4.0);
-                                    ui.horizontal(|ui| {
-                                        let w = (ui.available_width() - 150.0).max(200.0);
-                                        egui::Frame::NONE
-                                            .fill(Color32::from_rgba_premultiplied(14, 14, 14, 14))
+                                    if self.opts.game == GameVersion::Rd132211 {
+                                        ui.add_space(10.0);
+                                        ui.label(RichText::new(t.path_label).size(11.0).color(MUTED));
+                                        ui.add_space(4.0);
+                                        ui.horizontal(|ui| {
+                                            let w = (ui.available_width() - 150.0).max(200.0);
+                                            egui::Frame::NONE
+                                                .fill(Color32::from_rgba_premultiplied(14, 14, 14, 14))
+                                                .corner_radius(10)
+                                                .inner_margin(egui::Margin::symmetric(12, 9))
+                                                .show(ui, |ui| {
+                                                    ui.add_sized(
+                                                        [w - 24.0, 18.0],
+                                                        egui::TextEdit::singleline(&mut self.path)
+                                                            .frame(false)
+                                                            .hint_text(r"C:\...\.minecraft\versions\rd-132211\rd-132211.jar"),
+                                                    );
+                                                });
+                                            let use_btn = egui::Button::new(
+                                                RichText::new(t.use_path).size(13.0).color(TEXT),
+                                            )
+                                            .fill(GLASS_HI)
                                             .corner_radius(10)
-                                            .inner_margin(egui::Margin::symmetric(12, 9))
-                                            .show(ui, |ui| {
-                                                ui.add_sized(
-                                                    [w - 24.0, 18.0],
-                                                    egui::TextEdit::singleline(&mut self.path)
-                                                        .frame(false)
-                                                        .hint_text(r"C:\...\.minecraft\versions\rd-132211\rd-132211.jar"),
-                                                );
-                                            });
-                                        let use_btn = egui::Button::new(
-                                            RichText::new(t.use_path).size(13.0).color(TEXT),
-                                        )
-                                        .fill(GLASS_HI)
-                                        .corner_radius(10)
-                                        .min_size(egui::vec2(138.0, 38.0));
-                                        if ui.add(use_btn).clicked() {
-                                            self.use_path();
-                                        }
-                                    });
+                                            .min_size(egui::vec2(138.0, 38.0));
+                                            if ui.add(use_btn).clicked() {
+                                                self.use_path();
+                                            }
+                                        });
+                                    }
                                 });
 
                                 ui.add_space(12.0);
@@ -3359,45 +3339,89 @@ mod ui {
                                                 .color(SOFT),
                                         );
                                         ui.add_space(10.0);
-                                        news_card(
-                                            ui,
-                                            u.n1_title,
-                                            u.n1_date,
-                                            u.n1_short,
-                                            u.n1_body,
-                                            &mut self.news_open[0],
-                                            u.see_more,
-                                            u.see_less,
-                                            Art::Launcher,
-                                        );
-                                        ui.add_space(12.0);
-                                        news_card(
-                                            ui,
-                                            u.n2_title,
-                                            u.n2_date,
-                                            u.n2_short,
-                                            u.n2_body,
-                                            &mut self.news_open[1],
-                                            u.see_more,
-                                            u.see_less,
-                                            Art::Launcher,
-                                        );
+                                        // Intro cards, then the local extras from
+                                        // news.txt, then the version history. The
+                                        // list can grow at runtime, so the open
+                                        // flags are resized after it is built.
+                                        // (title, date, summary, body, version tag, art)
+                                        let mut cards: Vec<(String, String, String, String, String, Art)> = vec![
+                                            (
+                                                u.n1_title.to_string(),
+                                                u.n1_date.to_string(),
+                                                u.n1_short.to_string(),
+                                                u.n1_body.to_string(),
+                                                format!("v{VERSION}"),
+                                                Art::Launcher,
+                                            ),
+                                            (
+                                                u.n2_title.to_string(),
+                                                u.n2_date.to_string(),
+                                                u.n2_short.to_string(),
+                                                u.n2_body.to_string(),
+                                                "rd-132211".to_string(),
+                                                Art::First,
+                                            ),
+                                        ];
+                                        for (lang, title, date, short, body, version, art) in &self.local_news {
+                                            if lang != self.lang.code() {
+                                                continue;
+                                            }
+                                            cards.push((
+                                                title.clone(),
+                                                date.clone(),
+                                                short.clone(),
+                                                body.clone(),
+                                                version.clone(),
+                                                match *art {
+                                                    1 => Art::Bush,
+                                                    2 => Art::Zombies,
+                                                    3 => Art::Upright,
+                                                    4 => Art::First,
+                                                    _ => Art::World,
+                                                },
+                                            ));
+                                        }
+                                        // The build each version card talks about.
+                                        let tags = [
+                                            "rd-132211 … rd-161348",
+                                            "rd-20090515",
+                                            "rd-132328",
+                                            "rd-20090515 · rd-161348",
+                                        ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
-                                            ui.add_space(12.0);
-                                            news_card(
-                                                ui,
-                                                item.0,
-                                                item.1,
-                                                item.2,
-                                                item.3,
-                                                &mut self.news_open[2 + i],
-                                                u.see_more,
-                                                u.see_less,
+                                            cards.push((
+                                                item.0.to_string(),
+                                                item.1.to_string(),
+                                                item.2.to_string(),
+                                                item.3.to_string(),
+                                                tags.get(i).copied().unwrap_or("").to_string(),
                                                 match i {
                                                     1 => Art::Bush,
                                                     2 => Art::Zombies,
+                                                    3 => Art::Upright,
                                                     _ => Art::World,
                                                 },
+                                            ));
+                                        }
+                                        if self.news_open.len() != cards.len() {
+                                            self.news_open.resize(cards.len(), false);
+                                        }
+                                        for (i, (title, date, short, body, version, art)) in cards.iter().enumerate() {
+                                            if i > 0 {
+                                                ui.add_space(12.0);
+                                            }
+                                            news_card(
+                                                ui,
+                                                i,
+                                                title,
+                                                date,
+                                                short,
+                                                body,
+                                                version,
+                                                &mut self.news_open[i],
+                                                u.see_more,
+                                                u.see_less,
+                                                *art,
                                             );
                                         }
                                         ui.add_space(12.0);
@@ -3491,6 +3515,10 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
         World,
         Bush,
         Zombies,
+        /// The upright bushes of rd-20090515 / rd-161348.
+        Upright,
+        /// The flat world of the very first version, rd-132211.
+        First,
     }
 
     fn news_shot(
@@ -3516,6 +3544,8 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                 Art::World => ("news-world", include_bytes!("../../assets/news_game.rgb")),
                 Art::Bush => ("news-bush", include_bytes!("../../assets/news_bush.rgb")),
                 Art::Zombies => ("news-zombies", include_bytes!("../../assets/news_zombies.rgb")),
+                Art::Upright => ("news-upright", include_bytes!("../../assets/news_upright.rgb")),
+                Art::First => ("news-first", include_bytes!("../../assets/news_first.rgb")),
                 Art::Launcher => unreachable!(),
             };
             let shot = news_shot(ui.ctx(), name, bytes);
@@ -3558,10 +3588,12 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
     #[allow(clippy::too_many_arguments)]
     fn news_card(
         ui: &mut egui::Ui,
+        card: usize,
         title: &str,
         date: &str,
         short: &str,
         full: &str,
+        version: &str,
         open: &mut bool,
         more: &str,
         less: &str,
@@ -3589,16 +3621,32 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     ui.label(RichText::new(date).size(11.5).color(MUTED));
+                                    if !version.is_empty() {
+                                        egui::Frame::NONE
+                                            .fill(GLASS_HI)
+                                            .corner_radius(6)
+                                            .inner_margin(egui::Margin::symmetric(6, 2))
+                                            .show(ui, |ui| {
+                                                ui.label(
+                                                    RichText::new(version)
+                                                        .size(10.5)
+                                                        .strong()
+                                                        .color(MAGENTA),
+                                                );
+                                            });
+                                    }
                                 },
                             );
                         });
                         ui.add_space(7.0);
-                        // The body grows and crossfades instead of jumping.
-                        // One animation per card: the title makes the id unique.
+                        // The body grows instead of jumping and its text fades
+                        // in with it. The index (not the title) is the id, so two
+                        // cards with the same headline never share an animation
+                        // and freeze it.
                         let t = ui.ctx().animate_bool_with_time(
-                            egui::Id::new(("news-open", title)),
+                            egui::Id::new(("news-open", card)),
                             *open,
-                            0.34,
+                            0.30,
                         );
                         // Keep the frames coming while the box is still moving,
                         // otherwise the animation freezes half way.
@@ -3608,20 +3656,34 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                         // Spring only while opening; closing eases out evenly so
                         // it never snaps at the end.
                         let e = if *open { ease_out_back(t) } else { smooth_step(t) };
+                        let fade = smooth_step(t);
                         let w = text_w;
                         let body = egui::FontId::proportional(13.0);
                         let gs = ui.painter().layout(short.to_owned(), body.clone(), SOFT, w);
                         let gf = ui.painter().layout(full.to_owned(), body, SOFT, w);
-                        // One text at a time, revealed by the growing box: no
-                        // crossfade, so nothing ever overlaps.
-                        let shown = if *open { gf.clone() } else { gs.clone() };
                         let h = egui::lerp(gs.size().y..=gf.size().y, e)
                             .clamp(0.0, gf.size().y * 1.12);
                         let (body_rect, _) =
                             ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
-                        ui.painter()
-                            .with_clip_rect(body_rect)
-                            .galley(body_rect.left_top(), shown, SOFT);
+                        // One text at a time, revealed by the growing box and
+                        // fading in as it opens: the two strings never overlap.
+                        let shown = if *open { gf } else { gs };
+                        let a = if *open { fade } else { 1.0 };
+                        if a > 0.01 {
+                            let alpha = (a.clamp(0.0, 1.0) * 255.0).round() as u8;
+                            ui.painter()
+                                .with_clip_rect(body_rect)
+                                .galley(
+                                    body_rect.left_top(),
+                                    shown,
+                                    Color32::from_rgba_unmultiplied(
+                                        SOFT.r(),
+                                        SOFT.g(),
+                                        SOFT.b(),
+                                        alpha,
+                                    ),
+                                );
+                        }
                         ui.add_space(2.0);
                         let label = if *open { less } else { more };
                         if ui
@@ -3636,18 +3698,6 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                     });
                 });
             });
-    }
-
-    /// A one-line text field with room for the hint and the text to breathe.
-    fn field(ui: &mut egui::Ui, value: &mut String, hint: &str) {
-        let w = ui.available_width();
-        ui.add_sized(
-            [w, 27.0],
-            egui::TextEdit::singleline(value)
-                .hint_text(RichText::new(hint).size(11.5))
-                .text_color(TEXT)
-                .margin(egui::Margin::symmetric(8, 6)),
-        );
     }
 
     /// A clickable rail card; the whole panel reacts, like a list row.

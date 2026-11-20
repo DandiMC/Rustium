@@ -34,17 +34,16 @@ pub fn textura(id: u8, cara: usize) -> u32 {
 }
 
 pub fn solido(id: u8) -> bool {
-    match id {
-        ARBUSTO => false,
-        _ => id != AIRE,
-    }
+    // En esta familia (rd-160052 / rd-20090515 / rd-161348) Tile.isSolid()
+    // devuelve true para todo tile no vacio y Bush no lo sobrescribe: el arbusto
+    // ocupa la caja entera, frena al jugador y se puede apuntar y romper como
+    // cualquier otro bloque. Tambien se puede colocar un bloque encima.
+    id != AIRE
 }
 
 pub fn bloquea_luz(id: u8) -> bool {
-    match id {
-        ARBUSTO => false,
-        _ => id != AIRE,
-    }
+    // Tile.blocksLight() tambien es true por defecto y Bush no lo cambia.
+    id != AIRE
 }
 
 /// Factor de luz por cara, igual que Tile.render del original:
@@ -83,5 +82,20 @@ pub fn tick(nivel: &mut crate::legacy::level::Nivel, id: u8, x: i32, y: i32, z: 
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn el_arbusto_es_solido_y_bloquea_la_luz_como_el_original() {
+        // Tile.isSolid() y Tile.blocksLight() valen true por defecto en esta
+        // familia y Bush no los sobrescribe: la caja es la del bloque entero.
+        assert!(solido(ARBUSTO));
+        assert!(bloquea_luz(ARBUSTO));
+        assert!(!solido(AIRE));
+        assert!(!bloquea_luz(AIRE));
     }
 }

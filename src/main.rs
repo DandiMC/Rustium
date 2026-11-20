@@ -259,12 +259,12 @@ impl ApplicationHandler for App {
                                 self.log(&format!("BREAK ({},{},{})", bx, by, bz));
                             }
                             MouseButton::Left => {
-                                // Fiel al original: coloca sin comprobar colision con el jugador
+                                // Fiel al original: coloca sin comprobar solidez ni
+                                // colision con el jugador; el setTile sustituye lo
+                                // que hubiera en la cara contigua.
                                 let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
-                                if !self.level.is_solid(nx, ny, nz) {
-                                    self.level.set(nx, ny, nz, world::GRASS);
-                                    self.log(&format!("PLACE ({},{},{})", nx, ny, nz));
-                                }
+                                self.level.set(nx, ny, nz, world::GRASS);
+                                self.log(&format!("PLACE ({},{},{})", nx, ny, nz));
                             }
                             _ => {}
                         }

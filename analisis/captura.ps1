@@ -17,6 +17,7 @@ param(
     [string]$TitleMatch = "Minecraft|RubyDung",
     [string]$Exclude = "Launcher|Installer",
     [int]$Timeout = 0,
+    [int]$ProcessId = 0,
     [switch]$Foreground,
     [switch]$Bring,
     [switch]$FullScreen,
@@ -89,7 +90,13 @@ $target = $null
 $deadline = (Get-Date).AddSeconds($Timeout)
 
 while ($true) {
-    if ($Foreground) {
+    if ($ProcessId -gt 0) {
+        $p = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if ($p -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
+            $target = [pscustomobject]@{ Handle = $p.MainWindowHandle; Title = $p.MainWindowTitle }
+            break
+        }
+    } elseif ($Foreground) {
         $h = [WinCap]::GetForegroundWindow()
         if ($h -ne [IntPtr]::Zero) {
             $target = [pscustomobject]@{ Handle = $h; Title = [WinCap]::Title($h) }
