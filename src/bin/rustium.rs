@@ -583,7 +583,7 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.1.10).
+/// Novedades de las versiones del launcher (0.1.4 a 0.1.11).
 /// (titulo, fecha, resumen, cuerpo)
 fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 6] {
     match l {
@@ -595,7 +595,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Pick any of them from the list and press Play. Each one opens in its own window, and the launcher remembers the last version you used. rd-131655 is not included because Mojang never published its file.",
             ),
             (
-                "The bushes look right again",
+                "The bushes look right again?",
                 "18 Nov 2026",
                 "The bushes of 15 May 2009 have their leaves and crossed shape back.",
                 "They used to look like a square green block. Now they are drawn with two crossed planes and their leaves, just like the original game, and you can place one with the 6 key.",
@@ -633,7 +633,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Elige cualquiera en la lista y pulsa Jugar. Cada una se abre en su propia ventana y el launcher recuerda la última que usaste. La rd-131655 no está porque Mojang nunca publicó su archivo.",
             ),
             (
-                "Los arbustos vuelven a verse bien",
+                "¿Los arbustos vuelven a verse bien?",
                 "18 nov 2026",
                 "En la versión del 15 de mayo de 2009, los arbustos recuperan sus hojas y su forma cruzada.",
                 "Antes parecían un bloque verde cuadrado. Ahora se dibujan con dos planos cruzados y sus hojas, igual que en el juego original, y puedes colocar uno con la tecla 6.",
@@ -671,7 +671,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Escolhe qualquer uma na lista e carrega em Jogar. Cada uma abre na sua própria janela e o launcher lembra a última que usaste. A rd-131655 não está porque a Mojang nunca publicou o ficheiro.",
             ),
             (
-                "Os arbustos voltaram a parecer certos",
+                "Os arbustos voltam a parecer certos?",
                 "18 nov 2026",
                 "Na versão de 15 de maio de 2009, os arbustos voltam a ter as folhas e a forma cruzada.",
                 "Antes pareciam um bloco verde quadrado. Agora são desenhados com dois planos cruzados e as suas folhas, tal como no jogo original, e podes colocar um com a tecla 6.",
@@ -709,7 +709,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Choisis-en une dans la liste et appuie sur Jouer. Chacune s'ouvre dans sa propre fenêtre et le launcher retient la dernière utilisée. rd-131655 n'est pas incluse car Mojang n'a jamais publié son fichier.",
             ),
             (
-                "Les buissons ont retrouvé leur aspect",
+                "Les buissons ont retrouvé leur aspect ?",
                 "18 nov. 2026",
                 "Dans la version du 15 mai 2009, les buissons ont retrouvé leurs feuilles et leur forme croisée.",
                 "Avant, ils ressemblaient à un bloc vert carré. Maintenant, ils sont dessinés avec deux plans croisés et leurs feuilles, comme dans le jeu original, et tu peux en poser un avec la touche 6.",
@@ -747,7 +747,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Wähle eine aus der Liste und drücke Spielen. Jede öffnet sich in einem eigenen Fenster und der Launcher merkt sich die letzte. rd-131655 fehlt, weil Mojang ihre Datei nie veröffentlicht hat.",
             ),
             (
-                "Die Büsche sehen wieder richtig aus",
+                "Die Büsche sehen wieder richtig aus?",
                 "18. Nov. 2026",
                 "In der Version vom 15. Mai 2009 haben die Büsche wieder ihre Blätter und ihre gekreuzte Form.",
                 "Früher sahen sie wie ein grüner quadratischer Block aus. Jetzt werden sie mit zwei gekreuzten Flächen und ihren Blättern gezeichnet, wie im Original, und du kannst mit der Taste 6 einen setzen.",
