@@ -92,7 +92,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.1.9-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.1.10-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 
