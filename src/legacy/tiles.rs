@@ -33,17 +33,24 @@ pub fn textura(id: u8, cara: usize) -> u32 {
     }
 }
 
+/// Textura base del tile (`Tile.tex`), la que usa `Tile.destroy` para las
+/// particulas. El cesped suelta su lateral (3), no la cara de abajo (2).
+pub fn textura_particula(id: u8) -> u32 {
+    match id {
+        CESPED => 3,
+        _ => textura(id, 1),
+    }
+}
+
 pub fn solido(id: u8) -> bool {
-    // En esta familia (rd-160052 / rd-20090515 / rd-161348) Tile.isSolid()
-    // devuelve true para todo tile no vacio y Bush no lo sobrescribe: el arbusto
-    // ocupa la caja entera, frena al jugador y se puede apuntar y romper como
-    // cualquier otro bloque. Tambien se puede colocar un bloque encima.
-    id != AIRE
+    // Tile.isSolid() es true por defecto, pero Bush lo sobrescribe a false y su
+    // getAABB() devuelve null: se atraviesa y no frena al jugador.
+    id != AIRE && id != ARBUSTO
 }
 
 pub fn bloquea_luz(id: u8) -> bool {
-    // Tile.blocksLight() tambien es true por defecto y Bush no lo cambia.
-    id != AIRE
+    // Bush.blocksLight() tambien devuelve false: deja pasar la luz.
+    id != AIRE && id != ARBUSTO
 }
 
 /// Factor de luz por cara, igual que Tile.render del original:
@@ -90,12 +97,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn el_arbusto_es_solido_y_bloquea_la_luz_como_el_original() {
-        // Tile.isSolid() y Tile.blocksLight() valen true por defecto en esta
-        // familia y Bush no los sobrescribe: la caja es la del bloque entero.
-        assert!(solido(ARBUSTO));
-        assert!(bloquea_luz(ARBUSTO));
+    fn el_cesped_suelta_particulas_con_su_textura_lateral() {
+        assert_eq!(textura_particula(CESPED), 3);
+        assert_eq!(textura_particula(PIEDRA), 1);
+        assert_eq!(textura_particula(TIERRA), 2);
+    }
+
+    #[test]
+    fn el_arbusto_se_atraviesa_y_deja_pasar_la_luz() {
+        // Bush sobrescribe isSolid() y blocksLight() a false; su getAABB() es
+        // null, asi que tampoco genera cajas de colision.
+        assert!(!solido(ARBUSTO));
+        assert!(!bloquea_luz(ARBUSTO));
         assert!(!solido(AIRE));
         assert!(!bloquea_luz(AIRE));
+        // Los bloques normales siguen siendo solidos y opacos.
+        assert!(solido(PIEDRA));
+        assert!(bloquea_luz(PIEDRA));
     }
 }

@@ -15,7 +15,7 @@ y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.1.9-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.1.10-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.

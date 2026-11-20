@@ -78,10 +78,12 @@ impl Particula {
         self.xo = self.x;
         self.yo = self.y;
         self.zo = self.z;
-        self.age += 1;
+        // `this.age++ >= lifetime` del original: compara antes de incrementar,
+        // asi que la particula vive exactamente `lifetime` ticks.
         if self.age >= self.lifetime {
             self.borrada = true;
         }
+        self.age += 1;
         self.zd -= 0.04;
         let (xa, ya, za) = (self.xd, self.yd, self.zd);
         // Entity.move con la caja de 0.2x0.2
@@ -134,7 +136,9 @@ impl Particula {
         let base = verts.len() as u32;
         // [-der-arr], [-der+arr], [+der+arr], [+der-arr]
         let signs = [(-1.0f32, -1.0f32), (-1.0, 1.0), (1.0, 1.0), (1.0, -1.0)];
-        let uvs = [[u0, v1], [u0, v0], [u1, v0], [u1, v1]];
+        // Orden de vertices de Particle.render: (-r,-r) es el vertice de u1/v0,
+        // no el de u0/v1; con el orden anterior la textura salia girada 180.
+        let uvs = [[u1, v0], [u1, v1], [u0, v1], [u0, v0]];
         for (i, (sd, sa)) in signs.iter().enumerate() {
             verts.push(Vertex {
                 pos: [

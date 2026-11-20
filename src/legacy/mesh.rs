@@ -2,8 +2,10 @@
 //
 // A diferencia de rd-132211, aqui la luz no se muestrea: cada cara lleva solo su
 // factor fijo (1.0 arriba/abajo, 0.8 profundidad, 0.6 lateral) y se dibuja si el
-// vecino no es solido y esta iluminado: `!isSolid && isLit` del original
-// (pase opaco, layer == 0).
+// vecino no es solido, repartida en las dos pasadas de `Tile.render`:
+// capa 0 = caras que dan a aire iluminado, capa 1 = caras que dan a aire a
+// oscuras (bajo un techo o dentro de una cueva). El original dibuja la capa 1
+// con niebla exponencial densa y casi negra.
 //
 // Las esquinas y las UV son las de `Tile.renderFace`, cara por cara, en el mismo
 // orden (importa: es lo que hace que la hierba salga con el fleco arriba).
@@ -94,7 +96,8 @@ pub fn arbusto(x: f32, y: f32, z: f32) -> [([f32; 3], [f32; 2]); 8] {
     out
 }
 
-pub fn construir(nivel: &Nivel, cx: usize, cy: usize) -> (Vec<Vertex>, Vec<u32>) {
+pub fn construir(nivel: &Nivel, cx: usize, cy: usize, capa: u8) -> (Vec<Vertex>, Vec<u32>) {
+    let iluminada = capa == 0;
     let mut verts = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
     let x0 = cx * CHUNK;
@@ -107,9 +110,9 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize) -> (Vec<Vertex>, Vec<u32>)
                     continue;
                 }
                 if id == tiles::ARBUSTO {
-                    // Bush.render: solo en la capa iluminada; sus dos planos van y
-                    // vuelven (culling) y la textura tiene alfa que el shader corta.
-                    if nivel.is_lit(x as i32, y as i32, z as i32) {
+                    // Bush.render elige capa con su propio isLit; sus dos planos van
+                    // y vuelven (culling) y la textura tiene alfa que el shader corta.
+                    if nivel.is_lit(x as i32, y as i32, z as i32) == iluminada {
                         let base = verts.len() as u32;
                         for (pos, uv) in arbusto(x as f32, y as f32, z as f32) {
                             verts.push(Vertex { pos, uv, shade: 1.0 });
@@ -128,7 +131,11 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize) -> (Vec<Vertex>, Vec<u32>)
                     let nx = x as i32 + dx;
                     let ny = y as i32 + dy;
                     let nz = z as i32 + dz;
-                    if nivel.is_solid(nx, ny, nz) || !nivel.is_lit(nx, ny, nz) {
+                    if nivel.is_solid(nx, ny, nz) {
+                        continue;
+                    }
+                    // shouldRenderFace del original: `!isSolid && isLit ^ layer == 1`.
+                    if nivel.is_lit(nx, ny, nz) != iluminada {
                         continue;
                     }
                     let tex = tiles::textura(id, *cara);
@@ -155,6 +162,26 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize) -> (Vec<Vertex>, Vec<u32>)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn la_capa_1_dibuja_las_caras_que_dan_a_aire_a_oscuras() {
+        let mut n = Nivel {
+            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
+            light: vec![0; WIDTH * HEIGHT],
+            random: crate::legacy::perlin::JavaRandom::new(0),
+            unprocessed: 0,
+            dirty: Vec::new(),
+        };
+        // Piedra en (0,0,0) con la columna a oscuras desde z=1: la cara de
+        // arriba da a aire sin luz (solo capa 1); las otras cinco dan a aire
+        // iluminado (capa 0, incluidos los bordes del mapa).
+        n.blocks[0] = tiles::PIEDRA;
+        n.light[0] = 2;
+        let (_, i0) = construir(&n, 0, 0, 0);
+        let (_, i1) = construir(&n, 0, 0, 1);
+        assert_eq!(i0.len(), 5 * 6);
+        assert_eq!(i1.len(), 6);
+    }
 
     #[test]
     fn el_arbusto_son_dos_planos_cruzados() {

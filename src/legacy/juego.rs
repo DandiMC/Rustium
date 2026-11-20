@@ -12,7 +12,7 @@ use super::level::{Nivel, DEPTH, HEIGHT, WIDTH};
 use super::mesh;
 use super::particula::{self, Particula};
 use super::tiles;
-use crate::entity::Zombie;
+use crate::entity::{randf, Fisica, Zombie};
 use crate::render::{Renderer, Vertex};
 use crate::world::BlockBox;
 use std::collections::HashSet;
@@ -25,6 +25,22 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 const SPAWN_SEED: i64 = 12345;
+// RubyDung usa Timer(20.0f); cada tick es 1/20 de segundo, no 1/60.
+const TPS: f32 = 20.0;
+
+// Chunks que hay que reconstruir al tocar un bloque (o dos: el apuntado y el
+// de la cara donde se coloca). Se marca la celda y sus vecinas, como
+// LevelRenderer.setDirty, y se recorta al mundo.
+fn chunks_tocados(x0: i32, y0: i32, x1: i32, y1: i32) -> (usize, usize, usize, usize) {
+    let nx = WIDTH / mesh::CHUNK;
+    let ny = HEIGHT / mesh::CHUNK;
+    (
+        ((x0.min(x1) - 1).max(0) as usize / mesh::CHUNK).min(nx - 1),
+        ((x0.max(x1) + 1).max(0) as usize / mesh::CHUNK).min(nx - 1),
+        ((y0.min(y1) - 1).max(0) as usize / mesh::CHUNK).min(ny - 1),
+        ((y0.max(y1) + 1).max(0) as usize / mesh::CHUNK).min(ny - 1),
+    )
+}
 
 pub fn correr(version: &'static str) {
     let event_loop = EventLoop::new().unwrap();
@@ -36,6 +52,11 @@ struct Jugador {
     x: f32,
     y: f32,
     z: f32,
+    // Posicion del tick anterior: la camara interpola con la fraccion que sobra
+    // (moveCameraToPlayer(a) del original).
+    xo: f32,
+    yo: f32,
+    zo: f32,
     xd: f32,
     yd: f32,
     zd: f32,
@@ -82,6 +103,9 @@ impl Jugador {
             x: px,
             y: py,
             z: pz,
+            xo: px,
+            yo: py,
+            zo: pz,
             xd: 0.0, yd: 0.0, zd: 0.0,
             y_rot,
             x_rot,
@@ -109,6 +133,9 @@ impl Jugador {
                 self.x = n[0];
                 self.y = n[1];
                 self.z = n[2];
+                self.xo = n[0];
+                self.yo = n[1];
+                self.zo = n[2];
                 self.xd = 0.0;
                 self.yd = 0.0;
                 self.zd = 0.0;
@@ -151,6 +178,27 @@ impl Jugador {
         self.z = bb.z0 + 1.62;
     }
 
+    // Posicion de la camara con la fraccion de tick `a`, como
+    // moveCameraToPlayer(a); el pick usa esta misma posicion (0.3 detras del ojo).
+    fn camara(&self, a: f32) -> [f32; 3] {
+        [
+            self.xo + (self.x - self.xo) * a,
+            self.yo + (self.y - self.yo) * a,
+            self.zo + (self.z - self.zo) * a,
+        ]
+    }
+
+    // Entity.resetPos: posicion al azar en todo el mundo y velocidad a cero.
+    // Lo usa la R del original en cada tick mientras se mantiene pulsada.
+    fn reset_pos(&mut self) {
+        self.x = randf() * WIDTH as f32;
+        self.y = randf() * HEIGHT as f32;
+        self.z = DEPTH as f32 + 10.0;
+        self.xd = 0.0;
+        self.yd = 0.0;
+        self.zd = 0.0;
+    }
+
     fn move_relative(&mut self, xa: f32, za: f32, speed: f32) {
         let dist = (xa * xa + za * za).sqrt();
         if dist < 0.01 { return; }
@@ -160,21 +208,30 @@ impl Jugador {
         self.yd += (-xa * yr.cos() + za * yr.sin()) * d;
     }
 
-    fn tick(&mut self, nivel: &Nivel, f: f32, s: f32, jump: bool) {
-        if jump && self.on_ground {
-            self.zd = 0.12;
+    // Player.tick de rd-160052/rd-20090515/rd-161348 (20 ticks por segundo).
+    // Los valores de rd-132211 (0.12/0.005/0.8) no valen aqui: ese build usa
+    // Timer(60) y constantes distintas.
+    fn tick(&mut self, nivel: &Nivel, f: f32, s: f32, jump: bool, reset: bool) {
+        self.xo = self.x;
+        self.yo = self.y;
+        self.zo = self.z;
+        if reset {
+            self.reset_pos();
         }
-        let accel = if self.on_ground { 0.02 } else { 0.005 };
+        if jump && self.on_ground {
+            self.zd = 0.5;
+        }
+        let accel = if self.on_ground { 0.1 } else { 0.02 };
         self.move_relative(f, s, accel);
-        self.zd -= 0.005;
+        self.zd -= 0.08;
         let (xd, yd, zd) = (self.xd, self.yd, self.zd);
         self.mover(xd, yd, zd, nivel);
         self.xd *= 0.91;
         self.zd *= 0.98;
         self.yd *= 0.91;
         if self.on_ground {
-            self.xd *= 0.8;
-            self.yd *= 0.8;
+            self.xd *= 0.7;
+            self.yd *= 0.7;
         }
     }
 }
@@ -187,7 +244,6 @@ struct App {
     jugador: Jugador,
     zombis: Vec<Zombie>,
     particulas: Vec<Particula>,
-    mallas: Vec<(Vec<Vertex>, Vec<u32>)>,
     keys: HashSet<String>,
     grabbed: bool,
     last: Instant,
@@ -235,7 +291,6 @@ impl App {
             jugador: Jugador::new(),
             zombis,
             particulas: Vec::new(),
-            mallas: Vec::new(),
             keys: HashSet::new(),
             grabbed: false,
             last: Instant::now(),
@@ -252,37 +307,54 @@ impl App {
     fn reconstruir_todo(&mut self) {
         let nx = WIDTH / mesh::CHUNK;
         let ny = HEIGHT / mesh::CHUNK;
-        let mut mallas = Vec::with_capacity(nx * ny);
+        let mut capa0 = Vec::with_capacity(nx * ny);
+        let mut capa1 = Vec::with_capacity(nx * ny);
         for cy in 0..ny {
             for cx in 0..nx {
-                mallas.push(mesh::construir(&self.nivel, cx, cy));
+                capa0.push(mesh::construir(&self.nivel, cx, cy, 0));
+                capa1.push(mesh::construir(&self.nivel, cx, cy, 1));
             }
         }
-        self.mallas = mallas;
         if let Some(r) = &mut self.renderer {
-            r.subir_chunks(self.mallas.clone());
+            r.subir_chunks(capa0, capa1);
         }
     }
 
-    fn tocar_chunk(&mut self, bx: i32, by: i32) {
-        let cx = (bx.max(0) as usize) / mesh::CHUNK;
-        let cy = (by.max(0) as usize) / mesh::CHUNK;
-        let nx = WIDTH / mesh::CHUNK;
-        if cy >= HEIGHT / mesh::CHUNK || cx >= nx {
+    // Consume los cambios que Level avisaba a LevelRenderer. Incluye tanto los
+    // clics como el tick del nivel (hierba/arbustos); sin esto la malla se
+    // quedaba con el bloque viejo hasta el siguiente clic.
+    fn reconstruir_cambios(&mut self) {
+        if self.renderer.is_none() {
             return;
         }
-        let k = cy * nx + cx;
-        if let Some(slot) = self.mallas.get_mut(k) {
-            *slot = mesh::construir(&self.nivel, cx, cy);
-        }
-        let mallas = self.mallas.clone();
-        if let Some(r) = &mut self.renderer {
-            r.subir_chunks(mallas);
+        for (x, y) in self.nivel.tomar_cambios() {
+            self.tocar_zona(x, y, x, y);
         }
     }
 
-    fn raycast(&self) -> Option<((i32, i32, i32), (i32, i32, i32))> {
-        let (ex, ey, ez) = (self.jugador.x, self.jugador.y, self.jugador.z);
+    // LevelRenderer.setDirty del original: un bloque tocado marca las celdas de
+    // alrededor (x-1..x+1, y-1..y+1). Cambiar la columna de luz altera caras que
+    // pueden estar en un chunk vecino; antes solo se reconstruia el chunk del
+    // bloque y quedaban caras viejas en las costuras de 16.
+    fn tocar_zona(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
+        let nx = WIDTH / mesh::CHUNK;
+        let (cx0, cx1, cy0, cy1) = chunks_tocados(x0, y0, x1, y1);
+        let nivel = &self.nivel;
+        let Some(r) = &mut self.renderer else { return };
+        for cy in cy0..=cy1 {
+            for cx in cx0..=cx1 {
+                let k = cy * nx + cx;
+                r.actualizar_chunk(
+                    k,
+                    mesh::construir(nivel, cx, cy, 0),
+                    mesh::construir(nivel, cx, cy, 1),
+                );
+            }
+        }
+    }
+
+    fn raycast(&self, camara: [f32; 3]) -> Option<((i32, i32, i32), (i32, i32, i32))> {
+        let (ex, ey, ez) = (camara[0], camara[1], camara[2]);
         let yaw = self.jugador.y_rot.to_radians();
         let pitch = self.jugador.x_rot.to_radians();
         let (sy, cy) = yaw.sin_cos();
@@ -306,7 +378,9 @@ impl App {
             let bx = pos[0].floor() as i32;
             let by = pos[1].floor() as i32;
             let bz = pos[2].floor() as i32;
-            if self.nivel.is_solid(bx, by, bz) {
+            // LevelRenderer.pick prueba todos los tiles no vacios, no solo los
+            // solidos: el arbusto (isSolid=false) tambien se apunta y se rompe.
+            if self.nivel.get(bx, by, bz) != tiles::AIRE {
                 return Some(((bx, by, bz), (normal[0], normal[1], normal[2])));
             }
             let step = [
@@ -361,6 +435,10 @@ impl ApplicationHandler for App {
             renderer.pon_piel(w, h, &rgba);
         }
         renderer.mostrar_cruz = true;
+        // setupFog(1) de esta familia: GL_EXP densidad 0.06 con el color casi
+        // negro para las caras a oscuras; su renderHit usa medio alfa.
+        renderer.fog_densidad = 0.06;
+        renderer.hit_alpha_escala = 0.5;
         self.renderer = Some(renderer);
         self.window = Some(window);
         self.reconstruir_todo();
@@ -418,7 +496,10 @@ impl ApplicationHandler for App {
                                 self.keys.insert(c.to_string());
                             }
                         },
-                        Key::Named(NamedKey::Space) => {
+                        // La tecla Windows/Meta tambien salta (keycode 219).
+                        Key::Named(NamedKey::Space)
+                        | Key::Named(NamedKey::Super)
+                        | Key::Named(NamedKey::Meta) => {
                             self.keys.insert(" ".to_string());
                         }
                         Key::Named(NamedKey::ArrowUp) => {
@@ -437,7 +518,10 @@ impl ApplicationHandler for App {
                     }
                 } else if let Key::Character(c) = &logical_key {
                     self.keys.remove(c.as_str());
-                } else if let Key::Named(NamedKey::Space) = &logical_key {
+                } else if let Key::Named(NamedKey::Space)
+                | Key::Named(NamedKey::Super)
+                | Key::Named(NamedKey::Meta) = &logical_key
+                {
                     self.keys.remove(" ");
                 } else if let Key::Named(NamedKey::ArrowUp) = &logical_key {
                     self.keys.remove("arrowup");
@@ -458,14 +542,15 @@ impl ApplicationHandler for App {
                         // El original arranca con el raton capturado: el primer
                         // clic tambien rompe o coloca.
                     }
-                    if let Some(((bx, by, bz), normal)) = self.raycast() {
+                    let a = (self.tick_acc * TPS).clamp(0.0, 1.0);
+                    if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
                         match button {
                             // Boton derecho: romper + las 64 particulas del tile
                             MouseButton::Right => {
                                 let id = self.nivel.get(bx, by, bz);
                                 if self.nivel.set(bx, by, bz, tiles::AIRE) {
                                     particula::destruir(
-                                        tiles::textura(id, 0),
+                                        tiles::textura_particula(id),
                                         bx, by, bz,
                                         &mut self.particulas,
                                     );
@@ -481,8 +566,9 @@ impl ApplicationHandler for App {
                             }
                             _ => {}
                         }
-                        self.tocar_chunk(bx, by);
-                        self.tocar_chunk(bx + normal.0, by + normal.1);
+                        // El set de arriba ya anoto la columna en Nivel; ahora
+                        // se reconstruyen los chunks afectados.
+                        self.reconstruir_cambios();
                     }
                 }
             }
@@ -511,9 +597,9 @@ impl ApplicationHandler for App {
             - if self.keys.contains("a") || self.keys.contains("arrowleft") { 1.0 } else { 0.0 };
         let jump = self.keys.contains(" ");
         self.tick_acc += dt;
-        let mut steps = (self.tick_acc * 60.0) as i32;
+        let mut steps = (self.tick_acc * TPS) as i32;
         if steps > 100 { steps = 100; }
-        self.tick_acc -= steps as f32 / 60.0;
+        self.tick_acc -= steps as f32 / TPS;
         for _ in 0..steps {
             self.nivel.tick();
             // particulas
@@ -524,20 +610,26 @@ impl ApplicationHandler for App {
             // zombis
             let mut i = 0;
             while i < self.zombis.len() {
-                self.zombis[i].tick(&self.nivel);
+                self.zombis[i].tick_con(&self.nivel, Fisica::ZOMBI_LEGACY);
                 if self.zombis[i].e.z < -100.0 {
                     self.zombis.swap_remove(i);
                 } else {
                     i += 1;
                 }
             }
-            self.jugador.tick(&self.nivel, f, s, jump);
+            let reset = self.keys.contains("r") || self.keys.contains("R");
+            self.jugador.tick(&self.nivel, f, s, jump, reset);
         }
+        // LevelRenderer.updateDirtyChunks: una vez por frame, despues de todos
+        // los ticks, para que la hierba/arbustos cambiados por el nivel se vean.
+        self.reconstruir_cambios();
         // Careo: la camara fija manda antes del pick (igual que el parche del
         // original, que reescribe player.x/y/z dentro de render antes de pick).
         self.jugador.careo_fijar();
-        // RubyDung.pick: se recalcula cada frame
-        self.hit = self.raycast();
+        // RubyDung.pick: se recalcula cada frame con la camara interpolada.
+        let a = (self.tick_acc * TPS).clamp(0.0, 1.0);
+        let camara = self.jugador.camara(a);
+        self.hit = self.raycast(camara);
 
         self.fps_frames += 1;
         if self.fps_t.elapsed().as_millis() >= 500 {
@@ -553,37 +645,44 @@ impl ApplicationHandler for App {
 
         let (sy, cy) = self.jugador.y_rot.to_radians().sin_cos();
         let (sp, cp) = self.jugador.x_rot.to_radians().sin_cos();
-        // Ejes de la camara en orden (x, arriba, fondo)
+        // Ejes de la camara en orden (x, arriba, fondo). La derecha depende solo
+        // del yaw; con la proyeccion de fwd se degeneraba al mirar a 90 grados.
         let fwd = [sy * cp, sp, -cy * cp];
-        let der = normalize([-fwd[2], 0.0, fwd[0]]);
+        let der = [cy, 0.0, sy];
         let arr = [
             der[1] * fwd[2] - der[2] * fwd[1],
             der[2] * fwd[0] - der[0] * fwd[2],
             der[0] * fwd[1] - der[1] * fwd[0],
         ];
         // El renderer ya resta 0.3 detras del ojo (glTranslatef(0,0,-0.3) del
-        // original); no hay que adelantarlo aqui.
-        let eye = [self.jugador.x, self.jugador.z, self.jugador.y];
+        // original); no hay que adelantarlo aqui. La posicion va interpolada
+        // entre el tick anterior y el actual, como moveCameraToPlayer(a).
+        let eye = [camara[0], camara[2], camara[1]];
 
         // Particulas como quads de cara a la camara (malla dinamica)
         let mut pv: Vec<Vertex> = Vec::new();
         let mut pi: Vec<u32> = Vec::new();
-        let mut pz: Vec<[f32; 5]> = Vec::new();
-        let _ = &mut pz;
+        let mut pv_fondo: Vec<Vertex> = Vec::new();
+        let mut pi_fondo: Vec<u32> = Vec::new();
         for p in &self.particulas {
             if self.nivel.is_lit(p.x as i32, p.y as i32, p.z as i32) {
-                p.vertices(1.0, der, arr, &mut pv, &mut pi);
+                p.vertices(a, der, arr, &mut pv, &mut pi);
+            } else {
+                p.vertices(a, der, arr, &mut pv_fondo, &mut pi_fondo);
             }
         }
 
-        // Zombis con el modelo de la piel (solo los que estan a la luz). La
-        // posicion se interpola con la fraccion de tick que sobra, como el
+        // Zombis con el modelo de la piel, separados por luz como el original:
+        // los claros van antes de la capa 1 y los oscuros dentro de su niebla.
+        // La posicion se interpola con la fraccion de tick que sobra, como el
         // partialTicks del original.
-        let a = (self.tick_acc * 60.0).clamp(0.0, 1.0);
         let mut mv: Vec<[f32; 5]> = Vec::new();
+        let mut mv_fondo: Vec<[f32; 5]> = Vec::new();
         for z in &self.zombis {
             if self.nivel.is_lit(z.e.x as i32, z.e.y as i32, z.e.z as i32) {
                 z.vertices(a, &mut mv);
+            } else {
+                z.vertices(a, &mut mv_fondo);
             }
         }
 
@@ -591,20 +690,27 @@ impl ApplicationHandler for App {
         let yaw = self.jugador.y_rot.to_radians();
         let pitch = self.jugador.x_rot.to_radians();
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {
-            r.set_particulas(&pv);
+            r.set_particulas(&pv, &pv_fondo);
             // El original siempre enseña el bloque elegido en la esquina
             r.hud_bloque = Some(self.pintura);
-            r.render(eye, yaw, pitch, self.hit, fps, &mv);
+            r.render(eye, yaw, pitch, self.hit, fps, &mv, &mv_fondo);
             w.request_redraw();
         }
     }
 }
 
-fn normalize(v: [f32; 3]) -> [f32; 3] {
-    let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-    if l < 1e-6 {
-        [0.0, 1.0, 0.0]
-    } else {
-        [v[0] / l, v[1] / l, v[2] / l]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn un_bloque_en_la_costura_marca_los_chunks_vecinos() {
+        // (15,15) esta en la esquina del chunk 0: la luz cambia caras de los
+        // chunks 0, 1 y 4, asi que hay que reconstruir los cuatro de la esquina.
+        assert_eq!(chunks_tocados(15, 15, 15, 15), (0, 1, 0, 1));
+        // Un bloque en el centro solo toca su chunk.
+        assert_eq!(chunks_tocados(8, 8, 8, 8), (0, 0, 0, 0));
+        // Fuera del mundo se recorta al ultimo chunk.
+        assert_eq!(chunks_tocados(300, 300, 300, 300), (15, 15, 15, 15));
     }
 }

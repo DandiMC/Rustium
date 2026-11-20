@@ -376,7 +376,7 @@ impl ApplicationHandler for App {
         let pitch = self.player.x_rot.to_radians();
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {
             let fps = if self.show_fps { Some(self.fps) } else { None };
-            r.render([ex, ey, ez], yaw, pitch, hit, fps, &[]);
+            r.render([ex, ey, ez], yaw, pitch, hit, fps, &[], &[]);
             w.request_redraw();
         }
     }

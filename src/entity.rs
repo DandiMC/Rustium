@@ -270,6 +270,45 @@ impl PlayerE {
 
 // ------------------------------------------------------------------ zombi
 
+// Constantes de Zombie.tick. Cambian entre rd-132328 (Timer a 60 Hz) y los
+// builds legacy (Timer a 20 Hz); el resto del modelo es igual.
+#[derive(Clone, Copy)]
+pub struct Fisica {
+    pub salto: f32,
+    pub prob_salto: f32,
+    pub aceleracion_suelo: f32,
+    pub aceleracion_aire: f32,
+    pub gravedad: f32,
+    pub friccion_suelo: f32,
+    pub ruido_giro: f32,
+    // rd-132328 recicla al zombi que sube demasiado; la familia legacy lo
+    // elimina cuando cae por debajo del mundo (lo hace el bucle del juego).
+    pub reciclar_arriba: bool,
+}
+
+impl Fisica {
+    pub const ZOMBI_132328: Fisica = Fisica {
+        salto: 0.12,
+        prob_salto: 0.01,
+        aceleracion_suelo: 0.02,
+        aceleracion_aire: 0.005,
+        gravedad: 0.005,
+        friccion_suelo: 0.8,
+        ruido_giro: 0.01,
+        reciclar_arriba: true,
+    };
+    pub const ZOMBI_LEGACY: Fisica = Fisica {
+        salto: 0.5,
+        prob_salto: 0.08,
+        aceleracion_suelo: 0.1,
+        aceleracion_aire: 0.02,
+        gravedad: 0.08,
+        friccion_suelo: 0.7,
+        ruido_giro: 0.08,
+        reciclar_arriba: false,
+    };
+}
+
 pub struct Zombie {
     pub e: Entity,
     pub head: Cube,
@@ -328,34 +367,38 @@ impl Zombie {
     }
 
     pub fn tick(&mut self, level: &dyn Mundo) {
+        self.tick_con(level, Fisica::ZOMBI_132328);
+    }
+
+    pub fn tick_con(&mut self, level: &dyn Mundo, f: Fisica) {
         self.e.tick_prev();
         self.rot += self.rot_a;
         self.rot_a *= 0.99;
-        self.rot_a += (randf() - randf()) * randf() * randf() * 0.01;
+        self.rot_a += (randf() - randf()) * randf() * randf() * f.ruido_giro;
         let xa = self.rot.sin();
         let za = self.rot.cos();
-        if self.e.on_ground && randf() < 0.01 {
-            self.e.zd = 0.12;
+        if self.e.on_ground && randf() < f.prob_salto {
+            self.e.zd = f.salto;
         }
-        let accel = if self.e.on_ground { 0.02 } else { 0.005 };
+        let accel = if self.e.on_ground { f.aceleracion_suelo } else { f.aceleracion_aire };
         // moveRelative del original recibe (strafe, avance): el zombi le pasa
         // (sin(rot), cos(rot)). Nuestro move_relative recibe (avance, strafe) y
         // su avance con yaw 0 apunta a -profundidad, asi que hay que invertir el
         // avance. Antes se pasaban (sin, cos) y el zombi caminaba de lado,
         // perpendicular a su cuerpo.
         self.e.move_relative(-za, xa, accel);
-        self.e.zd -= 0.005;
+        self.e.zd -= f.gravedad;
         let (xd, yd, zd) = (self.e.xd, self.e.yd, self.e.zd);
         self.e.mover(xd, yd, zd, level);
         self.e.xd *= 0.91;
         self.e.zd *= 0.98;
         self.e.yd *= 0.91;
-        if self.e.z > 100.0 {
+        if f.reciclar_arriba && self.e.z > 100.0 {
             self.e.reset_pos(level);
         }
         if self.e.on_ground {
-            self.e.xd *= 0.8;
-            self.e.yd *= 0.8;
+            self.e.xd *= f.friccion_suelo;
+            self.e.yd *= f.friccion_suelo;
         }
     }
 

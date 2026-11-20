@@ -24,6 +24,10 @@ pub struct Nivel {
     pub random: perlin::JavaRandom,
     // acumulador de Level.tick
     pub unprocessed: i32,
+    // Columnas (x, fondo) tocadas desde la ultima reconstruccion. Level avisaba
+    // a LevelRenderer por cada setTile; el port necesita lo mismo para los
+    // cambios que hace el tick (crecimiento de hierba, arbustos).
+    pub dirty: Vec<(i32, i32)>,
 }
 
 impl Nivel {
@@ -33,6 +37,7 @@ impl Nivel {
             light: vec![0; WIDTH * HEIGHT],
             random: perlin::JavaRandom::new(seed),
             unprocessed: 0,
+            dirty: Vec::new(),
         };
         if n.load().is_none() {
             n.generar(seed);
@@ -132,8 +137,15 @@ impl Nivel {
             return false;
         }
         self.blocks[i] = id;
+        self.dirty.push((x, y));
         self.calc_light(x as usize, y as usize, 1, 1);
         true
+    }
+
+    // LevelListener.tileChanged: el juego consume las columnas cambiadas y
+    // reconstruye sus chunks (y los vecinos, por el cambio de luz).
+    pub fn tomar_cambios(&mut self) -> Vec<(i32, i32)> {
+        std::mem::take(&mut self.dirty)
     }
 
     pub fn is_solid(&self, x: i32, y: i32, z: i32) -> bool {

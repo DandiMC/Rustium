@@ -514,7 +514,7 @@ impl ApplicationHandler for App {
 
         let fps = if self.show_fps { Some(self.fps) } else { None };
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {
-            r.render(eye, yaw, pitch, hit, fps, &verts);
+            r.render(eye, yaw, pitch, hit, fps, &verts, &[]);
             w.request_redraw();
         }
     }

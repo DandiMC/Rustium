@@ -583,9 +583,9 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.1.9).
+/// Novedades de las versiones del launcher (0.1.4 a 0.1.10).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 4] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 6] {
     match l {
         Lang::En => [
             (
@@ -611,6 +611,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 Nov 2026",
                 "In rd-20090515 and rd-161348 the bushes are upright again.",
                 "Their crossed planes were built with the depth axis as height, so they lay on their side. They now grow from the ground to the top of the block, exactly like the original.",
+            ),
+            (
+                "The world ticks at 20 Hz",
+                "20 Nov 2026",
+                "The pre-classic builds now move at the speed of the original Java game.",
+                "The legacy engine ran at 60 ticks per second, so the player, zombies and particles moved three times too fast. The world now ticks at 20 Hz, physics uses the original constants, and the camera interpolates between ticks.",
+            ),
+            (
+                "Grass and bushes update live",
+                "20 Nov 2026",
+                "Grass that grows and bushes that break update the world immediately.",
+                "When the level changed a block on its own, that part of the world kept showing the old block until the next click. Every change now marks its area and the mesh is rebuilt in the same frame. Bushes also no longer stop the player or block light, just like the original.",
             ),
         ],
         Lang::Es => [
@@ -638,6 +650,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "En rd-20090515 y rd-161348 los arbustos ya se ven verticales.",
                 "Sus dos planos cruzados usaban la profundidad como altura y quedaban tumbados. Ahora van del suelo al techo del bloque, igual que en el original.",
             ),
+            (
+                "El mundo late a 20 Hz",
+                "20 nov 2026",
+                "Las versiones preclásicas se mueven al ritmo del Java original.",
+                "El motor legacy corría a 60 ticks por segundo, así que el jugador, los zombis y las partículas iban tres veces más rápido. Ahora el mundo late a 20 Hz, la física usa las constantes del original y la cámara interpola entre ticks.",
+            ),
+            (
+                "La hierba cambia al instante",
+                "20 nov 2026",
+                "La hierba que crece y los arbustos que se rompen actualizan el mundo al instante.",
+                "Cuando el nivel cambiaba un bloque por su cuenta, el trozo de mundo seguía enseñando el bloque viejo hasta el siguiente clic. Ahora cada cambio marca su zona y la malla se reconstruye en el mismo fotograma. Además, los arbustos ya no frenan al jugador ni bloquean la luz, como en el original.",
+            ),
         ],
         Lang::Pt => [
             (
@@ -663,6 +687,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 nov 2026",
                 "Em rd-20090515 e rd-161348 os arbustos já aparecem verticais.",
                 "Os dois planos cruzados usavam a profundidade como altura e ficavam deitados. Agora vão do chão ao topo do bloco, tal como no original.",
+            ),
+            (
+                "O mundo corre a 20 Hz",
+                "20 nov 2026",
+                "As versões pré-clássicas voltam a mover-se ao ritmo do Java original.",
+                "O motor legacy corria a 60 ticks por segundo, por isso o jogador, os zombis e as partículas andavam três vezes mais depressa. Agora o mundo bate a 20 Hz, a física usa as constantes do original e a câmara interpola entre ticks.",
+            ),
+            (
+                "A relva muda ao instante",
+                "20 nov 2026",
+                "A relva que cresce e os arbustos que se quebram atualizam o mundo na hora.",
+                "Quando o nível mudava um bloco sozinho, aquela parte do mundo continuava a mostrar o bloco antigo até ao clique seguinte. Agora cada mudança marca a sua zona e a malha é reconstruída no mesmo fotograma. Além disso, os arbustos já não travam o jogador nem bloqueiam a luz, como no original.",
             ),
         ],
         Lang::Fr => [
@@ -690,6 +726,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Dans rd-20090515 et rd-161348, les buissons sont de nouveau verticaux.",
                 "Leurs deux plans croisés utilisaient la profondeur comme hauteur et restaient couchés. Ils vont maintenant du sol au haut du bloc, comme dans l'original.",
             ),
+            (
+                "Le monde tourne à 20 Hz",
+                "20 nov. 2026",
+                "Les versions pré-classiques bougent au rythme du jeu Java original.",
+                "Le moteur legacy tournait à 60 ticks par seconde : le joueur, les zombies et les particules allaient trois fois trop vite. Le monde bat maintenant à 20 Hz, la physique utilise les constantes d'origine et la caméra interpole entre les ticks.",
+            ),
+            (
+                "L'herbe change à l'écran",
+                "20 nov. 2026",
+                "L'herbe qui pousse et les buissons qui se cassent mettent le monde à jour immédiatement.",
+                "Quand le niveau changeait un bloc tout seul, cette partie du monde continuait d'afficher l'ancien bloc jusqu'au clic suivant. Chaque changement marque maintenant sa zone et le maillage est reconstruit dans la même image. Les buissons ne bloquent plus le joueur ni la lumière, comme dans l'original.",
+            ),
         ],
         Lang::De => [
             (
@@ -715,6 +763,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20. Nov. 2026",
                 "In rd-20090515 und rd-161348 stehen die Büsche wieder aufrecht.",
                 "Ihre zwei gekreuzten Flächen nutzten die Tiefe als Höhe und lagen deshalb flach. Jetzt reichen sie vom Boden bis zur Blockoberseite, genau wie im Original.",
+            ),
+            (
+                "Die Welt läuft mit 20 Hz",
+                "20. Nov. 2026",
+                "Die pre-classic-Versionen bewegen sich im Tempo des Java-Originals.",
+                "Die Legacy-Engine lief mit 60 Ticks pro Sekunde, also waren Spieler, Zombies und Partikel dreimal zu schnell. Jetzt tickt die Welt mit 20 Hz, die Physik nutzt die Originalkonstanten und die Kamera interpoliert zwischen den Ticks.",
+            ),
+            (
+                "Gras ändert sich sofort",
+                "20. Nov. 2026",
+                "Wachsendes Gras und zerbrechende Büsche aktualisieren die Welt sofort.",
+                "Wenn das Level einen Block von selbst änderte, zeigte dieser Teil der Welt bis zum nächsten Klick noch den alten Block. Jede Änderung markiert jetzt ihre Zone und das Mesh wird im selben Frame neu gebaut. Büsche bremsen den Spieler außerdem nicht mehr und blockieren kein Licht, wie im Original.",
             ),
         ],
     }
@@ -3387,6 +3447,8 @@ mod ui {
                                             "rd-20090515",
                                             "rd-132328",
                                             "rd-20090515 · rd-161348",
+                                            "rd-160052 · rd-20090515 · rd-161348",
+                                            "rd-160052 · rd-20090515 · rd-161348",
                                         ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             cards.push((
@@ -3399,6 +3461,8 @@ mod ui {
                                                     1 => Art::Bush,
                                                     2 => Art::Zombies,
                                                     3 => Art::Upright,
+                                                    4 => Art::Ticks,
+                                                    5 => Art::Growth,
                                                     _ => Art::World,
                                                 },
                                             ));
@@ -3519,6 +3583,10 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
         Upright,
         /// The flat world of the very first version, rd-132211.
         First,
+        /// The legacy world ticking at the original 20 Hz.
+        Ticks,
+        /// Grass and bushes updating after a level tick.
+        Growth,
     }
 
     fn news_shot(
@@ -3546,6 +3614,8 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                 Art::Zombies => ("news-zombies", include_bytes!("../../assets/news_zombies.rgb")),
                 Art::Upright => ("news-upright", include_bytes!("../../assets/news_upright.rgb")),
                 Art::First => ("news-first", include_bytes!("../../assets/news_first.rgb")),
+                Art::Ticks => ("news-ticks", include_bytes!("../../assets/news_ticks.rgb")),
+                Art::Growth => ("news-growth", include_bytes!("../../assets/news_growth.rgb")),
                 Art::Launcher => unreachable!(),
             };
             let shot = news_shot(ui.ctx(), name, bytes);

@@ -87,24 +87,43 @@ struct VOut {
 }
 "#;
 
-// Modelos de personaje (rd-132328): piel char.png, sin niebla ni brillo, como el
-// render() del original (glColor3f(1,1,1) por poligono).
+// Modelos de personaje (zombis): piel char.png y el mismo esquema de niebla que
+// el terreno (la capa 0 va sin niebla; la capa 1 usa el uniform oscuro). El
+// original tambien mete a los zombis sin luz en la pasada de niebla.
 pub const MODEL_SHADER: &str = r#"
-struct MU { view_proj: mat4x4<f32>, };
+struct MU {
+    view_proj: mat4x4<f32>,
+    fog_color: vec4<f32>,
+    camera_pos: vec4<f32>,
+    fog_density: f32,
+    fog_exp: f32,
+    _pad: vec2<f32>,
+};
 @group(0) @binding(0) var<uniform> u: MU;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
 struct VIn { @location(0) p: vec3<f32>, @location(1) uv: vec2<f32> };
-struct VOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
+struct VOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) fogz: f32,
+};
 @vertex fn vs(v: VIn) -> VOut {
     var o: VOut;
     o.clip = u.view_proj * vec4<f32>(v.p, 1.0);
     o.uv = v.uv;
+    o.fogz = o.clip.w;
     return o;
 }
 @fragment fn fs(v: VOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, v.uv);
-    return vec4<f32>(c.rgb, 1.0);
+    let dist = max(v.fogz, 0.0);
+    var fog = 1.0 - exp(-dist * dist * u.fog_density * u.fog_density);
+    if (u.fog_exp > 0.5) {
+        fog = 1.0 - exp(-dist * u.fog_density);
+    }
+    let rgb = mix(c.rgb, u.fog_color.rgb, clamp(fog, 0.0, 1.0));
+    return vec4<f32>(rgb, 1.0);
 }
 "#;
 
@@ -387,7 +406,7 @@ pub struct Renderer {
     pub uniform_buf: wgpu::Buffer,
     pub depth_tex: wgpu::Texture,
     pub depth_view: wgpu::TextureView,
-    pub chunks: Vec<Chunk>,
+    pub chunks: Vec<Option<Chunk>>,
     pub hit_pipeline: wgpu::RenderPipeline,
     pub hit_uniform: wgpu::Buffer,
     pub hit_bind_group: wgpu::BindGroup,
@@ -402,14 +421,21 @@ pub struct Renderer {
     pub model_pipeline: wgpu::RenderPipeline,
     pub model_uniform: wgpu::Buffer,
     pub model_bind_group: wgpu::BindGroup,
+    pub model_fog_bind_group: wgpu::BindGroup,
     pub model_tex_bgl: wgpu::BindGroupLayout,
     pub model_bg: Option<wgpu::BindGroup>,
     pub model_vbuf: wgpu::Buffer,
     // Particulas: buffer persistente que se reescribe cada frame (como el de
     // los modelos), en vez de crear buffers nuevos por frame.
     pub part_vbuf: wgpu::Buffer,
+    pub part_fondo_vbuf: wgpu::Buffer,
     pub part_ibuf: wgpu::Buffer,
     pub part_count: u32,
+    pub part_fondo_count: u32,
+    // Densidad de la niebla del pase oscuro y escala del alfa del resaltado:
+    // la familia nueva usa 0.06 y la mitad de alfa que rd-132211.
+    pub fog_densidad: f32,
+    pub hit_alpha_escala: f32,
     // Cruz de mira (la dibuja el juego que la quiera, como el original)
     pub mostrar_cruz: bool,
     // Cubo del bloque elegido en la esquina (RubyDung.drawGui)
@@ -419,7 +445,7 @@ pub struct Renderer {
     pub hud_vbuf: wgpu::Buffer,
     // Caras de la capa 1 (con bloque encima): el original las dibuja aparte con
     // niebla exponencial densa y casi negra.
-    pub chunks_fog: Vec<Chunk>,
+    pub chunks_fog: Vec<Option<Chunk>>,
     pub fog_uniform: wgpu::Buffer,
     pub fog_bg: wgpu::BindGroup,
 }
@@ -903,7 +929,7 @@ impl Renderer {
             label: Some("model bgl"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -914,7 +940,7 @@ impl Renderer {
         });
         let model_uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("model uniform"),
-            size: 64,
+            size: std::mem::size_of::<Uniforms>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -922,6 +948,11 @@ impl Renderer {
             label: Some("model bg"),
             layout: &model_bgl,
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: model_uniform.as_entire_binding() }],
+        });
+        let model_fog_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("model fog bg"),
+            layout: &model_bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: fog_uniform.as_entire_binding() }],
         });
         // 100 zombis x 6 cajas x 6 caras x 6 verticess = 21600 vertices de 5 floats
         let model_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1063,6 +1094,12 @@ impl Renderer {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let part_fondo_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("part fondo vbuf"),
+            size: (MAX_PART_QUADS as usize * 4 * std::mem::size_of::<Vertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let mut pidx: Vec<u32> = Vec::with_capacity(MAX_PART_QUADS as usize * 12);
         for q in 0..MAX_PART_QUADS {
             let b: u32 = q * 4;
@@ -1106,8 +1143,12 @@ impl Renderer {
             ui_bind_group,
             ui_vbuf,
             part_vbuf,
+            part_fondo_vbuf,
             part_ibuf,
             part_count: 0,
+            part_fondo_count: 0,
+            fog_densidad: 0.2,
+            hit_alpha_escala: 1.0,
             mostrar_cruz: false,
             hud_bloque: None,
             hud_uniform,
@@ -1122,6 +1163,7 @@ impl Renderer {
             model_pipeline,
             model_uniform,
             model_bind_group,
+            model_fog_bind_group,
             model_tex_bgl,
             model_bg: None,
             model_vbuf,
@@ -1198,6 +1240,14 @@ impl Renderer {
         Chunk { vbuf, ibuf, icount: indices.len() as u32 }
     }
 
+    fn chunk_opcional(&self, verts: &[Vertex], indices: &[u32]) -> Option<Chunk> {
+        if indices.is_empty() {
+            None
+        } else {
+            Some(self.chunk_desde(verts, indices))
+        }
+    }
+
     pub fn build_chunks(&mut self, level: &Level) {
         self.chunks.clear();
         self.chunks_fog.clear();
@@ -1207,7 +1257,7 @@ impl Renderer {
             for cx in 0..nx {
                 for capa in [0u8, 1] {
                     let (verts, indices) = build_chunk_mesh(level, cx, cy, capa);
-                    let c = self.chunk_desde(&verts, &indices);
+                    let c = self.chunk_opcional(&verts, &indices);
                     if capa == 0 {
                         self.chunks.push(c);
                     } else {
@@ -1223,7 +1273,7 @@ impl Renderer {
         let i = cy * nx + cx;
         for capa in [0u8, 1] {
             let (verts, indices) = build_chunk_mesh(level, cx, cy, capa);
-            let c = self.chunk_desde(&verts, &indices);
+            let c = self.chunk_opcional(&verts, &indices);
             if capa == 0 {
                 if i < self.chunks.len() {
                     self.chunks[i] = c;
@@ -1234,60 +1284,55 @@ impl Renderer {
         }
     }
 
-    // Sube mallas ya construidas (sirve para versiones con otro Level)
-    pub fn subir_chunks(&mut self, mallas: Vec<(Vec<Vertex>, Vec<u32>)>) {
-        self.chunks.clear();
-        self.chunks_fog.clear();
-        for (verts, indices) in mallas {
-            if indices.is_empty() {
-                continue;
-            }
-            let vbuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("chunk vbuf"),
-                contents: unsafe {
-                    std::slice::from_raw_parts(
-                        verts.as_ptr() as *const u8,
-                        verts.len() * std::mem::size_of::<Vertex>(),
-                    )
-                },
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let ibuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("chunk ibuf"),
-                contents: unsafe {
-                    std::slice::from_raw_parts(
-                        indices.as_ptr() as *const u8,
-                        indices.len() * std::mem::size_of::<u32>(),
-                    )
-                },
-                usage: wgpu::BufferUsages::INDEX,
-            });
-            self.chunks.push(Chunk { vbuf, ibuf, icount: indices.len() as u32 });
+    // Sube mallas ya construidas (sirve para versiones con otro Level). Las dos
+    // listas van en el mismo orden de chunks; un chunk sin caras queda como None
+    // para que el indice de `actualizar_chunk` siga cuadrando.
+    pub fn subir_chunks(
+        &mut self,
+        capa0: Vec<(Vec<Vertex>, Vec<u32>)>,
+        capa1: Vec<(Vec<Vertex>, Vec<u32>)>,
+    ) {
+        let a: Vec<Option<Chunk>> = capa0
+            .iter()
+            .map(|(v, i)| self.chunk_opcional(v, i))
+            .collect();
+        let b: Vec<Option<Chunk>> = capa1
+            .iter()
+            .map(|(v, i)| self.chunk_opcional(v, i))
+            .collect();
+        self.chunks = a;
+        self.chunks_fog = b;
+    }
+
+    // Sustituye las dos capas de un unico chunk sin re-subir el mundo entero.
+    pub fn actualizar_chunk(
+        &mut self,
+        k: usize,
+        capa0: (Vec<Vertex>, Vec<u32>),
+        capa1: (Vec<Vertex>, Vec<u32>),
+    ) {
+        if k >= self.chunks.len() || k >= self.chunks_fog.len() {
+            return;
         }
+        let c0 = self.chunk_opcional(&capa0.0, &capa0.1);
+        let c1 = self.chunk_opcional(&capa1.0, &capa1.1);
+        self.chunks[k] = c0;
+        self.chunks_fog[k] = c1;
     }
 
     // Particulas: reescribe el buffer persistente. Los indices ya estan
     // precalculados (12 por quad, doble cara).
-    pub fn set_particulas(&mut self, verts: &[Vertex]) {
-        let n = verts.len().min(MAX_PART_QUADS as usize * 4);
-        let quads = (n / 4) as u32;
-        if quads == 0 {
-            self.part_count = 0;
-            return;
-        }
-        self.queue.write_buffer(&self.part_vbuf, 0, unsafe {
-            std::slice::from_raw_parts(verts.as_ptr() as *const u8, n * std::mem::size_of::<Vertex>())
-        });
-        self.part_count = quads * 12;
+    pub fn set_particulas(&mut self, lit: &[Vertex], fondo: &[Vertex]) {
+        self.part_count = subir_particulas(&self.queue, &self.part_vbuf, lit);
+        self.part_fondo_count = subir_particulas(&self.queue, &self.part_fondo_vbuf, fondo);
     }
 
-    pub fn render(&mut self, eye: [f32; 3], yaw: f32, pitch: f32, hit: Option<((i32, i32, i32), (i32, i32, i32))>, fps: Option<u32>, modelos: &[[f32; 5]]) {
+    pub fn render(&mut self, eye: [f32; 3], yaw: f32, pitch: f32, hit: Option<((i32, i32, i32), (i32, i32, i32))>, fps: Option<u32>, modelos: &[[f32; 5]], modelos_fondo: &[[f32; 5]]) {
         // El original hace glTranslatef(0,0,-0.3) antes de rotar. Eso NO adelanta
         // la camara: la deja 0.3 bloques DETRAS del ojo (con yaw 0, en +z). Se
         // comprobo moviendo la camara del Java 0.6 y viendo que el zombi coincide
         // pixel a pixel con el port. Antes se sumaba 0.3 hacia delante y todo el
         // mundo salia 0.6 bloques desplazado respecto al original.
-        let pitch = pitch.clamp(-1.55, 1.55);
         let (sy_c, cy_c) = yaw.sin_cos();
         let (sp_c, cp_c) = pitch.sin_cos();
         let eye = [
@@ -1301,7 +1346,7 @@ impl Renderer {
             view_proj,
             fog_color: [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0],
             camera_pos: [eye[0], eye[1], eye[2], 1.0],
-            fog_density: 0.2,
+            fog_density: self.fog_densidad,
             fog_exp: 1.0,
             _pad: [0.0; 2],
         };
@@ -1356,6 +1401,35 @@ impl Renderer {
             }
             None => 0,
         };
+        // Modelos: los claros van antes de la capa 1 y los oscuros dentro de
+        // ella, como el bucle de zombis del original. Los dos comparten buffer
+        // de vertices; el uniform de los oscuros es el mismo de la niebla.
+        let max_verts = 4 * 1024 * 1024 / 20;
+        let lit_n = modelos.len().min(max_verts);
+        let fondo_n = modelos_fondo.len().min(max_verts - lit_n);
+        if self.model_bg.is_some() && lit_n + fondo_n > 0 {
+            if lit_n > 0 {
+                self.queue.write_buffer(&self.model_vbuf, 0, unsafe {
+                    std::slice::from_raw_parts(modelos.as_ptr() as *const u8, lit_n * 5 * 4)
+                });
+            }
+            if fondo_n > 0 {
+                self.queue.write_buffer(&self.model_vbuf, (lit_n * 5 * 4) as u64, unsafe {
+                    std::slice::from_raw_parts(modelos_fondo.as_ptr() as *const u8, fondo_n * 5 * 4)
+                });
+            }
+            let mu = Uniforms {
+                view_proj,
+                fog_color: [0.5, 0.8, 1.0, 1.0],
+                camera_pos: [eye[0], eye[1], eye[2], 1.0],
+                fog_density: 0.0,
+                fog_exp: 0.0,
+                _pad: [0.0; 2],
+            };
+            self.queue.write_buffer(&self.model_uniform, 0, unsafe {
+                std::slice::from_raw_parts(&mu as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
+            });
+        }
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
             Err(_) => return,
@@ -1400,27 +1474,55 @@ impl Renderer {
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
-            for c in &self.chunks {
+            for c in self.chunks.iter().flatten() {
                 if c.icount == 0 { continue; }
                 pass.set_vertex_buffer(0, c.vbuf.slice(..));
                 pass.set_index_buffer(c.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..c.icount, 0, 0..1);
             }
+            // Zombis a plena luz, como el primer bucle de Zombie.render.
+            if lit_n > 0 {
+                if let Some(bg) = &self.model_bg {
+                    pass.set_pipeline(&self.model_pipeline);
+                    pass.set_bind_group(0, &self.model_bind_group, &[]);
+                    pass.set_bind_group(1, bg, &[]);
+                    pass.set_vertex_buffer(0, self.model_vbuf.slice(..));
+                    pass.draw(0..lit_n as u32, 0..1);
+                }
+            }
+            // Particulas a plena luz (antes del cambio de niebla).
+            if self.part_count > 0 {
+                pass.set_pipeline(&self.pipeline);
+                pass.set_bind_group(0, &self.bind_group, &[]);
+                pass.set_vertex_buffer(0, self.part_vbuf.slice(..));
+                pass.set_index_buffer(self.part_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..self.part_count, 0, 0..1);
+            }
             // Capa 1: las caras con bloque encima, con la niebla del original.
-            if !self.chunks_fog.is_empty() {
+            if !self.chunks_fog.is_empty() || self.part_fondo_count > 0 || fondo_n > 0 {
                 pass.set_bind_group(0, &self.fog_bg, &[]);
-                for c in &self.chunks_fog {
+                for c in self.chunks_fog.iter().flatten() {
                     if c.icount == 0 { continue; }
                     pass.set_vertex_buffer(0, c.vbuf.slice(..));
                     pass.set_index_buffer(c.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..c.icount, 0, 0..1);
                 }
+                if fondo_n > 0 {
+                    if let Some(bg) = &self.model_bg {
+                        pass.set_pipeline(&self.model_pipeline);
+                        pass.set_bind_group(0, &self.model_fog_bind_group, &[]);
+                        pass.set_bind_group(1, bg, &[]);
+                        pass.set_vertex_buffer(0, self.model_vbuf.slice(..));
+                        pass.draw(lit_n as u32..(lit_n + fondo_n) as u32, 0..1);
+                    }
+                }
+                if self.part_fondo_count > 0 {
+                    pass.set_pipeline(&self.pipeline);
+                    pass.set_vertex_buffer(0, self.part_fondo_vbuf.slice(..));
+                    pass.set_index_buffer(self.part_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..self.part_fondo_count, 0, 0..1);
+                }
                 pass.set_bind_group(0, &self.bind_group, &[]);
-            }
-            if self.part_count > 0 {
-                pass.set_vertex_buffer(0, self.part_vbuf.slice(..));
-                pass.set_index_buffer(self.part_ibuf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..self.part_count, 0, 0..1);
             }
             // Resaltado del bloque apuntado (renderHit original): la cara con la
             // textura del bloque y su brillo, sumada en aditivo con el alfa pulsante.
@@ -1431,15 +1533,15 @@ impl Renderer {
                     model: [[f32; 4]; 4],
                     color: [f32; 4],
                 }
-                // Original: glColor4f(1,1,1, 0.4 + 0.2*sin(ms/100)), alfa entre 0.2 y
-                // 0.6, sumado a la cara (SRC_ALPHA, ONE): sube entre +51 y +153 de
-                // los 255 de cada canal. Nada de reducir el alfa a la mitad.
+                // rd-132211 usa 0.4 + 0.2*sin(ms/100) (alfa 0.2..0.6); la familia
+                // nueva envuelve la misma expresion en *0.5 (0.1..0.3). El color se
+                // SUMA a la cara (SRC_ALPHA, ONE), asi que el alfa va directo.
                 let t = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_millis() as f64
                     / 100.0;
-                let alpha = (0.4 + 0.2 * t.sin()) as f32;
+                let alpha = ((0.4 + 0.2 * t.sin()) as f32) * self.hit_alpha_escala;
                 // Los vertices van ya en coordenadas de mundo: modelo identidad.
                 let ident = [
                     [1.0, 0.0, 0.0, 0.0],
@@ -1460,25 +1562,6 @@ impl Renderer {
                 pass.set_bind_group(1, &self.hit_flat_bg, &[]);
                 pass.set_vertex_buffer(0, self.hit_face_vbuf.slice(..));
                 pass.draw(0..6, 0..1);
-            }
-            // Modelos de personaje (zombis de rd-132328): pos+uv, ya en mundo
-            if !modelos.is_empty() {
-                if let Some(bg) = &self.model_bg {
-                    self.queue.write_buffer(&self.model_uniform, 0, unsafe {
-                        std::slice::from_raw_parts(view_proj.as_ptr() as *const u8, 64)
-                    });
-                    self.queue.write_buffer(&self.model_vbuf, 0, unsafe {
-                        std::slice::from_raw_parts(
-                            modelos.as_ptr() as *const u8,
-                            modelos.len() * 5 * 4,
-                        )
-                    });
-                    pass.set_pipeline(&self.model_pipeline);
-                    pass.set_bind_group(0, &self.model_bind_group, &[]);
-                    pass.set_bind_group(1, bg, &[]);
-                    pass.set_vertex_buffer(0, self.model_vbuf.slice(..));
-                    pass.draw(0..modelos.len() as u32, 0..1);
-                }
             }
             if ui_count > 0 {
                 pass.set_pipeline(&self.ui_pipeline);
@@ -1556,12 +1639,12 @@ pub fn perspective(fov_y: f32, aspect: f32, near: f32, far: f32) -> [[f32; 4]; 4
 
 pub fn look_at(eye: [f32; 3], yaw: f32, pitch: f32) -> [[f32; 4]; 4] {
     let (sy, cy) = yaw.sin_cos();
-    // Limitar pitch para no mirar exactamente arriba/abajo (evita NaN en cross)
-    let pitch = pitch.clamp(-1.55, 1.55);
     let (sp, cp) = pitch.sin_cos();
     let fwd = [sy * cp, sp, -cy * cp];
-    let up = [0.0, 1.0, 0.0];
-    let right = normalize(cross(fwd, up));
+    // El eje derecha solo depende del yaw: [cos, 0, sin]. Calculado con el
+    // producto vectorial se degenera al mirar justo arriba o abajo, y limitar
+    // el pitch a 1.55 rad desalineaba la camara del pick, que si llega a 90.
+    let right = [cy, 0.0, sy];
     let upv = cross(right, fwd);
     [
         [right[0], upv[0], -fwd[0], 0.0],
@@ -1577,14 +1660,6 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
-fn normalize(v: [f32; 3]) -> [f32; 3] {
-    let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-    if l < 1e-6 {
-        return [1.0, 0.0, 0.0];
-    }
-    [v[0] / l, v[1] / l, v[2] / l]
-}
-
 pub fn mat_mul(a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
     let mut r = [[0.0f32; 4]; 4];
     for c in 0..4 {
@@ -1800,6 +1875,18 @@ pub fn generate_atlas() -> Vec<u8> {
     data
 }
 
+fn subir_particulas(queue: &wgpu::Queue, buf: &wgpu::Buffer, verts: &[Vertex]) -> u32 {
+    let n = verts.len().min(MAX_PART_QUADS as usize * 4);
+    let quads = (n / 4) as u32;
+    if quads == 0 {
+        return 0;
+    }
+    queue.write_buffer(buf, 0, unsafe {
+        std::slice::from_raw_parts(verts.as_ptr() as *const u8, n * std::mem::size_of::<Vertex>())
+    });
+    quads * 12
+}
+
 // Genera la malla de un chunk de 16x16 (x,y) x 64 (z). Solo caras visibles.
 // Coordenadas de render: X=x, Y=z (arriba), Z=y.
 // capa 0 = caras a plena luz, capa 1 = caras con bloque solido encima en su
@@ -1868,4 +1955,21 @@ pub fn build_chunk_mesh(level: &Level, cx: usize, cy: usize, capa: u8) -> (Vec<V
         }
     }
     (verts, idx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mirar_en_vertical_conserva_el_rumbo() {
+        let yaw = 0.7f32;
+        for pitch in [-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2] {
+            let m = look_at([0.0; 3], yaw, pitch);
+            // La columna 0 es el eje derecha: (cos yaw, 0, sin yaw).
+            assert!((m[0][0] - yaw.cos()).abs() < 1e-5);
+            assert!(m[1][0].abs() < 1e-5);
+            assert!((m[2][0] - yaw.sin()).abs() < 1e-5);
+        }
+    }
 }
