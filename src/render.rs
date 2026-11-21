@@ -1500,6 +1500,11 @@ impl Renderer {
             }
             // Capa 1: las caras con bloque encima, con la niebla del original.
             if !self.chunks_fog.is_empty() || self.part_fondo_count > 0 || fondo_n > 0 {
+                // Los zombis claros dejan el pipeline de modelos activo. Sin
+                // volver al del terreno, esta capa se dibujaba con el pipeline
+                // de modelos y el bind group de niebla no le encajaba (wgpu
+                // abortaba el juego).
+                pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.fog_bg, &[]);
                 for c in self.chunks_fog.iter().flatten() {
                     if c.icount == 0 { continue; }

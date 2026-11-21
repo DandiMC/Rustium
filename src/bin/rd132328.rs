@@ -46,7 +46,12 @@ struct App {
     fixed_time: Option<f64>,
     // Solo careo: mantiene el rumbo de los zombis para comparar el caminar.
     fixed_zombie_rot: Option<f32>,
+    smoke_frames: u32,
 }
+
+// RD_SMOKE: arnes del test de regresion. Abre una ventana pequena con un zombi
+// delante, dibuja unos frames y cierra sola.
+const SMOKE_FRAMES: u32 = 12;
 
 impl App {
     fn log(&mut self, msg: &str) {
@@ -61,7 +66,18 @@ impl App {
     }
 
     fn new() -> Self {
-        let level = Level::new();
+        let mut level = Level::new();
+        // El test necesita una cara de la capa de niebla: un techo sobre la
+        // camara deja su columna a oscuras, como una casa del jugador.
+        let smoke = std::env::var_os("RD_SMOKE").is_some();
+        let foto = std::env::var_os("RD_SMOKE_FOTO").is_some();
+        if smoke && !foto {
+            for dx in -2..=2 {
+                for dy in -2..=2 {
+                    level.set(128 + dx, 128 + dy, 50, world::GRASS);
+                }
+            }
+        }
         let mut player = PlayerE::new(&level);
         // Atajo de pruebas: RD132328_POS="x,fondo" aparece en esa columna
         // (cayendo); con tres valores "x,fondo,alto" se fija la posicion exacta.
@@ -80,6 +96,15 @@ impl App {
                 player.e.y_rot = n[0];
                 player.e.x_rot = n[1];
             }
+        }
+        // El test de regresion usa una camara fija conocida.
+        if std::env::var_os("RD_SMOKE").is_some() {
+            player.e.set_pos(128.5, 128.5, 43.0);
+            player.e.xo = 128.5;
+            player.e.yo = 128.5;
+            player.e.zo = 43.0;
+            player.e.y_rot = 0.0;
+            player.e.x_rot = 0.0;
         }
         // RubyDung.init del original: 100 zombis en (128, 0, 128).
         // RD132328_ZOMBIES y RD132328_ZOMBIE son solo para el careo: permiten
@@ -133,6 +158,7 @@ impl App {
             fixed_zombie_rot: std::env::var("RD132328_ZOMBIE_ROT")
                 .ok()
                 .and_then(|v| v.trim().parse().ok()),
+            smoke_frames: 0,
         }
     }
 
@@ -266,25 +292,40 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let smoke = std::env::var_os("RD_SMOKE").is_some();
+        let foto = std::env::var_os("RD_SMOKE_FOTO").is_some();
+        if smoke {
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+        }
+        let (w, h) = if foto {
+            (960, 720)
+        } else if smoke {
+            (480, 360)
+        } else {
+            (1024, 768)
+        };
         let window = Arc::new(
             event_loop
                 .create_window(
                     winit::window::WindowAttributes::default()
                         .with_title("RubyDung RS (rd-132328)")
-                        .with_inner_size(winit::dpi::PhysicalSize::new(1024, 768)),
+                        .with_inner_size(winit::dpi::PhysicalSize::new(w, h)),
                 )
                 .unwrap(),
         );
         // Mouse.setGrabbed(true) del original. Si el gestor de ventanas no lo
-        // permite todavia, se reintenta en el primer clic.
-        if window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+        // permite todavia, se reintenta en el primer clic. El test no puede
+        // secuestrar el raton del equipo.
+        if !smoke && window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
             window.set_cursor_visible(false);
             self.grabbed = true;
         }
         // Esta version tiene su propio terrain.png (la hierba es un poco mas
         // clara que en rd-132211); sin esto el renderer usaria el atlas viejo.
         std::env::set_var("RD_ATLAS_VERSION", VERSION);
-        window.focus_window();
+        if !smoke {
+            window.focus_window();
+        }
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
         renderer.build_chunks(&self.level);
         // Piel de los modelos: char.png de la version original instalada
@@ -420,7 +461,8 @@ impl ApplicationHandler for App {
         let _ = self.level.save();
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let smoke = std::env::var_os("RD_SMOKE").is_some();
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
         self.last = now;
@@ -489,6 +531,20 @@ impl ApplicationHandler for App {
                 self.player.e.bb.x1, self.player.e.bb.y1, self.player.e.bb.z1
             ));
         }
+        if smoke {
+            // Un zombi a tres bloques de la camara, como el caso que crasheaba.
+            if let Some(z0) = self.zombis.first_mut() {
+                let (x, y, z) = (
+                    px + dir[0] * 3.0,
+                    py + dir[1] * 3.0,
+                    pz + dir[2] * 3.0 - 1.5,
+                );
+                z0.e.set_pos(x, y, z);
+                z0.e.xo = x;
+                z0.e.yo = y;
+                z0.e.zo = z;
+            }
+        }
         let hit = self.raycast_from(
             [px - dir[0] * 0.3, py - dir[1] * 0.3, pz - dir[2] * 0.3],
             dir,
@@ -515,6 +571,16 @@ impl ApplicationHandler for App {
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {
             r.render(eye, yaw, pitch, hit, fps, &verts, &[]);
             w.request_redraw();
+            if smoke {
+                self.smoke_frames += 1;
+                if std::env::var_os("RD_SMOKE_FOTO").is_none()
+                    && self.smoke_frames >= SMOKE_FRAMES
+                {
+                    let niebla = r.chunks_fog.iter().flatten().filter(|c| c.icount > 0).count();
+                    println!("SMOKE OK lit={} fog={}", verts.len(), niebla);
+                    event_loop.exit();
+                }
+            }
         }
     }
 }

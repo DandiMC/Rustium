@@ -27,6 +27,9 @@ use winit::window::{Window, WindowId};
 const SPAWN_SEED: i64 = 12345;
 // RubyDung usa Timer(20.0f); cada tick es 1/20 de segundo, no 1/60.
 const TPS: f32 = 20.0;
+// RD_SMOKE: abre una ventana pequena, coloca un zombi delante de la camara y
+// cierra sola tras unos frames. Es el arnes del test de regresion del renderer.
+const SMOKE_FRAMES: u32 = 12;
 
 // Chunks que hay que reconstruir al tocar un bloque (o dos: el apuntado y el
 // de la cara donde se coloca). Se marca la celda y sus vecinas, como
@@ -268,6 +271,7 @@ struct App {
     fps: u32,
     show_fps: bool,
     hit: Option<((i32, i32, i32), (i32, i32, i32))>,
+    smoke_frames: u32,
 }
 
 impl App {
@@ -275,7 +279,9 @@ impl App {
         // El original crea sus Random con la hora: el mundo cambia en cada
         // arranque. RD_SEEDS fija los cuatro filtros para el careo y
         // RD_SEED_FIJO conserva la semilla historica del port.
-        let seed = if std::env::var_os("RD_SEED_FIJO").is_some() {
+        let seed = if std::env::var_os("RD_SMOKE").is_some()
+            || std::env::var_os("RD_SEED_FIJO").is_some()
+        {
             SPAWN_SEED
         } else {
             std::time::SystemTime::now()
@@ -283,7 +289,16 @@ impl App {
                 .map(|d| d.as_nanos() as i64)
                 .unwrap_or(SPAWN_SEED)
         };
-        let nivel = Nivel::new(seed);
+        let mut nivel = Nivel::new(seed);
+        // El test necesita una cara de la capa de niebla: un techo sobre la
+        // camara deja su columna a oscuras, como una casa del jugador.
+        if std::env::var_os("RD_SMOKE").is_some() {
+            for dx in -2..=2 {
+                for dy in -2..=2 {
+                    nivel.set(128 + dx, 128 + dy, 50, tiles::PIEDRA);
+                }
+            }
+        }
         // RubyDung.init: 10 zombis en (128,0,128) con resetPos (posicion al azar
         // en todo el mundo). RD_ZOMBIS_CERCA los pone delante para poder verlos.
         let cerca = std::env::var("RD_ZOMBIS_CERCA").is_ok();
@@ -315,6 +330,7 @@ impl App {
             fps: 0,
             show_fps: false,
             hit: None,
+            smoke_frames: 0,
         }
     }
 
@@ -433,19 +449,27 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let smoke = std::env::var_os("RD_SMOKE").is_some();
+        // El test no depende de que el escritorio mande eventos de pintado.
+        if smoke {
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+        }
+        let (w, h) = if smoke { (480, 360) } else { (1024, 768) };
         let window = Arc::new(
             event_loop
                 .create_window(
                     Window::default_attributes()
                         .with_title(format!("RubyDung RS ({})", self.version))
-                        .with_inner_size(winit::dpi::PhysicalSize::new(1024, 768)),
+                        .with_inner_size(winit::dpi::PhysicalSize::new(w, h)),
                 )
                 .unwrap(),
         );
         // Atlas y piel de ESTA version (los tiles no son los de rd-132211)
         std::env::set_var("RD_ATLAS_VERSION", self.version);
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
-        window.focus_window();
+        if !smoke {
+            window.focus_window();
+        }
         if let Some((w, h, rgba)) = crate::render::cargar_png_del_jar(self.version, "char.png") {
             renderer.pon_piel(w, h, &rgba);
         }
@@ -457,7 +481,8 @@ impl ApplicationHandler for App {
         self.renderer = Some(renderer);
         // Mouse.setGrabbed(true) del original: el primer clic debe romper o
         // colocar, no quedarse solo en capturar el cursor.
-        if window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+        // El test no puede secuestrar el raton del equipo que lo ejecuta.
+        if !smoke && window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
             window.set_cursor_visible(false);
             self.grabbed = true;
         }
@@ -605,7 +630,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
         self.last = now;
@@ -695,10 +720,28 @@ impl ApplicationHandler for App {
         // los claros van antes de la capa 1 y los oscuros dentro de su niebla.
         // La posicion se interpola con la fraccion de tick que sobra, como el
         // partialTicks del original.
+        let smoke = std::env::var_os("RD_SMOKE").is_some();
+        if smoke {
+            // Un zombi a tres bloques de la camara, siempre en la lista clara:
+            // asi el test recorre el camino que fallaba (modelo -> niebla).
+            if let Some(z0) = self.zombis.first_mut() {
+                let (x, y, z) = (
+                    camara[0] + sy * cp * 3.0,
+                    camara[1] - cy * cp * 3.0,
+                    camara[2] + sp * 3.0 - 1.5,
+                );
+                z0.e.set_pos(x, y, z);
+                z0.e.xo = x;
+                z0.e.yo = y;
+                z0.e.zo = z;
+            }
+        }
         let mut mv: Vec<[f32; 5]> = Vec::new();
         let mut mv_fondo: Vec<[f32; 5]> = Vec::new();
-        for z in &self.zombis {
-            if self.nivel.is_lit(z.e.x as i32, z.e.y as i32, z.e.z as i32) {
+        for (i, z) in self.zombis.iter().enumerate() {
+            if smoke && i == 0 {
+                z.vertices(a, &mut mv);
+            } else if self.nivel.is_lit(z.e.x as i32, z.e.y as i32, z.e.z as i32) {
                 z.vertices(a, &mut mv);
             } else {
                 z.vertices(a, &mut mv_fondo);
@@ -714,6 +757,14 @@ impl ApplicationHandler for App {
             r.hud_bloque = Some(self.pintura);
             r.render(eye, yaw, pitch, self.hit, fps, &mv, &mv_fondo);
             w.request_redraw();
+            if smoke {
+                self.smoke_frames += 1;
+                if self.smoke_frames >= SMOKE_FRAMES {
+                    let niebla = r.chunks_fog.iter().flatten().filter(|c| c.icount > 0).count();
+                    println!("SMOKE OK lit={} fog={}", mv.len(), niebla);
+                    event_loop.exit();
+                }
+            }
         }
     }
 }

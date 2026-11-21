@@ -584,9 +584,9 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.1.11).
+/// Novedades de las versiones del launcher (0.1.4 a 0.1.13).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 6] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 7] {
     match l {
         Lang::En => [
             (
@@ -624,6 +624,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 Nov 2026",
                 "Grass that grows and bushes that break update the world immediately.",
                 "When the level changed a block on its own, that part of the world kept showing the old block until the next click. Every change now marks its area and the mesh is rebuilt in the same frame. Bushes also no longer stop the player or block light, just like the original.",
+            ),
+            (
+                "Zombies can't crash the game anymore!",
+                "21 Nov 2026",
+                "All five versions open even with a zombie right in front.",
+                "In the versions with zombies, the game closed as soon as one appeared on screen. It's fixed: press Play, find a zombie and watch it stay by your side. All five versions now run from start to finish.",
             ),
         ],
         Lang::Es => [
@@ -663,6 +669,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "La hierba que crece y los arbustos que se rompen actualizan el mundo al instante.",
                 "Cuando el nivel cambiaba un bloque por su cuenta, el trozo de mundo seguía enseñando el bloque viejo hasta el siguiente clic. Ahora cada cambio marca su zona y la malla se reconstruye en el mismo fotograma. Además, los arbustos ya no frenan al jugador ni bloquean la luz, como en el original.",
             ),
+            (
+                "¡Los zombis ya no se comen el juego!",
+                "21 nov 2026",
+                "Las cinco versiones se abren aunque tengas un zombi delante.",
+                "En las versiones con zombis, el juego se cerraba en cuanto uno aparecía en pantalla. Ya está arreglado: dale a Jugar, busca un zombi y comprueba que ahora se queda a tu lado. Las cinco versiones funcionan de principio a fin.",
+            ),
         ],
         Lang::Pt => [
             (
@@ -700,6 +712,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 nov 2026",
                 "A relva que cresce e os arbustos que se quebram atualizam o mundo na hora.",
                 "Quando o nível mudava um bloco sozinho, aquela parte do mundo continuava a mostrar o bloco antigo até ao clique seguinte. Agora cada mudança marca a sua zona e a malha é reconstruída no mesmo fotograma. Além disso, os arbustos já não travam o jogador nem bloqueiam a luz, como no original.",
+            ),
+            (
+                "Os zombis já não fecham o jogo!",
+                "21 nov 2026",
+                "As cinco versões abrem mesmo com um zombi à frente.",
+                "Nas versões com zombis, o jogo fechava assim que um aparecia no ecrã. Já está corrigido: carrega em Jogar, encontra um zombi e vê-o ficar ao teu lado. As cinco versões funcionam do início ao fim.",
             ),
         ],
         Lang::Fr => [
@@ -739,6 +757,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "L'herbe qui pousse et les buissons qui se cassent mettent le monde à jour immédiatement.",
                 "Quand le niveau changeait un bloc tout seul, cette partie du monde continuait d'afficher l'ancien bloc jusqu'au clic suivant. Chaque changement marque maintenant sa zone et le maillage est reconstruit dans la même image. Les buissons ne bloquent plus le joueur ni la lumière, comme dans l'original.",
             ),
+            (
+                "Les zombies ne font plus planter le jeu !",
+                "21 nov. 2026",
+                "Les cinq versions s'ouvrent même avec un zombie devant vous.",
+                "Dans les versions avec des zombies, le jeu se fermait dès qu'un zombie apparaissait à l'écran. C'est corrigé : appuyez sur Jouer, trouvez un zombie et voyez-le rester à vos côtés. Les cinq versions fonctionnent du début à la fin.",
+            ),
         ],
         Lang::De => [
             (
@@ -776,6 +800,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20. Nov. 2026",
                 "Wachsendes Gras und zerbrechende Büsche aktualisieren die Welt sofort.",
                 "Wenn das Level einen Block von selbst änderte, zeigte dieser Teil der Welt bis zum nächsten Klick noch den alten Block. Jede Änderung markiert jetzt ihre Zone und das Mesh wird im selben Frame neu gebaut. Büsche bremsen den Spieler außerdem nicht mehr und blockieren kein Licht, wie im Original.",
+            ),
+            (
+                "Zombies bringen das Spiel nicht mehr zum Absturz!",
+                "21. Nov. 2026",
+                "Alle fünf Versionen starten, auch mit einem Zombie direkt vor dir.",
+                "In den Versionen mit Zombies schloss sich das Spiel, sobald einer auf dem Bildschirm erschien. Jetzt behoben: Drücke Spielen, suche einen Zombie und sieh zu, wie er an deiner Seite bleibt. Alle fünf Versionen laufen von Anfang bis Ende.",
             ),
         ],
     }
@@ -3662,6 +3692,7 @@ mod ui {
                                             "rd-20090515 · rd-161348",
                                             "rd-160052 · rd-20090515 · rd-161348",
                                             "rd-160052 · rd-20090515 · rd-161348",
+                                            "rd-132328 · rd-20090515 · rd-160052 · rd-161348",
                                         ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             cards.push((
@@ -3676,6 +3707,7 @@ mod ui {
                                                     3 => Art::Upright,
                                                     4 => Art::Ticks,
                                                     5 => Art::Growth,
+                                                    6 => Art::Zombies,
                                                     _ => Art::World,
                                                 },
                                             ));
