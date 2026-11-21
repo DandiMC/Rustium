@@ -284,6 +284,7 @@ impl ApplicationHandler for App {
         // Esta version tiene su propio terrain.png (la hierba es un poco mas
         // clara que en rd-132211); sin esto el renderer usaria el atlas viejo.
         std::env::set_var("RD_ATLAS_VERSION", VERSION);
+        window.focus_window();
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
         renderer.build_chunks(&self.level);
         // Piel de los modelos: char.png de la version original instalada
@@ -448,10 +449,8 @@ impl ApplicationHandler for App {
             }
             // El original comprueba la R en cada tick: mantenida teletransporta
             // sin parar, no solo al pulsarla.
-            if self.keys.contains("r") {
-                self.player.e.reset_pos(&self.level);
-            }
-            self.player.tick(&self.level, f, s, jump);
+            let reset = self.keys.contains("r") || self.keys.contains("R");
+            self.player.tick(&self.level, f, s, jump, reset);
         }
         self.frame += 1;
 

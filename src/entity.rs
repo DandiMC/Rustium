@@ -248,8 +248,11 @@ impl PlayerE {
     }
 
     // Player.tick: input y fisica. f = adelante/atras, s = lateral, jump.
-    pub fn tick(&mut self, level: &dyn Mundo, f: f32, s: f32, jump: bool) {
+    pub fn tick(&mut self, level: &dyn Mundo, f: f32, s: f32, jump: bool, reset: bool) {
         self.e.tick_prev();
+        if reset {
+            self.e.reset_pos(level);
+        }
         if jump && self.e.on_ground {
             self.e.zd = 0.12;
         }

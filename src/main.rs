@@ -90,10 +90,12 @@ impl App {
         }
     }
 
-    fn raycast(&self) -> Option<((i32, i32, i32), (i32, i32, i32))> {
+    fn raycast(&self, eye: [f32; 3]) -> Option<((i32, i32, i32), (i32, i32, i32))> {
         // Coordenadas de mundo puras: (x, y horizontales, z arriba). La camara
         // del original va 0.3 detras del ojo y pick() solo prueba bb.grow(3).
-        let (ex, ey, ez) = self.player.eye_pos();
+        // eye_pos_at devuelve (x, alto, fondo) para el renderer; el DDA y la
+        // caja usan (x, fondo, alto). Sin este cambio se lanzaba el rayo con la
+        // altura en el eje horizontal y la seleccion no acertaba el suelo.
         let yaw = self.player.y_rot.to_radians();
         let pitch = self.player.x_rot.to_radians();
         let (sy, cy) = yaw.sin_cos();
@@ -101,8 +103,12 @@ impl App {
         let mut d = [sy * cp, -cy * cp, sp];
         let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
         d = [d[0] / l, d[1] / l, d[2] / l];
-        let mut pos = [ex - d[0] * 0.3, ey - d[1] * 0.3, ez - d[2] * 0.3];
-        let limit = self.player.bbox().expanded(3.0, 3.0, 3.0);
+        let mut pos = [
+            eye[0] - d[0] * 0.3,
+            eye[1] - d[1] * 0.3,
+            eye[2] - d[2] * 0.3,
+        ];
+        let limit = self.player.bbox().grown(3.0, 3.0, 3.0);
         let mut normal = [0i32, 0, 0];
         let mut t = 0.0f32;
         while t < 6.0 {
@@ -172,9 +178,16 @@ impl ApplicationHandler for App {
         if bench {
             window.set_window_level(winit::window::WindowLevel::AlwaysOnTop);
         }
+        window.focus_window();
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
         renderer.build_chunks(&self.level);
         self.renderer = Some(renderer);
+        // Mouse.setGrabbed(true) del original: si el gestor de ventanas lo
+        // permite, el primer clic ya rompe o coloca en vez de solo capturar.
+        if window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+            window.set_cursor_visible(false);
+            self.grabbed = true;
+        }
         self.window = Some(window);
     }
 
@@ -226,10 +239,6 @@ impl ApplicationHandler for App {
                             event_loop.exit();
                             return;
                         }
-                        if name == "r" {
-                            self.player.reset_pos(&self.level);
-                            self.log("RESET POS");
-                        }
                         if self.keys.insert(name.clone()) {
                             self.log(&format!("KEY DOWN {:?}", logical_key));
                         }
@@ -244,13 +253,19 @@ impl ApplicationHandler for App {
             WindowEvent::MouseInput { state, button, .. } => {
                 if state == ElementState::Pressed {
                     if !self.grabbed {
-                        let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
-                        window.set_cursor_visible(false);
-                        self.grabbed = true;
+                        if window
+                            .set_cursor_grab(winit::window::CursorGrabMode::Locked)
+                            .is_ok()
+                        {
+                            window.set_cursor_visible(false);
+                            self.grabbed = true;
+                        }
                         // El original ya tiene el raton capturado al arrancar: el
                         // primer clic tambien rompe/coloca, no solo agarra.
                     }
-                    if let Some(((bx, by, bz), normal)) = self.raycast() {
+                    let a = (self.tick_acc * 60.0).clamp(0.0, 1.0);
+                    let (ex, ey, ez) = self.player.eye_pos_at(a);
+                    if let Some(((bx, by, bz), normal)) = self.raycast([ex, ez, ey]) {
                         self.log(&format!("CLICK {:?} hit=({},{},{}) n=({},{},{})", button, bx, by, bz, normal.0, normal.1, normal.2));
                         match button {
                             // Original: boton derecho (1) rompe, izquierdo (0) coloca
@@ -331,8 +346,11 @@ impl ApplicationHandler for App {
             steps = 100;
         }
         self.tick_acc -= steps as f32 / 60.0;
+        let reset = self.keys.contains("r") || self.keys.contains("R");
         for _ in 0..steps {
-            self.player.tick(&self.level, f, s, jump);
+            // El original comprueba la R en cada tick: mantenida teletransporta
+            // sin parar, no solo al pulsarla.
+            self.player.tick(&self.level, f, s, jump, reset);
         }
         self.frame += 1;
         // FPS: media sobre ventanas de medio segundo, para que no baile el numero
@@ -351,7 +369,7 @@ impl ApplicationHandler for App {
         if let Some(b) = &mut self.bench {
             if !b.started {
                 b.started = true;
-                b.next = Instant::now() + std::time::Duration::from_millis(1500);
+                b.next = Instant::now() + std::time::Duration::from_millis(1000);
             } else if Instant::now() >= b.next {
                 println!("BENCH step={} yaw={:.0} fps={}", 5 - b.left, self.player.y_rot, self.fps);
                 b.left -= 1;
@@ -359,7 +377,7 @@ impl ApplicationHandler for App {
                     println!("BENCH DONE");
                     std::process::exit(0);
                 }
-                b.next = Instant::now() + std::time::Duration::from_millis(1000);
+                b.next = Instant::now() + std::time::Duration::from_millis(700);
             }
         }
         if self.frame % 20 == 0 {
@@ -370,8 +388,9 @@ impl ApplicationHandler for App {
         }
 
         self.player.careo_fijar();
-        let (ex, ey, ez) = self.player.eye_pos();
-        let hit = self.raycast();
+        let a = (self.tick_acc * 60.0).clamp(0.0, 1.0);
+        let (ex, ey, ez) = self.player.eye_pos_at(a);
+        let hit = self.raycast([ex, ez, ey]);
         let yaw = self.player.y_rot.to_radians();
         let pitch = self.player.x_rot.to_radians();
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {

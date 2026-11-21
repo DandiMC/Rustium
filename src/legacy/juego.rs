@@ -42,6 +42,21 @@ fn chunks_tocados(x0: i32, y0: i32, x1: i32, y1: i32) -> (usize, usize, usize, u
     )
 }
 
+// Teclas de seleccion de bloque de RubyDung: 1=piedra, 2=tierra, 3=ladrillo,
+// 4=madera y 6=arbusto. El Java compara Keyboard.getEventKey() con 2,3,4,5,7,
+// pero esos son los keycodes de LWJGL de las teclas fisicas 1,2,3,4,6
+// (Keyboard.KEY_1=2 ... KEY_4=5, KEY_6=7). rd-160052 no tiene el tile Bush.
+fn bloque_para_tecla(version: &str, tecla: &str) -> Option<u8> {
+    match tecla {
+        "1" => Some(tiles::PIEDRA),
+        "2" => Some(tiles::TIERRA),
+        "3" => Some(tiles::LADRILLO),
+        "4" => Some(tiles::MADERA),
+        "6" if version != "rd-160052" => Some(tiles::ARBUSTO),
+        _ => None,
+    }
+}
+
 pub fn correr(version: &'static str) {
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::new(version);
@@ -194,9 +209,8 @@ impl Jugador {
         self.x = randf() * WIDTH as f32;
         self.y = randf() * HEIGHT as f32;
         self.z = DEPTH as f32 + 10.0;
-        self.xd = 0.0;
-        self.yd = 0.0;
-        self.zd = 0.0;
+        // Entity.resetPos del original solo llama a setPos: conserva la
+        // velocidad actual. No la pongas a cero aqui.
     }
 
     fn move_relative(&mut self, xa: f32, za: f32, speed: f32) {
@@ -365,7 +379,7 @@ impl App {
         // La camara del original va 0.3 detras del ojo y pick() solo prueba
         // player.bb.grow(3).
         let mut pos = [ex - d[0] * 0.3, ey - d[1] * 0.3, ez - d[2] * 0.3];
-        let limit = self.jugador.bbox().expanded(3.0, 3.0, 3.0);
+        let limit = self.jugador.bbox().grown(3.0, 3.0, 3.0);
         let mut normal = [0i32, 0, 0];
         let mut t = 0.0f32;
         while t < 200.0 {
@@ -431,6 +445,7 @@ impl ApplicationHandler for App {
         // Atlas y piel de ESTA version (los tiles no son los de rd-132211)
         std::env::set_var("RD_ATLAS_VERSION", self.version);
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
+        window.focus_window();
         if let Some((w, h, rgba)) = crate::render::cargar_png_del_jar(self.version, "char.png") {
             renderer.pon_piel(w, h, &rgba);
         }
@@ -440,6 +455,12 @@ impl ApplicationHandler for App {
         renderer.fog_densidad = 0.06;
         renderer.hit_alpha_escala = 0.5;
         self.renderer = Some(renderer);
+        // Mouse.setGrabbed(true) del original: el primer clic debe romper o
+        // colocar, no quedarse solo en capturar el cursor.
+        if window.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+            window.set_cursor_visible(false);
+            self.grabbed = true;
+        }
         self.window = Some(window);
         self.reconstruir_todo();
     }
@@ -466,23 +487,18 @@ impl ApplicationHandler for App {
                             event_loop.exit();
                         }
                         Key::Named(NamedKey::F3) => self.show_fps = !self.show_fps,
-                        // RubyDung: 2 -> piedra, 3 -> tierra, 4 -> ladrillo,
-                        // 5 -> madera, 7 -> arbusto (keycodes de LWJGL = tecla)
+                        // RubyDung: 1 -> piedra, 2 -> tierra, 3 -> ladrillo,
+                        // 4 -> madera, 6 -> arbusto. El Java usa los keycodes
+                        // 2/3/4/5/7, que en LWJGL son esas teclas fisicas.
                         Key::Named(NamedKey::Enter) => {
                             let _ = self.nivel.save();
                         }
-                        Key::Character(c) => match c.as_str() {
-                            "1" => self.pintura = tiles::PIEDRA,
-                            "2" => self.pintura = tiles::TIERRA,
-                            "3" => self.pintura = tiles::LADRILLO,
-                            "4" => self.pintura = tiles::MADERA,
-                            // rd-160052 no define el tile Bush: su jar no lo tiene.
-                            "6" if self.version != "rd-160052" => {
-                                self.pintura = tiles::ARBUSTO
-                            }
-                            // RubyDung: G suelta un zombi en la posicion del jugador
-                            // (sin resetPos, a diferencia de los 10 iniciales)
-                            "g" | "G" => {
+                        Key::Character(c) => {
+                            if let Some(id) = bloque_para_tecla(self.version, c.as_str()) {
+                                self.pintura = id;
+                            } else if c.eq_ignore_ascii_case("g") {
+                                // RubyDung: G suelta un zombi en la posicion del jugador
+                                // (sin resetPos, a diferencia de los 10 iniciales)
                                 let mut z = Zombie::new(&self.nivel, self.jugador.x, self.jugador.y, self.jugador.z);
                                 // El constructor del Java legacy llama a setPos, que
                                 // recoloca tambien la caja (bb). El constructor
@@ -491,11 +507,10 @@ impl ApplicationHandler for App {
                                 // y saltaba a otro punto en el primer tick.
                                 z.e.set_pos(self.jugador.x, self.jugador.y, self.jugador.z);
                                 self.zombis.push(z);
-                            }
-                            _ => {
+                            } else {
                                 self.keys.insert(c.to_string());
                             }
-                        },
+                        }
                         // La tecla Windows/Meta tambien salta (keycode 219).
                         Key::Named(NamedKey::Space)
                         | Key::Named(NamedKey::Super)
@@ -536,9 +551,13 @@ impl ApplicationHandler for App {
             WindowEvent::MouseInput { state, button, .. } => {
                 if state == ElementState::Pressed {
                     if !self.grabbed {
-                        let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
-                        window.set_cursor_visible(false);
-                        self.grabbed = true;
+                        if window
+                            .set_cursor_grab(winit::window::CursorGrabMode::Locked)
+                            .is_ok()
+                        {
+                            window.set_cursor_visible(false);
+                            self.grabbed = true;
+                        }
                         // El original arranca con el raton capturado: el primer
                         // clic tambien rompe o coloca.
                     }
@@ -712,5 +731,30 @@ mod tests {
         assert_eq!(chunks_tocados(8, 8, 8, 8), (0, 0, 0, 0));
         // Fuera del mundo se recorta al ultimo chunk.
         assert_eq!(chunks_tocados(300, 300, 300, 300), (15, 15, 15, 15));
+    }
+
+    #[test]
+    fn reset_pos_conserva_la_velocidad_como_el_original() {
+        let mut j = Jugador::new();
+        j.xd = 1.0;
+        j.yd = 2.0;
+        j.zd = 3.0;
+        j.reset_pos();
+        assert_eq!((j.xd, j.yd, j.zd), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn las_teclas_de_bloque_son_las_teclas_fisicas_del_original() {
+        assert_eq!(bloque_para_tecla("rd-20090515", "1"), Some(tiles::PIEDRA));
+        assert_eq!(bloque_para_tecla("rd-20090515", "2"), Some(tiles::TIERRA));
+        assert_eq!(bloque_para_tecla("rd-20090515", "3"), Some(tiles::LADRILLO));
+        assert_eq!(bloque_para_tecla("rd-20090515", "4"), Some(tiles::MADERA));
+        assert_eq!(bloque_para_tecla("rd-20090515", "6"), Some(tiles::ARBUSTO));
+        assert_eq!(bloque_para_tecla("rd-161348", "6"), Some(tiles::ARBUSTO));
+        // La 5 y la 7 no seleccionan bloque en RubyDung.
+        assert_eq!(bloque_para_tecla("rd-20090515", "5"), None);
+        assert_eq!(bloque_para_tecla("rd-20090515", "7"), None);
+        // rd-160052 no define Bush: la 6 no debe seleccionar nada.
+        assert_eq!(bloque_para_tecla("rd-160052", "6"), None);
     }
 }

@@ -7,6 +7,11 @@ pub struct Player {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+    // Posicion del tick anterior para interpolar la camara, como moveCameraToPlayer(a)
+    // del original. Sin esto la camara avanza a tirones de 60 Hz.
+    pub xo: f32,
+    pub yo: f32,
+    pub zo: f32,
     pub xd: f32,
     pub yd: f32,
     pub zd: f32,
@@ -19,6 +24,7 @@ impl Player {
     pub fn new(level: &Level) -> Self {
         let mut p = Player {
             x: 0.0, y: 0.0, z: 0.0,
+            xo: 0.0, yo: 0.0, zo: 0.0,
             xd: 0.0, yd: 0.0, zd: 0.0,
             y_rot: 0.0, x_rot: 0.0,
             on_ground: false,
@@ -43,6 +49,9 @@ impl Player {
                 p.x_rot = n[1];
             }
         }
+        p.xo = p.x;
+        p.yo = p.y;
+        p.zo = p.z;
         p
     }
 
@@ -59,6 +68,9 @@ impl Player {
                 self.x = n[0];
                 self.y = n[1];
                 self.z = n[2] - 0.72;
+                self.xo = self.x;
+                self.yo = self.y;
+                self.zo = self.z;
                 self.xd = 0.0;
                 self.yd = 0.0;
                 self.zd = 0.0;
@@ -88,8 +100,13 @@ impl Player {
 
     // El original pone el ojo en bb.y0 + 1.62; nuestra caja (1.8 de alto) tiene
     // el centro en bb.y0 + 0.9, asi que el ojo queda 0.72 sobre el centro.
-    pub fn eye_pos(&self) -> (f32, f32, f32) {
-        (self.x, self.z + 0.72, self.y)
+    // moveCameraToPlayer(a): interpola xo/yo/zo con la fraccion de tick que
+    // sobra. Devuelve (x, alto, fondo), el orden que espera el renderer.
+    pub fn eye_pos_at(&self, a: f32) -> (f32, f32, f32) {
+        let x = self.xo + (self.x - self.xo) * a;
+        let y = self.yo + (self.y - self.yo) * a;
+        let z = self.zo + (self.z - self.zo) * a;
+        (x, z + 0.72, y)
     }
 
     // turn(x, y) del original: yRot += x*0.15; xRot -= y*0.15; clamp +-90
@@ -114,7 +131,13 @@ impl Player {
         self.yd += (-xa * ya.cos() + za * ya.sin()) * d;
     }
 
-    pub fn tick(&mut self, level: &Level, f: f32, s: f32, jump: bool) {
+    pub fn tick(&mut self, level: &Level, f: f32, s: f32, jump: bool, reset: bool) {
+        self.xo = self.x;
+        self.yo = self.y;
+        self.zo = self.z;
+        if reset {
+            self.reset_pos(level);
+        }
         let accel = if self.on_ground { 0.02 } else { 0.005 };
         if jump && self.on_ground {
             self.zd = 0.12;

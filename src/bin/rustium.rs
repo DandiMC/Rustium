@@ -567,6 +567,7 @@ struct UiTexts {
     see_less: &'static str,
     measure_fps: &'static str,
     bench_running: &'static str,
+    bench_java_wait: &'static str,
 }
 
 /// Small labels for the stat cards and the news footer. Kept as a tuple so adding
@@ -898,6 +899,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "See less",
             measure_fps: "Measure FPS",
             bench_running: "Measuring... {step}/{total}",
+            bench_java_wait: "Measuring Java...",
         },
         Lang::Es => UiTexts {
             sidebar_instances: "VERSIONES",
@@ -938,6 +940,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Ver menos",
             measure_fps: "Medir FPS",
             bench_running: "Midiendo... {step}/{total}",
+            bench_java_wait: "Midiendo Java...",
         },
         Lang::Pt => UiTexts {
             sidebar_instances: "VERSÕES",
@@ -978,6 +981,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Ver menos",
             measure_fps: "Medir FPS",
             bench_running: "A medir... {step}/{total}",
+            bench_java_wait: "A medir Java...",
         },
         Lang::Fr => UiTexts {
             sidebar_instances: "VERSIONS",
@@ -1018,6 +1022,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Voir moins",
             measure_fps: "Mesurer les FPS",
             bench_running: "Mesure... {step}/{total}",
+            bench_java_wait: "Mesure de Java...",
         },
         Lang::De => UiTexts {
             sidebar_instances: "VERSIONEN",
@@ -1058,6 +1063,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             see_less: "Weniger anzeigen",
             measure_fps: "FPS messen",
             bench_running: "Messung... {step}/{total}",
+            bench_java_wait: "Java wird gemessen...",
         },
     }
 }
@@ -2029,7 +2035,7 @@ fn measure_java() -> Option<u32> {
 
     let pid = child.id();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(14));
+        std::thread::sleep(std::time::Duration::from_secs(10));
         let _ = std::process::Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/F"])
             .stdout(std::process::Stdio::null())
@@ -2046,7 +2052,7 @@ fn measure_java() -> Option<u32> {
                     vals.push(v);
                 }
             }
-            if vals.len() >= 24 {
+            if vals.len() >= 16 {
                 break;
             }
         }
@@ -2130,6 +2136,7 @@ mod ui {
     const AMBER: Color32 = Color32::from_rgb(240, 192, 102);
     const BLUE: Color32 = Color32::from_rgb(186, 168, 255);
     const TEXT: Color32 = Color32::from_rgb(245, 238, 244);
+    const SELECTED: Color32 = Color32::from_rgb(52, 22, 43);
 
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Tab {
@@ -2152,6 +2159,19 @@ mod ui {
     struct BenchRun {
         rx: Receiver<String>,
         fps: Vec<u32>,
+        rust_done: bool,
+    }
+
+    impl BenchRun {
+        /// Median of the readings so far, once there is at least one.
+        fn settled(&self) -> Option<u32> {
+            let mut v = self.fps.clone();
+            if v.is_empty() {
+                None
+            } else {
+                Some(median(&mut v))
+            }
+        }
     }
 
     const BENCH_STEPS: usize = 5;
@@ -2361,6 +2381,16 @@ mod ui {
         1.0 + c3 * u * u * u + c1 * u * u
     }
 
+    /// Height of a damped bounce after the logo touches the centre. The first
+    /// rebound is the visible one; the rest die away quickly.
+    fn logo_bounce(t: f32) -> f32 {
+        if t <= 0.0 {
+            0.0
+        } else {
+            (t * std::f32::consts::PI / 0.27).sin().abs() * 46.0 * (-3.1 * t).exp()
+        }
+    }
+
     fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
         let t = t.clamp(0.0, 1.0);
         let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round().clamp(0.0, 255.0) as u8;
@@ -2418,6 +2448,17 @@ mod ui {
             520.0,
             Color32::from_rgb(150, 90, 255),
         );
+        // A very quiet R anchors the empty lower-right corner without adding
+        // another panel to the layout.
+        let mark = Color32::from_rgba_unmultiplied(255, 61, 146, 8);
+        let g = ui
+            .painter()
+            .layout_no_wrap("R".to_owned(), pixel(ui.ctx(), 420.0), mark);
+        let at = egui::pos2(
+            r.right() - g.size().x - 46.0,
+            r.bottom() - g.size().y - 18.0,
+        );
+        ui.painter().galley(at, g, mark);
     }
 
     fn card(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui)) {
@@ -2572,6 +2613,118 @@ mod ui {
         resp.on_hover_cursor(egui::CursorIcon::PointingHand)
     }
 
+    /// One language shortcut in the rail. The active one is filled magenta so
+    /// the current language is obvious without opening a dropdown.
+    fn lang_pill(ui: &mut egui::Ui, code: &str, active: bool) -> egui::Response {
+        let (rect, resp) = ui.allocate_exact_size(egui::vec2(34.0, 27.0), egui::Sense::click());
+        let ctx = ui.ctx().clone();
+        let h = ctx.animate_bool_with_time(resp.id.with("hover"), resp.hovered(), 0.12);
+        let idle = mix(
+            Color32::from_rgba_unmultiplied(255, 255, 255, 12),
+            Color32::from_rgba_unmultiplied(255, 255, 255, 28),
+            h,
+        );
+        let fill = if active { MAGENTA } else { idle };
+        ui.painter().rect(
+            rect,
+            8.0,
+            fill,
+            egui::Stroke::new(
+                1.0_f32,
+                if active {
+                    MAGENTA
+                } else {
+                    mix(EDGE, Color32::from_rgba_unmultiplied(255, 61, 146, 130), h)
+                },
+            ),
+            egui::StrokeKind::Inside,
+        );
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            code,
+            display(12.5),
+            if active { Color32::from_rgb(24, 10, 20) } else { SOFT },
+        );
+        resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+    }
+
+    /// A rounded bar in the launcher palette. `frac` is 0..1.
+    fn accent_bar(ui: &mut egui::Ui, width: f32, height: f32, frac: f32, color: Color32) {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+        let p = ui.painter();
+        p.rect_filled(
+            rect,
+            height * 0.5,
+            Color32::from_rgba_unmultiplied(255, 255, 255, 10),
+        );
+        let frac = frac.clamp(0.0, 1.0);
+        if frac > 0.0 {
+            let fill = egui::Rect::from_min_size(
+                rect.min,
+                egui::vec2((rect.width() * frac).max(height), height),
+            );
+            p.rect_filled(
+                fill,
+                height * 0.5,
+                Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 225),
+            );
+        }
+    }
+
+    /// One side of the performance card: label, number and a small bar.
+    /// `scale` is the shared ceiling for both bars, so their lengths keep the
+    /// real ratio instead of flattening against a fixed 120 fps.
+    fn fps_meter(
+        ui: &mut egui::Ui,
+        label: &str,
+        value: Option<u32>,
+        color: Color32,
+        width: f32,
+        scale: u32,
+    ) {
+        ui.vertical(|ui| {
+            ui.set_width(width);
+            ui.horizontal(|ui| {
+                ui.label(disp(label, 12.0).color(MUTED));
+                ui.add_space(8.0);
+                match value {
+                    Some(v) => ui.label(disp(format!("{v} fps"), 24.0).color(color)),
+                    None => ui.label(disp("—", 24.0).color(MUTED)),
+                };
+            });
+            ui.add_space(5.0);
+            let frac = match value {
+                Some(v) if scale > 0 => (v as f32 / scale as f32).clamp(0.0, 1.0),
+                _ => 0.0,
+            };
+            accent_bar(ui, width, 8.0, frac, color);
+        });
+    }
+
+    /// Five segments, one per captured reading.
+    fn bench_progress(ui: &mut egui::Ui, width: f32, frac: f32, color: Color32) {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 6.0), egui::Sense::hover());
+        let gap = 5.0;
+        let seg = ((rect.width() - gap * (BENCH_STEPS as f32 - 1.0)) / BENCH_STEPS as f32).max(1.0);
+        for i in 0..BENCH_STEPS {
+            let r = egui::Rect::from_min_size(
+                egui::pos2(rect.left() + i as f32 * (seg + gap), rect.top()),
+                egui::vec2(seg, rect.height()),
+            );
+            let done = i as f32 + 1.0 <= frac * BENCH_STEPS as f32 + 0.001;
+            ui.painter().rect_filled(
+                r,
+                3.0,
+                if done {
+                    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 225)
+                } else {
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 12)
+                },
+            );
+        }
+    }
+
     pub fn gui(opts: Options) -> R<()> {
         let options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
@@ -2713,18 +2866,17 @@ mod ui {
             }
         }
 
-        /// Opening: black, the Rustium R springs in and hops once, then the
-        /// letter and the black dissolve together and the launcher is there.
+        /// Opening: black, the Rustium R drops in from above, bounces to a stop
+        /// in the centre, then the letter and the black dissolve together.
         fn splash(&self, ctx: &egui::Context) {
             if std::env::var("RUSTIUM_NOSPLASH").is_ok() {
                 return;
             }
-            // The letter lands by IN, hops up and back down until HOLD, and by
+            // The letter reaches the centre by DROP, bounces until HOLD and by
             // TOTAL the black and the letter have both gone.
-            const IN: f32 = 0.50;
-            const HOP: f32 = 0.42;
-            const HOLD: f32 = 1.30;
-            const TOTAL: f32 = 1.85;
+            const DROP: f32 = 0.46;
+            const HOLD: f32 = 1.70;
+            const TOTAL: f32 = 2.15;
             let e = self.t0.elapsed().as_secs_f32();
             if e >= TOTAL {
                 return;
@@ -2746,29 +2898,25 @@ mod ui {
                 0.0,
                 Color32::from_rgba_unmultiplied(0, 0, 0, (255.0 * out).round() as u8),
             );
-            // The letter springs in: it grows, overshoots a touch and settles.
-            let grow = ease_out_back((e / IN).clamp(0.0, 1.0));
-            let size = 176.0 * (0.45 + 0.55 * grow);
-            let appear = (e / 0.18).clamp(0.0, 1.0);
+            // The letter keeps its size and falls in from above; after touching
+            // the centre it rebounds a few times with a decaying arc.
+            let size = 176.0;
+            let appear = (e / 0.14).clamp(0.0, 1.0);
             let alpha = (255.0 * appear * out).round() as u8;
             if alpha == 0 {
                 return;
             }
-            // After landing it hops up and falls back once. The hop ends well
-            // before the fade, so the letter and the black leave together.
-            let hop_t = ((e - IN) / HOP).clamp(0.0, 1.0);
-            let hop = if e > IN {
-                -(hop_t * std::f32::consts::PI).sin() * 38.0 * (1.0 - hop_t * 0.35)
-            } else {
-                0.0
-            };
-            let center = rect.center() + egui::vec2(0.0, hop);
+            let fall = (e / DROP).clamp(0.0, 1.0);
+            let drop = fall * fall;
+            let bounce = logo_bounce(e - DROP);
+            let from = rect.height() * 0.55 + size;
+            let center = rect.center() + egui::vec2(0.0, -from * (1.0 - drop) - bounce);
             let tint = |a: u8| {
                 Color32::from_rgba_unmultiplied(MAGENTA.r(), MAGENTA.g(), MAGENTA.b(), a)
             };
-            // A soft magenta halo that breathes with the letter.
+            // A soft magenta halo that follows the letter down.
             for (i, base) in [9u8, 7, 5].iter().enumerate() {
-                let a = (*base as f32 * grow * out).round() as u8;
+                let a = (*base as f32 * appear * out).round() as u8;
                 if a > 0 {
                     p.circle_filled(center, size * (0.86 - i as f32 * 0.16), tint(a));
                 }
@@ -2886,15 +3034,18 @@ mod ui {
                             run.fps.push(v);
                         }
                     }
-                    if line == "BENCH DONE" || line == "END" {
+                    if line == "RUST DONE" {
+                        run.rust_done = true;
+                        self.bench_fps = run.settled();
+                    }
+                    // Only the thread's own END closes the run: the game also
+                    // prints BENCH DONE when it stops, and Java still follows.
+                    if line == "END" {
                         done = true;
                     }
                 }
                 if done {
-                    if !run.fps.is_empty() {
-                        let mut v = run.fps.clone();
-                        self.bench_fps = Some(median(&mut v));
-                    }
+                    self.bench_fps = run.settled();
                     beep();
                 } else {
                     self.bench = Some(run);
@@ -2934,15 +3085,13 @@ mod ui {
             // so it always starts that build, whatever the picker says.
             let Ok(exe) = find_game(&t, GameVersion::Rd132211) else { return };
             let (tx, rx) = channel();
-            self.bench = Some(BenchRun { rx, fps: Vec::new() });
+            self.bench = Some(BenchRun { rx, fps: Vec::new(), rust_done: false });
             self.bench_fps = None;
             self.bench_java = None;
             std::thread::spawn(move || {
                 use std::io::BufRead;
-                // First the player's own Java copy, then the port.
-                if let Some(fps) = measure_java() {
-                    let _ = tx.send(format!("JAVA {fps}"));
-                }
+                // The port goes first so the progress bar starts moving right
+                // away; the Java original follows and both keep the same spot.
                 let child = std::process::Command::new(&exe)
                     .env("RD_BENCH", "1")
                     // Same fraction the agent hands the original, so both spawn on
@@ -2952,6 +3101,7 @@ mod ui {
                     .stderr(std::process::Stdio::null())
                     .spawn();
                 let Ok(mut child) = child else {
+                    let _ = tx.send("RUST DONE".to_string());
                     let _ = tx.send("END".to_string());
                     return;
                 };
@@ -2962,6 +3112,12 @@ mod ui {
                     }
                 }
                 let _ = child.wait();
+                let _ = tx.send("RUST DONE".to_string());
+                // Then the player's own Java copy, measured on its own so the
+                // two numbers are not distorted by sharing the GPU.
+                if let Some(fps) = measure_java() {
+                    let _ = tx.send(format!("JAVA {fps}"));
+                }
                 let _ = tx.send("END".to_string());
             });
         }
@@ -3031,14 +3187,18 @@ mod ui {
             ui.label(RichText::new(u.language_label).size(10.5).color(MUTED));
             ui.add_space(3.0);
             let mut elegido = self.lang;
-            egui::ComboBox::from_id_salt("lang")
-                .selected_text(RichText::new(self.lang.name()).size(12.5).color(TEXT))
-                .width(ui.available_width() - 4.0)
-                .show_ui(ui, |ui| {
-                    for l in Lang::ALL {
-                        ui.selectable_value(&mut elegido, l, l.name());
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                for l in Lang::ALL {
+                    let code = l.code().to_uppercase();
+                    if lang_pill(ui, &code, l == self.lang)
+                        .on_hover_text(l.name())
+                        .clicked()
+                    {
+                        elegido = l;
                     }
-                });
+                }
+            });
             if elegido != self.lang {
                 self.lang = elegido;
                 save_config(elegido, self.opts.game);
@@ -3148,6 +3308,12 @@ mod ui {
 
         fn update(&mut self, ctx: &egui::Context, _f: &mut eframe::Frame) {
             ctx.set_visuals(egui::Visuals::dark());
+            // The window is created hidden while fonts and the GPU wake up. The
+            // intro clock starts with the first paint, not with construction, so
+            // the fall is never half over before the window is on screen.
+            if !self.revealed {
+                self.t0 = std::time::Instant::now();
+            }
             // Debug hook: start the measurement as soon as the window opens.
             if std::env::var("RUSTIUM_BENCH").is_ok()
                 && self.bench.is_none()
@@ -3300,6 +3466,8 @@ mod ui {
                                                         [w - 24.0, 18.0],
                                                         egui::TextEdit::singleline(&mut self.path)
                                                             .frame(false)
+                                                            .background_color(Color32::TRANSPARENT)
+                                                            .text_color(SOFT)
                                                             .hint_text(r"C:\...\.minecraft\versions\rd-132211\rd-132211.jar"),
                                                     );
                                                 });
@@ -3330,8 +3498,8 @@ mod ui {
                                 });
 
                                 ui.add_space(10.0);
-                                // Rendimiento: los dos números y el botón de medir,
-                                // en una franja a todo el ancho.
+                                // Rendimiento: dos medidores con la misma barra
+                                // redondeada del resto del launcher.
                                 {
                                     egui::Frame::NONE
                                         .fill(GLASS)
@@ -3340,22 +3508,13 @@ mod ui {
                                         .inner_margin(egui::Margin::symmetric(16, 12))
                                         .show(ui, |ui| {
                                             ui.set_width((ui.available_width() - 32.0).max(320.0));
-                                            ui.label(disp(l_perf, 11.5).color(MUTED));
-                                            ui.add_space(3.0);
-                                            ui.horizontal(|ui| {
-                                                let fmt = |v: Option<u32>| {
-                                                    v.map(|v| format!("{v} fps"))
-                                                        .unwrap_or_else(|| "—".to_string())
-                                                };
-                                                ui.label(disp("Java", 13.0).color(SOFT));
-                                                ui.label(disp(fmt(self.bench_java), 19.0).color(BLUE));
-                                                ui.add_space(14.0);
-                                                ui.label(disp("Rust", 13.0).color(SOFT));
-                                                ui.label(disp(fmt(self.bench_fps), 19.0).color(GREEN));
-                                            });
-                                            ui.add_space(7.0);
                                             let running = self.bench.is_some();
                                             let label = match &self.bench {
+                                                Some(run)
+                                                    if run.rust_done && self.bench_java.is_none() =>
+                                                {
+                                                    u.bench_java_wait.to_string()
+                                                }
                                                 Some(run) => fill(
                                                     &fill(
                                                         &u.bench_running,
@@ -3367,17 +3526,71 @@ mod ui {
                                                 ),
                                                 None => u.measure_fps.to_string(),
                                             };
-                                            if plain_button(ui, &label, 150.0, !running).clicked()
-                                            {
-                                                self.start_bench();
-                                            }
+                                            ui.horizontal(|ui| {
+                                                ui.label(disp(l_perf, 11.5).color(MUTED));
+                                                ui.with_layout(
+                                                    egui::Layout::right_to_left(
+                                                        egui::Align::Center,
+                                                    ),
+                                                    |ui| {
+                                                        if plain_button(
+                                                            ui,
+                                                            &label,
+                                                            150.0,
+                                                            !running,
+                                                        )
+                                                        .clicked()
+                                                        {
+                                                            self.start_bench();
+                                                        }
+                                                    },
+                                                );
+                                            });
+                                            ui.add_space(9.0);
+                                            let meter_w =
+                                                ((ui.available_width() - 22.0) * 0.5).max(150.0);
+                                            // Both bars share the bigger reading, rounded up
+                                            // to a round number: 582 and 105 stay apart.
+                                            let scale = self
+                                                .bench_java
+                                                .max(self.bench_fps)
+                                                .unwrap_or(0)
+                                                .div_ceil(50)
+                                                * 50;
+                                            ui.horizontal(|ui| {
+                                                fps_meter(
+                                                    ui,
+                                                    "Java",
+                                                    self.bench_java,
+                                                    BLUE,
+                                                    meter_w,
+                                                    scale,
+                                                );
+                                                ui.add_space(22.0);
+                                                fps_meter(
+                                                    ui,
+                                                    "Rust",
+                                                    self.bench_fps,
+                                                    GREEN,
+                                                    meter_w,
+                                                    scale,
+                                                );
+                                            });
                                             if let Some(run) = &self.bench {
-                                                ui.add_space(6.0);
-                                                let frac =
-                                                    run.fps.len() as f32 / BENCH_STEPS as f32;
-                                                ui.add(
-                                                    egui::ProgressBar::new(frac)
-                                                        .desired_width(170.0),
+                                                ui.add_space(10.0);
+                                                let frac = if run.rust_done
+                                                    && self.bench_java.is_none()
+                                                {
+                                                    1.0
+                                                } else {
+                                                    run.fps.len() as f32
+                                                        / BENCH_STEPS as f32
+                                                };
+                                                bench_progress(
+                                                    ui,
+                                                    ui.available_width(),
+                                                    frac,
+                                                    MAGENTA,
                                                 );
                                             }
                                         });
@@ -3784,7 +3997,7 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
             EDGE
         };
         let inner = egui::Frame::NONE
-            .fill(if selected { GLASS_HI } else { GLASS })
+            .fill(if selected { SELECTED } else { GLASS })
             .stroke(egui::Stroke::new(1.0_f32, border))
             .corner_radius(14)
             .inner_margin(egui::Margin::symmetric(14, 11))
@@ -3800,6 +4013,14 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                     ui.label(RichText::new(sub).size(11.5).color(SOFT));
                 });
             });
+        if selected {
+            let r = inner.response.rect;
+            let accent = egui::Rect::from_min_size(
+                egui::pos2(r.left() + 1.0, r.top() + 13.0),
+                egui::vec2(3.0, (r.height() - 26.0).max(4.0)),
+            );
+            ui.painter().rect_filled(accent, 2.0, MAGENTA);
+        }
         let resp = ui.interact(
             inner.response.rect,
             ui.id().with(("instance", name)),

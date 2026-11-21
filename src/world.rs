@@ -42,6 +42,20 @@ pub struct BlockBox {
 }
 
 impl BlockBox {
+    // AABB.grow: agranda la caja por los dos lados. pick() la usa para limitar
+    // el alcance; expand() solo alarga el lado hacia el que se mueve y dejaba
+    // fuera los bloques por debajo de los pies.
+    pub fn grown(&self, x: f32, y: f32, z: f32) -> BlockBox {
+        BlockBox {
+            x0: self.x0 - x,
+            x1: self.x1 + x,
+            y0: self.y0 - y,
+            y1: self.y1 + y,
+            z0: self.z0 - z,
+            z1: self.z1 + z,
+        }
+    }
+
     // AABB.expand: agranda la caja solo hacia el lado en el que se mueve.
     pub fn expanded(&self, x: f32, y: f32, z: f32) -> BlockBox {
         let mut b = *self;
@@ -353,5 +367,18 @@ pub trait Mundo {
 impl Mundo for Level {
     fn cajas(&self, bb: &BlockBox) -> Vec<BlockBox> {
         self.cubes(bb)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BlockBox;
+
+    #[test]
+    fn grown_extends_both_sides() {
+        let b = BlockBox { x0: 1.0, y0: 2.0, z0: 3.0, x1: 4.0, y1: 5.0, z1: 6.0 };
+        let g = b.grown(3.0, 2.0, 1.0);
+        assert_eq!((g.x0, g.y0, g.z0), (-2.0, 0.0, 2.0));
+        assert_eq!((g.x1, g.y1, g.z1), (7.0, 7.0, 7.0));
     }
 }
