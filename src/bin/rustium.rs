@@ -77,9 +77,10 @@ const BENCH_SPAWN: f32 = 0.5;
 
 type R<T> = Result<T, String>;
 
-/// Las cinco versiones pre-clasicas que trae el launcher, en orden de fecha.
+/// Las seis versiones pre-clasicas que trae el launcher, en orden de fecha.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum GameVersion {
+    Rd131655,
     Rd132211,
     Rd132328,
     Rd20090515,
@@ -88,7 +89,8 @@ enum GameVersion {
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 5] = [
+    const ALL: [GameVersion; 6] = [
+        GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
         GameVersion::Rd20090515,
@@ -99,6 +101,7 @@ impl GameVersion {
     /// The build name, as the original version is called everywhere else.
     fn id(self) -> &'static str {
         match self {
+            GameVersion::Rd131655 => "rd-131655",
             GameVersion::Rd132211 => "rd-132211",
             GameVersion::Rd132328 => "rd-132328",
             GameVersion::Rd20090515 => "rd-20090515",
@@ -111,6 +114,9 @@ impl GameVersion {
     fn exe(self) -> &'static str {
         let win = cfg!(windows);
         match self {
+            GameVersion::Rd131655 => {
+                if win { "rd131655.exe" } else { "rd131655" }
+            }
             GameVersion::Rd132211 => {
                 if win { "rubydung-rs.exe" } else { "rubydung-rs" }
             }
@@ -230,7 +236,7 @@ fn fill(template: &str, key: &str, value: &str) -> String {
 fn texts(l: Lang) -> Texts {
     match l {
         Lang::En => Texts {
-            tagline: "rd-132211 in Rust",
+            tagline: "pre-classic Minecraft in Rust",
             found_title: "ORIGINAL TEXTURES",
             found_src: "found on this computer",
             manual_src: "loaded from the path you chose",
@@ -288,7 +294,7 @@ fn texts(l: Lang) -> Texts {
                    --help            this help",
         },
         Lang::Es => Texts {
-            tagline: "rd-132211 en Rust",
+            tagline: "Minecraft preclásico en Rust",
             found_title: "TEXTURAS ORIGINALES",
             found_src: "encontrada en tu equipo",
             manual_src: "cargada desde la ruta que indicaste",
@@ -346,7 +352,7 @@ fn texts(l: Lang) -> Texts {
                    --help            esta ayuda",
         },
         Lang::Pt => Texts {
-            tagline: "rd-132211 em Rust",
+            tagline: "Minecraft pré-clássico em Rust",
             found_title: "TEXTURAS ORIGINAIS",
             found_src: "encontradas neste computador",
             manual_src: "carregadas do caminho que indicaste",
@@ -404,7 +410,7 @@ fn texts(l: Lang) -> Texts {
                    --help            esta ajuda",
         },
         Lang::Fr => Texts {
-            tagline: "rd-132211 en Rust",
+            tagline: "Minecraft pré-classique en Rust",
             found_title: "TEXTURES D'ORIGINE",
             found_src: "trouvées sur cet ordinateur",
             manual_src: "chargées depuis le chemin indiqué",
@@ -462,7 +468,7 @@ fn texts(l: Lang) -> Texts {
                    --help            cette aide",
         },
         Lang::De => Texts {
-            tagline: "rd-132211 in Rust",
+            tagline: "pre-classic Minecraft in Rust",
             found_title: "ORIGINALTEXTUREN",
             found_src: "auf diesem Computer gefunden",
             manual_src: "aus dem angegebenen Pfad geladen",
@@ -584,9 +590,9 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.1.13).
+/// Novedades de las versiones del launcher (0.1.4 a 0.1.14).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 7] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 8] {
     match l {
         Lang::En => [
             (
@@ -630,6 +636,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "21 Nov 2026",
                 "All five versions open even with a zombie right in front.",
                 "In the versions with zombies, the game closed as soon as one appeared on screen. It's fixed: press Play, find a zombie and watch it stay by your side. All five versions now run from start to finish.",
+            ),
+            (
+                "The lost Minecraft of 2009",
+                "21 Nov 2026",
+                "The first version ever recorded, which was never released, is now in the launcher.",
+                "Before the name Minecraft existed, Notch recorded a tech test called Cave game. It is the origin of everything: a world of grass and rock, huge caves, no inventory and no way to break blocks. Only you, the landscape and R to fall from the sky again. We rebuilt it from the Minecraft Wiki so you can walk through the very first piece of Minecraft history.",
             ),
         ],
         Lang::Es => [
@@ -675,6 +687,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Las cinco versiones se abren aunque tengas un zombi delante.",
                 "En las versiones con zombis, el juego se cerraba en cuanto uno aparecía en pantalla. Ya está arreglado: dale a Jugar, busca un zombi y comprueba que ahora se queda a tu lado. Las cinco versiones funcionan de principio a fin.",
             ),
+            (
+                "El Minecraft perdido de 2009",
+                "21 nov 2026",
+                "La primera versión que se grabó, y que nunca se publicó, ya está en el launcher.",
+                "Antes de que existiera el nombre Minecraft, Notch grabó una prueba llamada Cave game. Es el origen de todo: un mundo de hierba y roca, cuevas enormes, sin inventario y sin poder romper bloques. Solo tú, el paisaje y la R para volver a caer desde el cielo. La hemos reconstruido con la información de Minecraft Wiki para que puedas pisar el primer trocito de la historia de Minecraft.",
+            ),
         ],
         Lang::Pt => [
             (
@@ -718,6 +736,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "21 nov 2026",
                 "As cinco versões abrem mesmo com um zombi à frente.",
                 "Nas versões com zombis, o jogo fechava assim que um aparecia no ecrã. Já está corrigido: carrega em Jogar, encontra um zombi e vê-o ficar ao teu lado. As cinco versões funcionam do início ao fim.",
+            ),
+            (
+                "O Minecraft perdido de 2009",
+                "21 nov 2026",
+                "A primeira versão alguma vez gravada, que nunca foi publicada, já está no launcher.",
+                "Antes de o nome Minecraft existir, a Notch gravou um teste chamado Cave game. É a origem de tudo: um mundo de relva e rocha, cavernas enormes, sem inventário e sem poder quebrar blocos. Só tu, a paisagem e a tecla R para voltares a cair do céu. Reconstruímo-lo com a informação da Minecraft Wiki para que possas pisar o primeiro pedaço da história do Minecraft.",
             ),
         ],
         Lang::Fr => [
@@ -763,6 +787,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Les cinq versions s'ouvrent même avec un zombie devant vous.",
                 "Dans les versions avec des zombies, le jeu se fermait dès qu'un zombie apparaissait à l'écran. C'est corrigé : appuyez sur Jouer, trouvez un zombie et voyez-le rester à vos côtés. Les cinq versions fonctionnent du début à la fin.",
             ),
+            (
+                "Le Minecraft perdu de 2009",
+                "21 nov. 2026",
+                "La toute première version enregistrée, jamais publiée, est enfin dans le launcher.",
+                "Avant même que le nom Minecraft existe, Notch a filmé un test nommé Cave game. C'est l'origine de tout : un monde d'herbe et de roche, d'immenses cavernes, sans inventaire et sans pouvoir casser de blocs. Juste vous, le paysage et la touche R pour retomber du ciel. Nous l'avons reconstruit grâce aux informations du Minecraft Wiki pour que vous puissiez fouler le tout premier morceau de l'histoire de Minecraft.",
+            ),
         ],
         Lang::De => [
             (
@@ -806,6 +836,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "21. Nov. 2026",
                 "Alle fünf Versionen starten, auch mit einem Zombie direkt vor dir.",
                 "In den Versionen mit Zombies schloss sich das Spiel, sobald einer auf dem Bildschirm erschien. Jetzt behoben: Drücke Spielen, suche einen Zombie und sieh zu, wie er an deiner Seite bleibt. Alle fünf Versionen laufen von Anfang bis Ende.",
+            ),
+            (
+                "Das verlorene Minecraft von 2009",
+                "21. Nov. 2026",
+                "Die erste je aufgezeichnete Version, die nie erschien, ist jetzt im Launcher.",
+                "Bevor der Name Minecraft überhaupt existierte, filmte Notch einen Test namens Cave game. Er ist der Ursprung von allem: eine Welt aus Gras und Stein, riesige Höhlen, kein Inventar und keine Möglichkeit, Blöcke abzubauen. Nur du, die Landschaft und die R-Taste, um wieder vom Himmel zu fallen. Wir haben ihn mit den Informationen aus dem Minecraft Wiki nachgebaut, damit du das allererste Stück Minecraft-Geschichte betreten kannst.",
             ),
         ],
     }
@@ -1130,7 +1166,7 @@ fn saved_game() -> Option<GameVersion> {
 
 /// Language and the chosen build share one tiny file, so writing either keeps
 /// both. Older versions also wrote `inst=` lines for texture instances; they are
-/// simply ignored now that the rail lists the five versions themselves.
+/// simply ignored now that the rail lists the six versions themselves.
 fn save_config(l: Lang, game: GameVersion) {
     let Some(p) = config_path() else { return };
     if let Some(dir) = p.parent() {
@@ -1688,7 +1724,7 @@ fn options() -> R<Options> {
             "--status" | "--estado" => opts.status = true,
             "--game" | "--juego" => {
                 i += 1;
-                let id = args.get(i).ok_or("--game needs a build (rd-132211, rd-132328, rd-20090515, rd-160052, rd-161348)")?;
+                let id = args.get(i).ok_or("--game needs a build (rd-131655, rd-132211, rd-132328, rd-20090515, rd-160052, rd-161348)")?;
                 opts.game = GameVersion::from_id(id)
                     .ok_or_else(|| format!("unknown build: {id}"))?;
             }
@@ -1856,6 +1892,13 @@ fn detect_atlas(opts: &Options) -> Detection {
 /// loose terrain.png). The rail uses it for the ready/replacement dot without
 /// decoding the jar every frame; `Window::new` fills the cache once.
 fn version_textures(base: &Path, game: GameVersion) -> bool {
+    // rd-131655 no tuvo jar: sus texturas son las mismas de RubyDung que
+    // trae rd-132211, asi que hereda su deteccion.
+    let game = if game == GameVersion::Rd131655 {
+        GameVersion::Rd132211
+    } else {
+        game
+    };
     if !installed_copies(base, game.id()).is_empty() {
         return true;
     }
@@ -3693,6 +3736,7 @@ mod ui {
                                             "rd-160052 · rd-20090515 · rd-161348",
                                             "rd-160052 · rd-20090515 · rd-161348",
                                             "rd-132328 · rd-20090515 · rd-160052 · rd-161348",
+                                            "rd-131655 · Cave game tech test",
                                         ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             cards.push((
@@ -3708,6 +3752,7 @@ mod ui {
                                                     4 => Art::Ticks,
                                                     5 => Art::Growth,
                                                     6 => Art::Zombies,
+                                                    7 => Art::Cave,
                                                     _ => Art::World,
                                                 },
                                             ));
@@ -3832,6 +3877,8 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
         Ticks,
         /// Grass and bushes updating after a level tick.
         Growth,
+        /// The terraced caves of rd-131655, the Cave game tech test.
+        Cave,
     }
 
     fn news_shot(
@@ -3861,6 +3908,7 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                 Art::First => ("news-first", include_bytes!("../../assets/news_first.rgb")),
                 Art::Ticks => ("news-ticks", include_bytes!("../../assets/news_ticks.rgb")),
                 Art::Growth => ("news-growth", include_bytes!("../../assets/news_growth.rgb")),
+                Art::Cave => ("news-cave", include_bytes!("../../assets/news_cave.rgb")),
                 Art::Launcher => unreachable!(),
             };
             let shot = news_shot(ui.ctx(), name, bytes);

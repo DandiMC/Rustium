@@ -156,6 +156,18 @@ impl Level {
         level
     }
 
+    /// Crea un nivel con los bloques ya generados, sin cargar level.dat.
+    /// Lo usa rd-131655, que no guarda el mundo.
+    pub fn from_blocks(blocks: Vec<u8>) -> Self {
+        debug_assert_eq!(blocks.len(), WIDTH * HEIGHT * DEPTH);
+        let mut level = Level {
+            blocks,
+            light_depths: vec![0; WIDTH * HEIGHT],
+        };
+        level.recalc_light();
+        level
+    }
+
     fn recalc_light(&mut self) {
         for x in 0..WIDTH as i32 {
             for y in 0..HEIGHT as i32 {

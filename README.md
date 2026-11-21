@@ -1,7 +1,7 @@
 # Rustium
 
-Launcher and Rust port of the pre-classic Minecraft builds (rd-132211, rd-132328,
-rd-20090515, rd-160052 and rd-161348), with no Microsoft account and nothing
+Launcher and Rust port of the pre-classic Minecraft builds (rd-131655, rd-132211,
+rd-132328, rd-20090515, rd-160052 and rd-161348), with no Microsoft account and nothing
 downloaded from Mojang: it reads the textures of the copy already on your computer
 and, if there is none, draws its own.
 
@@ -13,9 +13,11 @@ and, if there is none, draws its own.
 
 ![Performance panel comparing Java and Rust](docs/screenshots/launcher-performance.png)
 
+![rd-131655, the Cave game tech test](docs/screenshots/rd-131655.png)
+
 ## To play
 
-You only need **the installer**: `Rustium-0.1.13-setup.exe`.
+You only need **the installer**: `Rustium-0.1.14-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -26,18 +28,19 @@ You only need **the installer**: `Rustium-0.1.13-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the five pre-classic builds:
+The picker above the Play button starts any of the six pre-classic builds:
 
 | build | what it brings |
 |---|---|
+| rd-131655 | the Cave game tech test: terraced grass, rock and huge caves, with no inventory and no block editing |
 | rd-132211 | the RubyDung world: grass, stone and the pulsing highlight on the block you look at |
 | rd-132328 | the first mob, zombies, with their Steve skin |
 | rd-20090515 | particles, more blocks and the block cube in the corner |
 | rd-160052 | the same engine, one earlier build |
 | rd-161348 | the last pre-classic build (its jar is the same as rd-20090515's) |
 
-rd-131655 (the "Cave game tech test") never had a released jar, so there is nothing
-to port from it: the five above are the pre-classic builds Mojang published.
+rd-131655 (the "Cave game tech test") never had a released jar. It is reconstructed
+from the Minecraft Wiki and uses the same RubyDung textures as rd-132211.
 
 ## To build from source
 
@@ -92,7 +95,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.1.13-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.1.14-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 

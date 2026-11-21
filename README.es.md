@@ -1,7 +1,7 @@
 # Rustium
 
-Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-132211,
-rd-132328, rd-20090515, rd-160052 y rd-161348), sin cuenta de Microsoft y sin
+Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-131655,
+rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348), sin cuenta de Microsoft y sin
 descargar nada de Mojang: lee las texturas de la copia que ya tengas en el ordenador
 y, si no hay ninguna, dibuja las suyas.
 
@@ -13,9 +13,11 @@ y, si no hay ninguna, dibuja las suyas.
 
 ![Panel de rendimiento comparando Java y Rust](docs/screenshots/launcher-performance.png)
 
+![rd-131655, el Cave game tech test](docs/screenshots/rd-131655.png)
+
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.1.13-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.1.14-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -26,18 +28,19 @@ Solo hace falta **el instalador**: `Rustium-0.1.13-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las cinco versiones pre-clásicas:
+El selector encima de «Jugar» arranca cualquiera de las seis versiones pre-clásicas:
 
 | versión | qué trae |
 |---|---|
+| rd-131655 | el Cave game tech test: hierba en terrazas, roca y cuevas enormes, sin inventario y sin poder tocar bloques |
 | rd-132211 | el mundo de RubyDung: césped, piedra y el velo que pulsa en el bloque que miras |
 | rd-132328 | el primer móvil, los zombis, con su piel de Steve |
 | rd-20090515 | partículas, más bloques y el cubo del bloque en la esquina |
 | rd-160052 | el mismo motor, un build anterior |
 | rd-161348 | el último build pre-clásico (su jar es el mismo que el de rd-20090515) |
 
-rd-131655 (el «Cave game tech test») nunca tuvo jar publicado, así que no hay nada que
-portar de él: las cinco de arriba son las versiones pre-clásicas que Mojang publicó.
+rd-131655 (el «Cave game tech test») nunca tuvo jar publicado. Está reconstruido
+a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-132211.
 
 ## Para compilar desde el código
 
@@ -92,7 +95,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.1.13-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.1.14-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 
