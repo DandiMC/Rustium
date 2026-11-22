@@ -30,6 +30,11 @@ path = "src/bin/rd20090515.rs"
 name = "rd161348"
 path = "src/bin/rd161348.rs"
 
+# Primera version Classic conservada
+[[bin]]
+name = "classic011a"
+path = "src/bin/classic011a.rs"
+
 [dependencies]
 winit = "0.30"
 wgpu = "25"

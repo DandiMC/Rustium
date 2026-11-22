@@ -26,6 +26,11 @@ impl JavaRandom {
         (self.seed >> (48 - bits)) as u32
     }
 
+    /// java.util.Random.nextFloat(): 24 bits altos entre 0 y 1.
+    pub fn next_float(&mut self) -> f32 {
+        (self.next(24) as f32) / ((1u32 << 24) as f32)
+    }
+
     pub fn next_int(&mut self, bound: i32) -> i32 {
         if bound & -bound == bound {
             (((bound as i64) * (self.next(31) as i64)) >> 31) as i32

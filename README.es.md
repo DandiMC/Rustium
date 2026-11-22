@@ -1,7 +1,8 @@
 # Rustium
 
 Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-131655,
-rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348), sin cuenta de Microsoft y sin
+rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348) y de la primera Classic
+(c0.0.11a), sin cuenta de Microsoft y sin
 descargar nada de Mojang: lee las texturas de la copia que ya tengas en el ordenador
 y, si no hay ninguna, dibuja las suyas.
 
@@ -30,7 +31,8 @@ Solo hace falta **el instalador**: `Rustium-0.1.15-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las seis versiones pre-clásicas:
+El selector encima de «Jugar» arranca cualquiera de las siete versiones (las seis
+pre-clásicas y la primera Classic):
 
 | versión | qué trae |
 |---|---|
@@ -40,6 +42,7 @@ El selector encima de «Jugar» arranca cualquiera de las seis versiones pre-cl�
 | rd-20090515 | partículas, más bloques y el cubo del bloque en la esquina |
 | rd-160052 | el mismo motor, un build anterior |
 | rd-161348 | el último build pre-clásico (su jar es el mismo que el de rd-20090515) |
+| c0.0.11a | la primera Classic: terreno con cuevas de `NoiseMap`, HUD con fps y chunk updates, y el modo pintar que cambia con el botón derecho |
 
 rd-131655 (el «Cave game tech test») nunca tuvo jar publicado. Está reconstruido
 a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-132211.
@@ -49,7 +52,7 @@ a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-13221
 Cada versión guarda su mundo en `%APPDATA%\Rustium\worlds\<versión>\level.dat`,
 así que una partida de rd-132211 nunca se abre con los bloques de otra familia.
 La pestaña **Mundos** del launcher enseña cuánto ocupa cada uno y cuándo lo
-jugaste, abre su carpeta y lo borra con confirmación. Justo debajo están las seis
+jugaste, abre su carpeta y lo borra con confirmación. Justo debajo están las siete
 instalaciones con su carpeta.
 
 ## Para compilar desde el código

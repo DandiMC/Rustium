@@ -61,8 +61,25 @@ fn bloque_para_tecla(version: &str, tecla: &str) -> Option<u8> {
 }
 
 pub fn correr(version: &'static str) {
+    correr_modo(version, Modo::Legacy);
+}
+
+/// c0.0.11a, la primera Classic: mismo motor, pero el mundo sale de LevelGen
+/// con NoiseMap, y los clics funcionan como alli (el izquierdo rompe o pinta
+/// segun el modo que cambia el derecho).
+pub fn correr_clasico(version: &'static str) {
+    correr_modo(version, Modo::Clasico);
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Modo {
+    Legacy,
+    Clasico,
+}
+
+fn correr_modo(version: &'static str, modo: Modo) {
     let event_loop = EventLoop::new().unwrap();
-    let mut app = App::new(version);
+    let mut app = App::new(version, modo);
     event_loop.run_app(&mut app).unwrap();
 }
 
@@ -274,6 +291,12 @@ impl Jugador {
 
 struct App {
     version: &'static str,
+    modo: Modo,
+    // Classic: 0 rompe (y el velo es liso), 1 pinta el bloque elegido. Lo
+    // cambia el boton derecho, como Minecraft.editMode.
+    edit_mode: u8,
+    // Classic cuenta los chunk updates que enseña en el HUD (Chunk.updates).
+    chunk_updates: u32,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     nivel: Nivel,
@@ -294,7 +317,7 @@ struct App {
 }
 
 impl App {
-    fn new(version: &'static str) -> Self {
+    fn new(version: &'static str, modo: Modo) -> Self {
         // El original crea sus Random con la hora: el mundo cambia en cada
         // arranque. RD_SEEDS fija los cuatro filtros para el careo y
         // RD_SEED_FIJO conserva la semilla historica del port.
@@ -308,7 +331,10 @@ impl App {
                 .map(|d| d.as_nanos() as i64)
                 .unwrap_or(SPAWN_SEED)
         };
-        let mut nivel = Nivel::new(seed);
+        let mut nivel = match modo {
+            Modo::Clasico => Nivel::new_clasico(seed),
+            Modo::Legacy => Nivel::new(seed),
+        };
         // El test necesita una cara de la capa de niebla: un techo sobre la
         // camara deja su columna a oscuras, como una casa del jugador.
         if std::env::var_os("RD_SMOKE").is_some() {
@@ -333,6 +359,9 @@ impl App {
         }
         App {
             version,
+            modo,
+            edit_mode: 0,
+            chunk_updates: 0,
             window: None,
             renderer: None,
             nivel,
@@ -364,6 +393,10 @@ impl App {
                 capa1.push(mesh::construir(&self.nivel, cx, cy, 1));
             }
         }
+        if self.modo == Modo::Clasico {
+            // Chunk.rebuild actualiza las dos capas y suma dos updates.
+            self.chunk_updates += (2 * nx * ny) as u32;
+        }
         if let Some(r) = &mut self.renderer {
             r.subir_chunks(capa0, capa1);
         }
@@ -390,6 +423,7 @@ impl App {
         let (cx0, cx1, cy0, cy1) = chunks_tocados(x0, y0, x1, y1);
         let nivel = &self.nivel;
         let Some(r) = &mut self.renderer else { return };
+        let mut n = 0u32;
         for cy in cy0..=cy1 {
             for cx in cx0..=cx1 {
                 let k = cy * nx + cx;
@@ -398,8 +432,34 @@ impl App {
                     mesh::construir(nivel, cx, cy, 0),
                     mesh::construir(nivel, cx, cy, 1),
                 );
+                n += 2;
             }
         }
+        if self.modo == Modo::Clasico {
+            self.chunk_updates += n;
+        }
+    }
+
+    // Minecraft.isFree: no se pinta encima de un bloque que ocupe el jugador o
+    // un zombi. La caja del bloque nuevo es la unidad entera.
+    fn casilla_libre(&self, x: i32, y: i32, z: i32) -> bool {
+        let caja = BlockBox {
+            x0: x as f32,
+            y0: y as f32,
+            z0: z as f32,
+            x1: x as f32 + 1.0,
+            y1: y as f32 + 1.0,
+            z1: z as f32 + 1.0,
+        };
+        let toca = |b: &BlockBox| {
+            b.x1 > caja.x0 && b.x0 < caja.x1
+                && b.y1 > caja.y0 && b.y0 < caja.y1
+                && b.z1 > caja.z0 && b.z0 < caja.z1
+        };
+        if toca(&self.jugador.bb) {
+            return false;
+        }
+        !self.zombis.iter().any(|z| toca(&z.e.bb))
     }
 
     fn raycast(&self, camara: [f32; 3]) -> Option<((i32, i32, i32), (i32, i32, i32))> {
@@ -606,7 +666,36 @@ impl ApplicationHandler for App {
                         // clic tambien rompe o coloca.
                     }
                     let a = (self.tick_acc * TPS).clamp(0.0, 1.0);
-                    if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
+                    if self.modo == Modo::Clasico {
+                        // Minecraft.handleMouseClick: el izquierdo rompe o
+                        // pinta segun editMode y el derecho alterna el modo.
+                        match button {
+                            MouseButton::Right => {
+                                self.edit_mode = (self.edit_mode + 1) % 2;
+                            }
+                            MouseButton::Left => {
+                                if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
+                                    if self.edit_mode == 0 {
+                                        let id = self.nivel.get(bx, by, bz);
+                                        if self.nivel.set(bx, by, bz, tiles::AIRE) {
+                                            particula::destruir(
+                                                tiles::textura_particula(id),
+                                                bx, by, bz,
+                                                &mut self.particulas,
+                                            );
+                                        }
+                                    } else {
+                                        let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
+                                        if self.casilla_libre(nx, ny, nz) {
+                                            self.nivel.set(nx, ny, nz, self.pintura);
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        self.reconstruir_cambios();
+                    } else if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
                         match button {
                             // Boton derecho: romper + las 64 particulas del tile
                             MouseButton::Right => {
@@ -699,6 +788,15 @@ impl ApplicationHandler for App {
             self.fps = (self.fps_frames as f64 * 1000.0 / self.fps_t.elapsed().as_millis() as f64).round() as u32;
             self.fps_frames = 0;
             self.fps_t = Instant::now();
+            if self.modo == Modo::Clasico {
+                // Minecraft.run: "N fps, N chunk updates" y se pone a cero el
+                // contador cada segundo. La version va encima, en (2,2).
+                let stats = format!("{} fps, {} chunk updates", self.fps, self.chunk_updates);
+                if let Some(r) = &mut self.renderer {
+                    r.hud_lineas = vec![(self.version.to_string(), 2.0, 2.0), (stats, 2.0, 12.0)];
+                }
+                self.chunk_updates = 0;
+            }
             if std::env::var("RD_LOG_POS").is_ok() {
                 println!("POS {:.3} fondo={:.3} alto={:.3} yaw={:.3} pitch={:.3}",
                     self.jugador.x, self.jugador.y, self.jugador.z,
@@ -767,6 +865,14 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Classic renderHit: en modo pintar el velo va en la casilla donde
+        // caeria el bloque, no en la apuntada.
+        let mut hit = self.hit;
+        if self.modo == Modo::Clasico && self.edit_mode == 1 {
+            if let Some(((x, y, z), n)) = hit {
+                hit = Some(((x + n.0, y + n.1, z + n.2), n));
+            }
+        }
         let fps = if self.show_fps { Some(self.fps) } else { None };
         let yaw = self.jugador.y_rot.to_radians();
         let pitch = self.jugador.x_rot.to_radians();
@@ -774,7 +880,7 @@ impl ApplicationHandler for App {
             r.set_particulas(&pv, &pv_fondo);
             // El original siempre enseña el bloque elegido en la esquina
             r.hud_bloque = Some(self.pintura);
-            r.render(eye, yaw, pitch, self.hit, fps, &mv, &mv_fondo);
+            r.render(eye, yaw, pitch, hit, fps, &mv, &mv_fondo);
             w.request_redraw();
             if smoke {
                 self.smoke_frames += 1;

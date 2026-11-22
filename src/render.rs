@@ -180,6 +180,28 @@ fn hit_face_vertices((bx, by, bz): (i32, i32, i32), n: (i32, i32, i32)) -> [Vert
 
 // Overlay de texto (F3). Los vertices llegan ya en coordenadas de recorte, asi que
 // el vertex shader no transforma nada y el fragment shader solo devuelve el color.
+// Texto del HUD con la fuente del jar: muestrea default.gif y tinta con el
+// color uniforme, como Tesselator con GL_MODULATE y el glColor de Font.
+pub const TEXT_SHADER: &str = r#"
+struct TU { color: vec4<f32>, };
+@group(0) @binding(0) var<uniform> u: TU;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct VOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) shade: f32 };
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) uv: vec2<f32>, @location(2) s: f32) -> VOut {
+    var o: VOut;
+    o.clip = vec4<f32>(p, 1.0);
+    o.uv = uv;
+    o.shade = s;
+    return o;
+}
+@fragment fn fs(v: VOut) -> @location(0) vec4<f32> {
+    let c = textureSample(tex, samp, v.uv);
+    if (c.a < 0.5) { discard; }
+    return vec4<f32>(u.color.rgb * v.shade * c.rgb, u.color.a * c.a);
+}
+"#;
+
 pub const UI_SHADER: &str = r#"
 struct UiU { color: vec4<f32>, };
 @group(0) @binding(0) var<uniform> u: UiU;
@@ -190,7 +212,7 @@ struct UiU { color: vec4<f32>, };
 "#;
 
 // Vertices reservados para el overlay (cada pixel del glifo son 6 vertices).
-const UI_MAX_VERTS: usize = 6144;
+const UI_MAX_VERTS: usize = 32768;
 
 // Fuente 5x7 minima: solo lo que necesita el contador.
 const FONT_CHARS: &[(char, [u8; 7])] = &[
@@ -204,6 +226,37 @@ const FONT_CHARS: &[(char, [u8; 7])] = &[
     ('7', [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000]),
     ('8', [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]),
     ('9', [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100]),
+    ('.', [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00110, 0b00110]),
+    (',', [0b00000, 0b00000, 0b00000, 0b00000, 0b00110, 0b00110, 0b00100]),
+    (':', [0b00000, 0b00110, 0b00110, 0b00000, 0b00110, 0b00110, 0b00000]),
+    ('-', [0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000]),
+    ('/', [0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000]),
+    ('a', [0b00000, 0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111]),
+    ('b', [0b10000, 0b10000, 0b10110, 0b11001, 0b10001, 0b10001, 0b11110]),
+    ('c', [0b00000, 0b00000, 0b01110, 0b10001, 0b10000, 0b10001, 0b01110]),
+    ('d', [0b00001, 0b00001, 0b01101, 0b10011, 0b10001, 0b10001, 0b01111]),
+    ('e', [0b00000, 0b00000, 0b01110, 0b10001, 0b11111, 0b10000, 0b01110]),
+    ('f', [0b00110, 0b01001, 0b01000, 0b11100, 0b01000, 0b01000, 0b01000]),
+    ('g', [0b00000, 0b01111, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110]),
+    ('h', [0b10000, 0b10000, 0b10110, 0b11001, 0b10001, 0b10001, 0b10001]),
+    ('i', [0b00100, 0b00000, 0b01100, 0b00100, 0b00100, 0b00100, 0b01110]),
+    ('j', [0b00010, 0b00000, 0b00110, 0b00010, 0b00010, 0b10010, 0b01100]),
+    ('k', [0b10000, 0b10000, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010]),
+    ('l', [0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]),
+    ('m', [0b00000, 0b00000, 0b11010, 0b10101, 0b10101, 0b10001, 0b10001]),
+    ('n', [0b00000, 0b00000, 0b10110, 0b11001, 0b10001, 0b10001, 0b10001]),
+    ('o', [0b00000, 0b00000, 0b01110, 0b10001, 0b10001, 0b10001, 0b01110]),
+    ('p', [0b00000, 0b00000, 0b11110, 0b10001, 0b11110, 0b10000, 0b10000]),
+    ('q', [0b00000, 0b00000, 0b01101, 0b10011, 0b01111, 0b00001, 0b00001]),
+    ('r', [0b00000, 0b00000, 0b10110, 0b11001, 0b10000, 0b10000, 0b10000]),
+    ('s', [0b00000, 0b00000, 0b01111, 0b10000, 0b01110, 0b00001, 0b11110]),
+    ('t', [0b01000, 0b01000, 0b11100, 0b01000, 0b01000, 0b01001, 0b00110]),
+    ('u', [0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b10011, 0b01101]),
+    ('v', [0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]),
+    ('w', [0b00000, 0b00000, 0b10001, 0b10001, 0b10101, 0b10101, 0b01010]),
+    ('x', [0b00000, 0b00000, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001]),
+    ('y', [0b00000, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110]),
+    ('z', [0b00000, 0b00000, 0b11111, 0b00010, 0b00100, 0b01000, 0b11111]),
     ('F', [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000]),
     ('P', [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000]),
     ('S', [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]),
@@ -235,6 +288,104 @@ fn ui_text_quads(text: &str, width: u32, height: u32) -> Vec<f32> {
             }
         }
         cx += 6.0 * p;
+    }
+    out
+}
+
+// Texto con la fuente real del jar (default.gif) para el HUD de Classic.
+// Font.java pinta el glifo entero de 8x8 y avanza por charWidths, con una copia
+// oscura desplazada 1 px (drawShadow). Aqui los vertices llevan la UV del glifo
+// y el brillo: 1.0 el texto y 0.247 la sombra ((0xFFFFFF & 0xFCFCFC) >> 2).
+const FUENTE_SOMBRA: f32 = 0.247;
+
+fn fuente_anchos(rgba: &[u8], w: usize, h: usize) -> [u8; 128] {
+    let mut anchos = [0u8; 128];
+    for i in 0..128usize {
+        let xt = i % 16;
+        let yt = i / 16;
+        let mut x = 0;
+        let mut columna_vacia = false;
+        while x < 8 && !columna_vacia {
+            columna_vacia = true;
+            let mut y = 0;
+            while y < 8 {
+                let px = xt * 8 + x;
+                let py = yt * 8 + y;
+                if px < w && py < h && rgba[(py * w + px) * 4 + 2] > 128 {
+                    columna_vacia = false;
+                }
+                y += 1;
+            }
+            x += 1;
+        }
+        if i == 32 {
+            x = 4;
+        }
+        anchos[i] = x as u8;
+    }
+    anchos
+}
+
+fn fuente_quads(
+    texto: &str,
+    x_gui: f32,
+    y_gui: f32,
+    ancho: u32,
+    alto: u32,
+    fw: f32,
+    fh: f32,
+    anchos: &[u8; 128],
+    sombra: bool,
+    out: &mut Vec<Vertex>,
+) {
+    let sh = 240.0f32;
+    let sw = ancho as f32 * sh / alto.max(1) as f32;
+    let mut cx = x_gui + if sombra { 1.0 } else { 0.0 };
+    let cy = y_gui + if sombra { 1.0 } else { 0.0 };
+    let shade = if sombra { FUENTE_SOMBRA } else { 1.0 };
+    for ch in texto.chars() {
+        let c = ch as usize;
+        if c < 128 {
+            let (u0, v0) = ((c % 16) as f32 * 8.0 / fw, (c / 16) as f32 * 8.0 / fh);
+            let (u1, v1) = (u0 + 8.0 / fw, v0 + 8.0 / fh);
+            let (x0, x1) = (cx, cx + 8.0);
+            let (y0, y1) = (cy, cy + 8.0);
+            let p = |px: f32, py: f32| [2.0 * px / sw - 1.0, 1.0 - 2.0 * py / sh, 0.5];
+            let (a, b, d, e) = (p(x0, y0), p(x1, y0), p(x1, y1), p(x0, y1));
+            let v = |pos: [f32; 3], uv: [f32; 2]| Vertex { pos, uv, shade };
+            out.extend_from_slice(&[
+                v(a, [u0, v0]), v(b, [u1, v0]), v(d, [u1, v1]),
+                v(a, [u0, v0]), v(d, [u1, v1]), v(e, [u0, v1]),
+            ]);
+        }
+        cx += anchos[c.min(127)] as f32;
+    }
+}
+
+// Texto del HUD en coordenadas de la GUI del original (alto 240). Cada pixel
+// de la fuente es una unidad de GUI, asi que a 854x480 la letra mide 8 px y a
+// 1024x768 unos 25, como el default.gif del jar.
+fn ui_text_gui(text: &str, width: u32, height: u32, x_gui: f32, y_gui: f32) -> Vec<f32> {
+    let sh = 240.0f32;
+    let sw = width as f32 * sh / height.max(1) as f32;
+    let mut out: Vec<f32> = Vec::new();
+    let mut cx = x_gui;
+    for ch in text.chars() {
+        if let Some((_, rows)) = FONT_CHARS.iter().find(|(c, _)| *c == ch) {
+            for (r, bits) in rows.iter().enumerate() {
+                for c in 0..5u32 {
+                    if *bits & (1u8 << (4 - c)) != 0 {
+                        let x0 = 2.0 * (cx + c as f32) / sw - 1.0;
+                        let x1 = 2.0 * (cx + c as f32 + 1.0) / sw - 1.0;
+                        let y0 = 1.0 - 2.0 * (y_gui + r as f32) / sh;
+                        let y1 = 1.0 - 2.0 * (y_gui + r as f32 + 1.0) / sh;
+                        out.extend_from_slice(&[x0, y0, 0.0, x1, y0, 0.0, x1, y1, 0.0]);
+                        out.extend_from_slice(&[x0, y0, 0.0, x1, y1, 0.0, x0, y1, 0.0]);
+                    }
+                }
+            }
+        }
+        cx += 6.0;
     }
     out
 }
@@ -411,6 +562,14 @@ pub struct Renderer {
     pub hit_uniform: wgpu::Buffer,
     pub hit_bind_group: wgpu::BindGroup,
     pub ui_pipeline: wgpu::RenderPipeline,
+    // HUD de Classic con la fuente default.gif del jar.
+    pub hud_fuente: Option<([u8; 128], f32, f32)>,
+    pub text_pipeline: wgpu::RenderPipeline,
+    pub text_uniform: wgpu::Buffer,
+    pub text_bind_group: wgpu::BindGroup,
+    pub text_vbuf: wgpu::Buffer,
+    pub text_font_bg: Option<wgpu::BindGroup>,
+    pub text_verts: usize,
     pub ui_uniform: wgpu::Buffer,
     pub ui_bind_group: wgpu::BindGroup,
     pub ui_vbuf: wgpu::Buffer,
@@ -438,6 +597,9 @@ pub struct Renderer {
     pub hit_alpha_escala: f32,
     // Cruz de mira (la dibuja el juego que la quiera, como el original)
     pub mostrar_cruz: bool,
+    /// Classic: lineas del HUD en coordenadas de la GUI (alto 240), como
+    /// Minecraft.drawGui (version arriba y "N fps, N chunk updates").
+    pub hud_lineas: Vec<(String, f32, f32)>,
     // Cubo del bloque elegido en la esquina (RubyDung.drawGui)
     pub hud_bloque: Option<u8>,
     pub hud_uniform: wgpu::Buffer,
@@ -1037,6 +1199,118 @@ impl Renderer {
             layout: &ui_bgl,
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: ui_uniform.as_entire_binding() }],
         });
+        // Pipeline del HUD de Classic: glifos texturados de default.gif, con
+        // mezcla alfa normal y sin tocar la profundidad (van siempre encima).
+        let text_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("text shader"),
+            source: wgpu::ShaderSource::Wgsl(TEXT_SHADER.into()),
+        });
+        let text_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("text uniform"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let text_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("text bg"),
+            layout: &ui_bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: text_uniform.as_entire_binding() }],
+        });
+        let text_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("text vbuf"),
+            size: (20000 * std::mem::size_of::<Vertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let text_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("text pipeline"),
+            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("text pl"),
+                bind_group_layouts: &[&ui_bgl, &hit_tex_bgl],
+                push_constant_ranges: &[],
+            })),
+            vertex: wgpu::VertexState {
+                module: &text_shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Vertex::layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &text_shader,
+                entry_point: Some("fs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        // La fuente sale del jar de la version que se esta jugando.
+        let fuente = cargar_gif_del_jar(&version_atlas, "/default.gif")
+            .or_else(|| cargar_gif_del_jar(&version_atlas, "default.gif"));
+        let hud_fuente = fuente.as_ref().map(|g| {
+            (fuente_anchos(&g.rgba, g.width, g.height), g.width as f32, g.height as f32)
+        });
+        let text_font_bg = fuente.as_ref().map(|g| {
+            let tex = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("font"),
+                size: wgpu::Extent3d {
+                    width: g.width as u32,
+                    height: g.height as u32,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &tex,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &g.rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(g.width as u32 * 4),
+                    rows_per_image: Some(g.height as u32),
+                },
+                wgpu::Extent3d {
+                    width: g.width as u32,
+                    height: g.height as u32,
+                    depth_or_array_layers: 1,
+                },
+            );
+            let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("font bg"),
+                layout: &hit_tex_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
+                ],
+            })
+        });
         let ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("ui pipeline"),
             layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -1139,6 +1413,13 @@ impl Renderer {
             hit_uniform,
             hit_bind_group,
             ui_pipeline,
+            hud_fuente,
+            text_pipeline,
+            text_uniform,
+            text_bind_group,
+            text_vbuf,
+            text_font_bg,
+            text_verts: 0,
             ui_uniform,
             ui_bind_group,
             ui_vbuf,
@@ -1150,6 +1431,7 @@ impl Renderer {
             fog_densidad: 0.2,
             hit_alpha_escala: 1.0,
             mostrar_cruz: false,
+            hud_lineas: Vec::new(),
             hud_bloque: None,
             hud_uniform,
             hud_bg,
@@ -1374,6 +1656,40 @@ impl Renderer {
         if self.mostrar_cruz {
             ui_verts.extend(cruz_quads(self.config.width, self.config.height));
         }
+        // HUD de Classic: con la fuente del jar, sombra incluida. Si el jar no
+        // tiene default.gif se cae a la fuente 5x7 del contador.
+        self.text_verts = 0;
+        if !self.hud_lineas.is_empty() {
+            let mut con_fuente = false;
+            if let (Some((anchos, fw, fh)), true) = (&self.hud_fuente, self.text_font_bg.is_some()) {
+                let (w, h) = (self.config.width, self.config.height);
+                let mut tv: Vec<Vertex> = Vec::new();
+                for sombra in [true, false] {
+                    for (texto, x, y) in &self.hud_lineas {
+                        fuente_quads(texto, *x, *y, w, h, *fw, *fh, anchos, sombra, &mut tv);
+                    }
+                }
+                if tv.len() <= 20000 {
+                    self.queue.write_buffer(&self.text_vbuf, 0, unsafe {
+                        std::slice::from_raw_parts(
+                            tv.as_ptr() as *const u8,
+                            tv.len() * std::mem::size_of::<Vertex>(),
+                        )
+                    });
+                    let blanco = [1.0f32, 1.0, 1.0, 1.0];
+                    self.queue.write_buffer(&self.text_uniform, 0, unsafe {
+                        std::slice::from_raw_parts(blanco.as_ptr() as *const u8, 16)
+                    });
+                    self.text_verts = tv.len();
+                    con_fuente = true;
+                }
+            }
+            if !con_fuente {
+                for (texto, x, y) in &self.hud_lineas {
+                    ui_verts.extend(ui_text_gui(texto, self.config.width, self.config.height, *x, *y));
+                }
+            }
+        }
         if !ui_verts.is_empty() {
             let n = (ui_verts.len() / 3) as u32;
             if (n as usize) <= UI_MAX_VERTS {
@@ -1577,7 +1893,7 @@ impl Renderer {
         }
         // El original limpia el z-buffer antes de la GUI (drawGui), asi que el
         // cubo va en su propio pase con la profundidad limpia y el color encima.
-        if hud_count > 0 {
+        if hud_count > 0 || self.text_verts > 0 {
             let ident = [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -1618,10 +1934,21 @@ impl Renderer {
                 }),
                 ..Default::default()
             });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.hud_bg, &[]);
-            pass.set_vertex_buffer(0, self.hud_vbuf.slice(..));
-            pass.draw(0..hud_count, 0..1);
+            if hud_count > 0 {
+                pass.set_pipeline(&self.pipeline);
+                pass.set_bind_group(0, &self.hud_bg, &[]);
+                pass.set_vertex_buffer(0, self.hud_vbuf.slice(..));
+                pass.draw(0..hud_count, 0..1);
+            }
+            if self.text_verts > 0 {
+                if let Some(bg) = &self.text_font_bg {
+                    pass.set_pipeline(&self.text_pipeline);
+                    pass.set_bind_group(0, &self.text_bind_group, &[]);
+                    pass.set_bind_group(1, bg, &[]);
+                    pass.set_vertex_buffer(0, self.text_vbuf.slice(..));
+                    pass.draw(0..self.text_verts as u32, 0..1);
+                }
+            }
         }
         self.queue.submit(Some(encoder.finish()));
         frame.present();
@@ -1791,6 +2118,203 @@ pub fn cargar_atlas_de_ruta(ruta: &str) -> Option<(u32, u32, Vec<u8>)> {
 
 // Saca un PNG de un jar de una version concreta (instalacion local del usuario)
 // y lo devuelve como RGBA de 8 bits. Sirve para terrain.png y para char.png.
+// ------------------------------------------------------- GIF (default.gif)
+// El HUD de Classic usa la fuente default.gif del jar. Para no meter una
+// dependencia solo por esto, aqui va un decodificador GIF minimo (paleta, LZW,
+// transparencia y entrelazado) que basta para ese fichero.
+
+pub struct Gif {
+    pub width: usize,
+    pub height: usize,
+    pub rgba: Vec<u8>,
+}
+
+fn gif_lzw(data: &[u8], min_code: u8) -> Vec<u8> {
+    let clear = 1u16 << min_code;
+    let eoi = clear + 1;
+    let mut dict: Vec<Vec<u8>> = Vec::new();
+    let reset = |dict: &mut Vec<Vec<u8>>| {
+        dict.clear();
+        for i in 0..clear {
+            dict.push(vec![i as u8]);
+        }
+        dict.push(Vec::new());
+        dict.push(Vec::new());
+    };
+    reset(&mut dict);
+    let mut size = min_code + 1;
+    let mut out = Vec::new();
+    let mut bit = 0usize;
+    let mut prev: Option<Vec<u8>> = None;
+    while bit + size as usize <= data.len() * 8 {
+        let mut code = 0u16;
+        for i in 0..size as usize {
+            let b = (data[(bit + i) / 8] >> ((bit + i) % 8)) & 1;
+            code |= (b as u16) << i;
+        }
+        bit += size as usize;
+        if code == clear {
+            reset(&mut dict);
+            size = min_code + 1;
+            prev = None;
+            continue;
+        }
+        if code == eoi {
+            break;
+        }
+        let entry: Vec<u8> = if (code as usize) < dict.len() {
+            dict[code as usize].clone()
+        } else if let Some(p) = &prev {
+            let mut e = p.clone();
+            e.push(p[0]);
+            e
+        } else {
+            break;
+        };
+        out.extend_from_slice(&entry);
+        if let Some(p) = prev {
+            let mut e = p.clone();
+            e.push(entry[0]);
+            dict.push(e);
+            if dict.len() == (1usize << size) && size < 12 {
+                size += 1;
+            }
+        }
+        prev = Some(entry);
+    }
+    out
+}
+
+fn le16(d: &[u8], p: usize) -> Option<usize> {
+    Some(u16::from_le_bytes([*d.get(p)?, *d.get(p + 1)?]) as usize)
+}
+
+pub fn decode_gif(data: &[u8]) -> Option<Gif> {
+    if data.len() < 13 || &data[0..3] != b"GIF" {
+        return None;
+    }
+    let w = le16(data, 6)?;
+    let h = le16(data, 8)?;
+    let packed = data[10];
+    let mut p = 13;
+    let mut palette = vec![[0u8; 3]; 256];
+    if packed & 0x80 != 0 {
+        let n = 1usize << ((packed & 7) + 1);
+        for slot in palette.iter_mut().take(n) {
+            if p + 3 > data.len() {
+                return None;
+            }
+            *slot = [data[p], data[p + 1], data[p + 2]];
+            p += 3;
+        }
+    }
+    let mut transparent: Option<u8> = None;
+    loop {
+        let b = *data.get(p)?;
+        p += 1;
+        match b {
+            0x21 => {
+                let label = *data.get(p)?;
+                p += 1;
+                if label == 0xF9 {
+                    let size = *data.get(p)? as usize;
+                    p += 1;
+                    if size >= 4 {
+                        let flags = data[p];
+                        transparent = if flags & 1 != 0 { Some(data[p + 3]) } else { None };
+                    }
+                    p += size;
+                }
+                loop {
+                    let s = *data.get(p)? as usize;
+                    p += 1;
+                    if s == 0 {
+                        break;
+                    }
+                    p += s;
+                }
+            }
+            0x2C => {
+                let left = le16(data, p)?;
+                let top = le16(data, p + 2)?;
+                let iw = le16(data, p + 4)?;
+                let ih = le16(data, p + 6)?;
+                let flags = data[p + 8];
+                p += 9;
+                if flags & 0x80 != 0 {
+                    let n = 1usize << ((flags & 7) + 1);
+                    for slot in palette.iter_mut().take(n) {
+                        if p + 3 > data.len() {
+                            return None;
+                        }
+                        *slot = [data[p], data[p + 1], data[p + 2]];
+                        p += 3;
+                    }
+                }
+                let interlace = flags & 0x40 != 0;
+                let min_code = *data.get(p)?;
+                p += 1;
+                let mut lzw = Vec::new();
+                loop {
+                    let s = *data.get(p)? as usize;
+                    p += 1;
+                    if s == 0 {
+                        break;
+                    }
+                    lzw.extend_from_slice(data.get(p..p + s)?);
+                    p += s;
+                }
+                let idx = gif_lzw(&lzw, min_code);
+                let mut rgba = vec![0u8; w * h * 4];
+                // Orden de filas del GIF entrelazado (passes 0..3).
+                let mut filas: Vec<usize> = if interlace {
+                    let mut f = Vec::with_capacity(ih);
+                    for (inicio, paso) in [(0, 8), (4, 8), (2, 4), (1, 2)] {
+                        let mut y = inicio;
+                        while y < ih {
+                            f.push(y);
+                            y += paso;
+                        }
+                    }
+                    f
+                } else {
+                    (0..ih).collect()
+                };
+                for y in 0..ih {
+                    let fy = filas.get(y).copied().unwrap_or(y);
+                    for x in 0..iw {
+                        let ci = idx.get(y * iw + x).copied().unwrap_or(0) as usize;
+                        let (cx, cy) = (left + x, top + fy);
+                        if cx >= w || cy >= h {
+                            continue;
+                        }
+                        let c = palette[ci.min(255)];
+                        let o = (cy * w + cx) * 4;
+                        rgba[o] = c[0];
+                        rgba[o + 1] = c[1];
+                        rgba[o + 2] = c[2];
+                        rgba[o + 3] = if transparent == Some(ci as u8) { 0 } else { 255 };
+                    }
+                }
+                return Some(Gif { width: w, height: h, rgba });
+            }
+            0x3B => return None,
+            _ => return None,
+        }
+    }
+}
+
+pub fn cargar_gif_del_jar(version: &str, nombre: &str) -> Option<Gif> {
+    let appdata = std::env::var("APPDATA").ok()?;
+    let jar = format!("{}/.minecraft/versions/{v}/{v}.jar", appdata, v = version);
+    let data = std::fs::read(&jar).ok()?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data)).ok()?;
+    let mut entry = archive.by_name(nombre).ok()?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut bytes).ok()?;
+    decode_gif(&bytes)
+}
+
 pub fn cargar_png_del_jar(version: &str, nombre: &str) -> Option<(u32, u32, Vec<u8>)> {
     let appdata = std::env::var("APPDATA").ok()?;
     let jar = format!("{}/.minecraft/versions/{v}/{v}.jar", appdata, v = version);

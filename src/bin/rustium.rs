@@ -78,7 +78,8 @@ const BENCH_SPAWN: f32 = 0.5;
 
 type R<T> = Result<T, String>;
 
-/// Las seis versiones pre-clasicas que trae el launcher, en orden de fecha.
+/// Las versiones que trae el launcher, en orden de fecha: las pre-clasicas y
+/// la primera Classic conservada.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum GameVersion {
     Rd131655,
@@ -87,16 +88,18 @@ enum GameVersion {
     Rd20090515,
     Rd160052,
     Rd161348,
+    C0011a,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 6] = [
+    const ALL: [GameVersion; 7] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
         GameVersion::Rd20090515,
         GameVersion::Rd160052,
         GameVersion::Rd161348,
+        GameVersion::C0011a,
     ];
 
     /// The build name, as the original version is called everywhere else.
@@ -108,6 +111,7 @@ impl GameVersion {
             GameVersion::Rd20090515 => "rd-20090515",
             GameVersion::Rd160052 => "rd-160052",
             GameVersion::Rd161348 => "rd-161348",
+            GameVersion::C0011a => "c0.0.11a",
         }
     }
 
@@ -132,6 +136,9 @@ impl GameVersion {
             }
             GameVersion::Rd161348 => {
                 if win { "rd161348.exe" } else { "rd161348" }
+            }
+            GameVersion::C0011a => {
+                if win { "classic011a.exe" } else { "classic011a" }
             }
         }
     }
@@ -978,7 +985,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             worlds_intro: "Each build keeps its own world, so they never mix. Open its folder, play it or delete it from here.",
             world_none: "No world saved yet",
             instances_title: "INSTALLS",
-            instances_intro: "The six builds the launcher can start, with the folder each one lives in.",
+            instances_intro: "The seven builds the launcher can start, with the folder each one lives in.",
             instance_missing: "Not installed",
             delete: "Delete",
             delete_sure: "Sure?",
@@ -1030,7 +1037,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             worlds_intro: "Cada versión guarda su propio mundo, así nunca se mezclan. Desde aquí puedes abrir su carpeta, jugarlo o borrarlo.",
             world_none: "Todavía no hay mundo guardado",
             instances_title: "INSTALACIONES",
-            instances_intro: "Las seis versiones que puede arrancar el launcher, con la carpeta de cada una.",
+            instances_intro: "Las siete versiones que puede arrancar el launcher, con la carpeta de cada una.",
             instance_missing: "No instalada",
             delete: "Borrar",
             delete_sure: "¿Seguro?",
@@ -1082,7 +1089,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             worlds_intro: "Cada versão guarda o seu próprio mundo, por isso nunca se misturam. Aqui podes abrir a pasta, jogar ou apagar.",
             world_none: "Ainda não há mundo guardado",
             instances_title: "INSTALAÇÕES",
-            instances_intro: "As seis versões que o launcher pode iniciar, com a pasta de cada uma.",
+            instances_intro: "As sete versões que o launcher pode iniciar, com a pasta de cada uma.",
             instance_missing: "Não instalada",
             delete: "Apagar",
             delete_sure: "De certeza?",
@@ -1134,7 +1141,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             worlds_intro: "Chaque version garde son propre monde, ils ne se mélangent donc jamais. D'ici, tu peux ouvrir son dossier, jouer ou le supprimer.",
             world_none: "Pas encore de monde enregistré",
             instances_title: "INSTALLATIONS",
-            instances_intro: "Les six versions que le launcher peut lancer, avec le dossier de chacune.",
+            instances_intro: "Les sept versions que le launcher peut lancer, avec le dossier de chacune.",
             instance_missing: "Non installée",
             delete: "Supprimer",
             delete_sure: "Sûr ?",
@@ -1186,7 +1193,7 @@ fn ui_texts(l: Lang) -> UiTexts {
             worlds_intro: "Jede Version speichert ihre eigene Welt, so vermischen sie sich nie. Hier kannst du ihren Ordner öffnen, spielen oder sie löschen.",
             world_none: "Noch keine Welt gespeichert",
             instances_title: "INSTALLATIONEN",
-            instances_intro: "Die sechs Versionen, die der Launcher starten kann, mit ihrem Ordner.",
+            instances_intro: "Die sieben Versionen, die der Launcher starten kann, mit ihrem Ordner.",
             instance_missing: "Nicht installiert",
             delete: "Löschen",
             delete_sure: "Sicher?",
@@ -3414,18 +3421,26 @@ mod ui {
             // The rail is the version picker: one list, no second combo box
             // and no separate "new instance" dialog.
             let mut pick: Option<GameVersion> = None;
-            for (i, v) in GameVersion::ALL.iter().enumerate() {
-                let ok = self.version_ready.get(i).copied().unwrap_or(false);
-                let (dot, sub) = if ok {
-                    (GREEN, u.instance_ready)
-                } else {
-                    (AMBER, u.instance_replacement)
-                };
-                if instance_row(ui, v.id(), sub, dot, *v == self.opts.game).clicked() {
-                    pick = Some(*v);
-                }
-                ui.add_space(8.0);
-            }
+            // Siete filas ya no caben a 863 px de alto: el rail se desplaza y
+            // deja sitio fijo al pie (Mundos / Novedades / aviso / idiomas).
+            let rail_h = (ui.available_height() - 150.0).max(120.0);
+            egui::ScrollArea::vertical()
+                .max_height(rail_h)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for (i, v) in GameVersion::ALL.iter().enumerate() {
+                        let ok = self.version_ready.get(i).copied().unwrap_or(false);
+                        let (dot, sub) = if ok {
+                            (GREEN, u.instance_ready)
+                        } else {
+                            (AMBER, u.instance_replacement)
+                        };
+                        if instance_row(ui, v.id(), sub, dot, *v == self.opts.game).clicked() {
+                            pick = Some(*v);
+                        }
+                        ui.add_space(4.0);
+                    }
+                });
             if let Some(v) = pick {
                 self.opts.game = v;
                 save_config(self.lang, v);
@@ -4579,17 +4594,17 @@ mod ui {
             .fill(if selected { SELECTED } else { GLASS })
             .stroke(egui::Stroke::new(1.0_f32, border))
             .corner_radius(14)
-            .inner_margin(egui::Margin::symmetric(14, 11))
+            .inner_margin(egui::Margin::symmetric(14, 7))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(RichText::new(name).size(13.5).strong().color(TEXT));
-                ui.add_space(3.0);
+                ui.label(RichText::new(name).size(12.5).strong().color(TEXT));
+                ui.add_space(2.0);
                 ui.horizontal(|ui| {
                     let (rect, _) =
                         ui.allocate_exact_size(egui::vec2(9.0, 9.0), egui::Sense::hover());
                     ui.painter().circle_filled(rect.center(), 4.0, dot);
                     ui.add_space(2.0);
-                    ui.label(RichText::new(sub).size(11.5).color(SOFT));
+                    ui.label(RichText::new(sub).size(10.5).color(SOFT));
                 });
             });
         if selected {

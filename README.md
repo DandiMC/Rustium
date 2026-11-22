@@ -1,7 +1,8 @@
 # Rustium
 
 Launcher and Rust port of the pre-classic Minecraft builds (rd-131655, rd-132211,
-rd-132328, rd-20090515, rd-160052 and rd-161348), with no Microsoft account and nothing
+rd-132328, rd-20090515, rd-160052 and rd-161348) and the first Classic (c0.0.11a),
+with no Microsoft account and nothing
 downloaded from Mojang: it reads the textures of the copy already on your computer
 and, if there is none, draws its own.
 
@@ -30,7 +31,8 @@ You only need **the installer**: `Rustium-0.1.15-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the six pre-classic builds:
+The picker above the Play button starts any of the seven builds (the six pre-classics
+and the first Classic):
 
 | build | what it brings |
 |---|---|
@@ -40,6 +42,7 @@ The picker above the Play button starts any of the six pre-classic builds:
 | rd-20090515 | particles, more blocks and the block cube in the corner |
 | rd-160052 | the same engine, one earlier build |
 | rd-161348 | the last pre-classic build (its jar is the same as rd-20090515's) |
+| c0.0.11a | the first Classic: `NoiseMap` terrain with caves, an fps/chunk-update HUD and the paint mode the right button toggles |
 
 rd-131655 (the "Cave game tech test") never had a released jar. It is reconstructed
 from the Minecraft Wiki and uses the same RubyDung textures as rd-132211.
@@ -49,7 +52,7 @@ from the Minecraft Wiki and uses the same RubyDung textures as rd-132211.
 Each build saves its world in `%APPDATA%\Rustium\worlds\<build>\level.dat`, so a
 save from rd-132211 is never opened with another family's block ids. The launcher's
 **Worlds** tab shows how much space each one takes and when you last played it,
-opens its folder and deletes it after asking. The six installs sit right below,
+opens its folder and deletes it after asking. The seven installs sit right below,
 each with its own folder.
 
 ## To build from source

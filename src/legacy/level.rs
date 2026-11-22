@@ -6,6 +6,7 @@
 // El array va indexado (z * HEIGHT + y) * WIDTH + x, igual que el original
 // ((y * height + z) * width + x con y = vertical, z = fondo).
 
+use super::noisemap;
 use super::perlin;
 use super::tiles;
 use crate::world::BlockBox;
@@ -45,6 +46,130 @@ impl Nivel {
         n.calc_light(0, 0, WIDTH, HEIGHT);
         n.volcar_si_toca();
         n
+    }
+
+    // Classic c0.0.11a: Level encarga el mapa a LevelGen, que en vez de Perlin
+    // usa cuatro NoiseMap y cava cuevas con un Random propio.
+    pub fn new_clasico(seed: i64) -> Self {
+        let mut n = Nivel {
+            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
+            light: vec![0; WIDTH * HEIGHT],
+            random: perlin::JavaRandom::new(seed),
+            unprocessed: 0,
+            dirty: Vec::new(),
+        };
+        if n.load().is_none() {
+            n.generar_clasico(seed);
+        }
+        n.calc_light(0, 0, WIDTH, HEIGHT);
+        n.volcar_si_toca();
+        n
+    }
+
+    // LevelGen.generateMap de c0.0.11a. Identico al de la familia B salvo los
+    // cuatro NoiseMap y las cuevas (LevelGen se las hace aqui, no en Level).
+    fn generar_clasico(&mut self, seed: i64) {
+        let sem = semillas(seed);
+        let h1 = noisemap::read(0, WIDTH, HEIGHT, sem[0]);
+        let h2 = noisemap::read(0, WIDTH, HEIGHT, sem[1]);
+        let cf = noisemap::read(1, WIDTH, HEIGHT, sem[2]);
+        let rock = noisemap::read(1, WIDTH, HEIGHT, sem[3]);
+        let d = DEPTH as i32;
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
+                for z in 0..DEPTH {
+                    let k = x + y * WIDTH;
+                    let dh1 = h1[k];
+                    let mut dh2 = h2[k];
+                    if cf[k] < 128 {
+                        dh2 = dh1;
+                    }
+                    let mut dh = if dh2 > dh1 { dh2 } else { dh1 };
+                    if dh2 <= dh1 {
+                        dh2 = dh1;
+                    }
+                    let _ = dh2;
+                    dh = dh / 8 + d / 3;
+                    let mut rh = rock[k] / 8 + d / 3;
+                    if rh > dh - 2 {
+                        rh = dh - 2;
+                    }
+                    let zz = z as i32;
+                    let id = if zz == dh {
+                        tiles::CESPED
+                    } else if zz < dh {
+                        tiles::TIERRA
+                    } else {
+                        tiles::AIRE
+                    };
+                    let id = if zz <= rh { tiles::PIEDRA } else { id };
+                    let i = self.idx(x, y, z);
+                    self.blocks[i] = id;
+                }
+            }
+        }
+        self.cavar_cuevas(seed);
+    }
+
+    // Segunda mitad de LevelGen.generateMap: gusanos de piedra que se comen la
+    // roca. Los 256 tuneles (w*h*d/256/64) salen de un Random que en el original
+    // se crea con la hora; aqui va con semilla para que el mundo se reproduzca.
+    fn cavar_cuevas(&mut self, seed: i64) {
+        let mut random = perlin::JavaRandom::new(seed ^ 0xC0FFEE);
+        let (w, h, d) = (WIDTH as i32, HEIGHT as i32, DEPTH as i32);
+        let count = w * h * d / 256 / 64;
+        for _ in 0..count {
+            let mut x2 = random.next_float() * w as f32;
+            let mut y = random.next_float() * d as f32;
+            let mut z = random.next_float() * h as f32;
+            let length = (random.next_float() + random.next_float() * 150.0) as i32;
+            let mut dir1 = random.next_float() * std::f32::consts::PI * 2.0;
+            let mut dira1 = 0.0f32;
+            let mut dir2 = random.next_float() * std::f32::consts::PI * 2.0;
+            let mut dira2 = 0.0f32;
+            for l in 0..length {
+                x2 = (x2 as f64 + (dir1 as f64).sin() * (dir2 as f64).cos()) as f32;
+                z = (z as f64 + (dir1 as f64).cos() * (dir2 as f64).cos()) as f32;
+                y = (y as f64 + (dir2 as f64).sin()) as f32;
+                dir1 += dira1 * 0.2;
+                dira1 *= 0.9;
+                dira1 += random.next_float() - random.next_float();
+                dir2 += dira2 * 0.5;
+                dir2 *= 0.5;
+                dira2 *= 0.9;
+                dira2 += random.next_float() - random.next_float();
+                let size = ((l as f64 * std::f64::consts::PI / length as f64).sin() * 2.5 + 1.0) as f32;
+                let mut xx = (x2 - size) as i32;
+                while xx as f32 <= x2 + size {
+                    let mut yy = (y - size) as i32;
+                    while yy as f32 <= y + size {
+                        let mut zz = (z - size) as i32;
+                        while zz as f32 <= z + size {
+                            let xd = xx as f32 - x2;
+                            let yd = yy as f32 - y;
+                            let zd = zz as f32 - z;
+                            let dd = xd * xd + yd * yd * 2.0 + zd * zd;
+                            if dd < size * size
+                                && xx >= 1
+                                && yy >= 1
+                                && zz >= 1
+                                && xx < w - 1
+                                && yy < d - 1
+                                && zz < h - 1
+                            {
+                                let i = self.idx(xx as usize, zz as usize, yy as usize);
+                                if self.blocks[i] == tiles::PIEDRA {
+                                    self.blocks[i] = tiles::AIRE;
+                                }
+                            }
+                            zz += 1;
+                        }
+                        yy += 1;
+                    }
+                    xx += 1;
+                }
+            }
+        }
     }
 
     fn idx(&self, x: usize, y: usize, z: usize) -> usize {

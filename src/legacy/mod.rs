@@ -4,6 +4,7 @@
 
 pub mod juego;
 pub mod level;
+pub mod noisemap;
 pub mod mesh;
 pub mod particula;
 pub mod perlin;
