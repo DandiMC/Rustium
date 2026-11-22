@@ -58,12 +58,12 @@ fn fs_main(v: VOut) -> @location(0) vec4<f32> {
 }
 "#;
 
-// Resaltado del bloque apuntado, tal cual LevelRenderer.renderHit del original.
-// Modo romper: velo blanco liso, aditivo, por las seis caras de Tile.rock y sin
-// textura (renderFaceNoTexture). Modo construir: el bloque elegido dibujado con
-// terrain.png y blending normal en la casilla donde caeria, pulsando brillo y
-// alfa. El shader sirve para los dos: el velo usa un texel blanco de 1x1 y el
-// preview el atlas, con el color uniforme modulando brillo y alfa.
+// Resaltado del bloque apuntado. Modo romper: una sola cara, la que se esta
+// mirando, con una capa blanca translucida (no se enciende el bloque entero).
+// Modo construir: el bloque elegido dibujado con terrain.png en la casilla donde
+// caeria, con blending normal y escribiendo profundidad para que se vea macizo.
+// El shader sirve para los dos: el velo usa un texel blanco de 1x1 y el preview
+// el atlas, con el color uniforme modulando brillo y alfa.
 pub const HIT_SHADER: &str = r#"
 struct HitU { view_proj: mat4x4<f32>, model: mat4x4<f32>, color: vec4<f32>, };
 @group(0) @binding(0) var<uniform> u: HitU;
@@ -140,7 +140,7 @@ const HIT_CARA_BRILLO: [f32; 6] = [1.0, 1.0, 0.6, 0.6, 0.8, 0.8];
 const HIT_CARA_UV: [[[f32; 2]; 4]; 6] = [
     [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]],
     [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-    [[1.0, 1.0], [0.0, 1.0], [0.0, 0.0], [1.0, 0.0]],
+    [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
     [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
     [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
     [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
@@ -148,13 +148,14 @@ const HIT_CARA_UV: [[[f32; 2]; 4]; 6] = [
 
 // renderHit con mode 1 dibuja `Tile.tiles[tileType].render` en la casilla
 // contigua: el bloque elegido con su textura, sus brillos por cara y blending
-// normal. Con mode 0 dibuja las seis caras de Tile.rock sin textura (blanco
-// aditivo). `bloque` elige uno u otro.
+// normal. `bloque` elige el preview; para la seleccion de una sola cara esta
+// hit_face_vertices.
 fn hit_cube_vertices((bx, by, bz): (i32, i32, i32), bloque: Option<u8>) -> [Vertex; 36] {
     let esquinas: [[[f32; 3]; 4]; 6] = [
         [[0.0, 1.0, 0.0], [0.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 0.0]],
         [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
-        [[1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 0.0]],
+        // Mismo sentido que las otras cinco caras (las traseras se descartan).
+        [[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0], [1.0, 0.0, 1.0]],
         [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 1.0], [0.0, 1.0, 0.0]],
         [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0]],
         [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [1.0, 0.0, 0.0]],
@@ -256,12 +257,16 @@ fn hit_face_vertices((bx, by, bz): (i32, i32, i32), n: (i32, i32, i32)) -> [Vert
     // textura de arriba: parecia una capa blanca puesta encima del bloque.
     let shade = 1.0;
     let uv = [0.0, 0.0];
-    // El original dibuja la cara EN el plano del bloque: init() deja
-    // glDepthFunc(GL_LEQUAL), asi que el empate con la cara del chunk pasa. El
-    // port compara con GreaterEqual por la profundidad inversa: mismo empate, sin
-    // desplazamiento. Cualquier milimitro hacia fuera se ve como un filo blanco al
-    // mirar la cara de canto.
-    let off = [0.0, 0.0, 0.0];
+    // La cara va unos micrones por delante del bloque. Compartir plano con la
+    // cara del chunk hacia que ambos fragmentos compitieran por el mismo valor de
+    // profundidad (z-fighting); separarlos 1 mm es imperceptible a simple vista y
+    // deja la capa siempre delante, sin tocar el depth bias de la GPU.
+    let eps = 0.001f32;
+    let off = [
+        n.0 as f32 * eps,
+        n.2 as f32 * eps,
+        n.1 as f32 * eps,
+    ];
     let mut p = [Vertex { pos: [0.0; 3], uv, shade }; 4];
     for (ci, c) in corners.iter().enumerate() {
         p[ci] = Vertex {
@@ -1147,18 +1152,17 @@ impl Renderer {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    // Original: glBlendFunc(GL_SRC_ALPHA, GL_ONE) -> blending ADITIVO.
-                    // El blanco se SUMA al color de la cara (se quema a blanco puro en
-                    // las zonas claras), no se mezcla hacia blanco.
+                    // Capa blanca normal: se mezcla hacia blanco, no se suma al
+                    // color del bloque (eso lo encendia entero).
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                             operation: wgpu::BlendOperation::Add,
                         },
                         alpha: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),
@@ -1175,25 +1179,18 @@ impl Renderer {
                 depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::GreaterEqual,
                 stencil: wgpu::StencilState::default(),
-                // El velo se dibuja exactamente en el plano de la cara apuntada:
-                // sin bias, ambos fragmentos compiten por el mismo valor de
-                // profundidad y el resultado cambia con el angulo (z-fighting).
-                // Un bias constante lo adelanta una fraccion de ULP sin mover la
-                // geometria, asi que no saca el velo por el canto de los bloques
-                // vecinos como hacia el slope-bias.
-                bias: wgpu::DepthBiasState {
-                    constant: 8,
-                    slope_scale: 0.0,
-                    clamp: 0.0,
-                },
+                // La capa ya va 1 mm por delante de la cara (hit_face_vertices),
+                // asi que no hace falta depth bias.
+                bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
         });
         // Preview de colocacion: mismo shader y geometria, pero blending normal
-        // (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) y descarte de caras traseras,
-        // como el GL_CULL_FACE del original.
+        // (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), descarte de caras traseras y
+        // escritura de profundidad. Sin escribir profundidad se veian las caras
+        // interiores del bloque (el cubo parecia hueco).
         let hit_preview_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("hit preview pipeline"),
             layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -1231,24 +1228,19 @@ impl Renderer {
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 cull_mode: Some(wgpu::Face::Back),
-                // Las caras de Tile.renderFace llegan en el sentido del original,
-                // que usa un espacio con la altura en z; al pasar los vertices a
-                // (x, z, y) se invierte el sentido y hay que declararlo CW.
-                front_face: wgpu::FrontFace::Cw,
+                // Mismo sentido que la malla del terreno (y que las seis caras
+                // del preview): las caras interiores del cubo se descartan.
+                front_face: wgpu::FrontFace::Ccw,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
+                // El bloque del preview se tapa a si mismo: sin esto, las caras
+                // del fondo se mezclaban sobre las de delante y parecia hueco.
+                depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::GreaterEqual,
                 stencil: wgpu::StencilState::default(),
-                // Mismo motivo que el velo: el bloque de previsualizacion puede
-                // compartir plano con una cara del mundo.
-                bias: wgpu::DepthBiasState {
-                    constant: 8,
-                    slope_scale: 0.0,
-                    clamp: 0.0,
-                },
+                bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
@@ -2050,9 +2042,9 @@ impl Renderer {
                 }
                 pass.set_bind_group(0, &self.bind_group, &[]);
             }
-            // Resaltado del bloque apuntado (renderHit original): la cara con la
-            // textura del bloque y su brillo, sumada en aditivo con el alfa pulsante.
-            if let Some(((hx, hy, hz), _n)) = hit {
+            // Resaltado del bloque apuntado: en modo romper, una capa blanca en
+            // la cara que se mira; en modo construir, el preview del bloque entero.
+            if let Some(((hx, hy, hz), n)) = hit {
                 #[repr(C)]
                 struct HitU {
                     view_proj: [[f32; 4]; 4],
@@ -2060,10 +2052,9 @@ impl Renderer {
                     color: [f32; 4],
                 }
                 // Modo romper: rd-132211 usa 0.4 + 0.2*sin(ms/100) (alfa 0.2..0.6);
-                // la familia nueva envuelve la misma expresion en *0.5 (0.1..0.3) y
-                // el color se SUMA a la cara (SRC_ALPHA, ONE). Modo construir:
-                // renderHit cambia a blending normal, brillo 0.6..1.0 (sin/100) y
-                // alfa 0.3..0.7 (sin/200), sin la escala del velo.
+                // la familia nueva envuelve la misma expresion en *0.5 (0.1..0.3).
+                // Modo construir: brillo 0.6..1.0 (sin/100) y alfa 0.3..0.7
+                // (sin/200), sin la escala del velo.
                 let ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
@@ -2092,7 +2083,10 @@ impl Renderer {
                 self.queue.write_buffer(&self.hit_uniform, 0, unsafe {
                     std::slice::from_raw_parts(&hu as *const HitU as *const u8, std::mem::size_of::<HitU>())
                 });
-                let verts = hit_vertices((hx, hy, hz), preview);
+                let verts = match preview {
+                    Some(id) => hit_vertices((hx, hy, hz), Some(id)),
+                    None => hit_face_vertices((hx, hy, hz), n).to_vec(),
+                };
                 self.queue.write_buffer(&self.hit_face_vbuf, 0, unsafe {
                     std::slice::from_raw_parts(verts.as_ptr() as *const u8, std::mem::size_of_val(&verts[..]))
                 });

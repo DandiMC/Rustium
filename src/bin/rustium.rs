@@ -710,6 +710,17 @@ struct UiTexts {
     bench_java_wait: &'static str,
 }
 
+/// Label for the creator credit in the launcher footer.
+fn creator_label(l: Lang) -> &'static str {
+    match l {
+        Lang::En => "Created by DandiMC",
+        Lang::Es => "Creado por DandiMC",
+        Lang::Pt => "Criado por DandiMC",
+        Lang::Fr => "Créé par DandiMC",
+        Lang::De => "Erstellt von DandiMC",
+    }
+}
+
 /// Small labels for the stat cards and the news footer. Kept as a tuple so adding
 /// a language stays a one-liner.
 fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static str) {
@@ -724,9 +735,9 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.1.15).
+/// Novedades de las versiones del launcher (0.1.4 a 0.1.16).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 9] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 11] {
     match l {
         Lang::En => [
             (
@@ -782,6 +793,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "22 Nov 2026",
                 "Every world now has its place in the launcher: play it, open its folder or delete it.",
                 "Each build keeps its own world from now on, so a save never gets mixed with another version's. The new Worlds tab shows what each world takes up and when you last played it, opens its folder, and deletes it in one click (it asks 'Sure?' first). Below it you have the six installs with their folder. We also gave the earliest versions their original blocks back, and you no longer sink through the floor in the later pre-classics. Enjoy!",
+            ),
+            (
+                "The block you look at lights up again",
+                "22 Nov 2026",
+                "In the Classic versions the selection is a single white face again, like in 2009.",
+                "Aiming at a block used to light up all of its faces and flicker against the world texture. Now only the face you are looking at gets a soft white layer, and that layer sits just in front of the block, so the flicker is gone for good.",
+            ),
+            (
+                "Building in Classic shows the whole block again",
+                "22 Nov 2026",
+                "The block you are about to place is drawn complete and solid, as in the original.",
+                "The preview cube had its faces in the wrong order, so you saw its sides or its inside instead of a normal block. It is fixed: the block you are about to place now appears complete, with its texture, just like in 2009.",
             ),
         ],
         Lang::Es => [
@@ -839,6 +862,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Cada mundo ya tiene su sitio en el launcher: juégalo, abre su carpeta o bórralo.",
                 "A partir de ahora cada versión guarda su propio mundo, así que una partida nunca se mezcla con la de otra versión. La nueva pestaña Mundos te dice cuánto ocupa y cuándo lo jugaste, abre su carpeta y lo borra con un clic (antes te pregunta «¿Seguro?»). Justo debajo tienes las seis instalaciones con su carpeta. Además, las primeras versiones vuelven a tener sus bloques originales y en las preclásicas posteriores ya no te hundes en el suelo. ¡A jugar!",
             ),
+            (
+                "El bloque que miras vuelve a iluminarse",
+                "22 nov 2026",
+                "En las versiones Classic la selección vuelve a ser una sola cara blanca, como en 2009.",
+                "Apuntar a un bloque encendía todas sus caras y parpadeaba contra la textura del mundo. Ahora solo la cara que miras recibe una capa blanca suave, y esa capa va un milímetro por delante del bloque, así que el parpadeo desaparece para siempre.",
+            ),
+            (
+                "Construir en Classic vuelve a enseñar el bloque entero",
+                "22 nov 2026",
+                "El bloque que vas a colocar se dibuja completo y macizo, como en el original.",
+                "El cubo de vista previa tenía las caras en el orden equivocado, así que veías sus lados o su interior en vez de un bloque normal. Ya está arreglado: el bloque que vas a colocar aparece completo, con su textura, igual que en 2009.",
+            ),
         ],
         Lang::Pt => [
             (
@@ -894,6 +929,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "22 nov 2026",
                 "Cada mundo já tem o seu lugar no launcher: joga-o, abre a pasta ou apaga-o.",
                 "A partir de agora cada versão guarda o seu próprio mundo, por isso uma partida nunca se mistura com a de outra versão. O novo separador Mundos diz-te quanto ocupa e quando o jogaste, abre a pasta e apaga-o com um clique (pergunta «De certeza?» primeiro). Logo abaixo tens as seis instalações com a pasta. Além disso, as primeiras versões voltaram a ter os blocos originais e nas pré-clássicas seguintes já não te afundas no chão. Boa jogatina!",
+            ),
+            (
+                "O bloco que miras volta a iluminar-se",
+                "22 nov 2026",
+                "Nas versões Classic a seleção volta a ser uma única face branca, como em 2009.",
+                "Apontar para um bloco acendia todas as faces e piscava contra a textura do mundo. Agora só a face que estás a ver recebe uma camada branca suave, e essa camada fica um milímetro à frente do bloco, por isso o piscar desaparece de vez.",
+            ),
+            (
+                "Construir em Classic volta a mostrar o bloco inteiro",
+                "22 nov 2026",
+                "O bloco que vais colocar é desenhado completo e maciço, como no original.",
+                "O cubo de pré-visualização tinha as faces na ordem errada, por isso vias os lados ou o interior em vez de um bloco normal. Já está corrigido: o bloco que vais colocar aparece completo, com a sua textura, tal como em 2009.",
             ),
         ],
         Lang::Fr => [
@@ -951,6 +998,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Chaque monde a désormais sa place dans le launcher : joue, ouvre son dossier ou supprime-le.",
                 "Désormais, chaque version garde son propre monde : une partie ne se mélange plus jamais avec celle d'une autre version. Le nouvel onglet Mondes te dit combien il occupe et quand tu y as joué, ouvre son dossier et le supprime en un clic (il demande d'abord « Sûr ? »). Juste en dessous, tu as les six installations avec leur dossier. Les premières versions ont aussi retrouvé leurs blocs d'origine, et dans les pré-classiques suivantes tu ne traverses plus le sol. Amuse-toi bien !",
             ),
+            (
+                "Le bloc que tu vises s'éclaire à nouveau",
+                "22 nov. 2026",
+                "Dans les versions Classic, la sélection redevient une seule face blanche, comme en 2009.",
+                "Viser un bloc allumait toutes ses faces et scintillait contre la texture du monde. Maintenant, seule la face que tu regardes reçoit un voile blanc doux, et ce voile se place un millimètre devant le bloc : le scintillement disparaît pour de bon.",
+            ),
+            (
+                "Construire en Classic montre à nouveau le bloc entier",
+                "22 nov. 2026",
+                "Le bloc que tu vas poser est dessiné complet et plein, comme dans l'original.",
+                "Le cube d'aperçu avait ses faces dans le mauvais ordre : on voyait ses côtés ou son intérieur au lieu d'un bloc normal. C'est réglé : le bloc que tu vas poser apparaît complet, avec sa texture, comme en 2009.",
+            ),
         ],
         Lang::De => [
             (
@@ -1006,6 +1065,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "22. Nov. 2026",
                 "Jede Welt hat jetzt ihren Platz im Launcher: spielen, Ordner öffnen oder löschen.",
                 "Ab jetzt speichert jede Version ihre eigene Welt, eine Partie vermischt sich also nie mit der einer anderen Version. Der neue Welten-Tab zeigt dir, wie viel Platz sie braucht und wann du zuletzt gespielt hast, öffnet ihren Ordner und löscht sie mit einem Klick (vorher fragt er „Sicher?“). Direkt darunter findest du die sechs Installationen mit ihrem Ordner. Außerdem haben die ersten Versionen ihre Originalblöcke zurück, und in den späteren pre-classics fällst du nicht mehr durch den Boden. Viel Spaß!",
+            ),
+            (
+                "Der Block, den du ansiehst, leuchtet wieder",
+                "22. Nov. 2026",
+                "In den Classic-Versionen ist die Auswahl wieder eine einzelne weiße Fläche, wie 2009.",
+                "Beim Anvisieren eines Blocks leuchteten alle seine Flächen auf und flackerten gegen die Welttextur. Jetzt bekommt nur die Fläche, die du ansiehst, eine sanfte weiße Schicht, und diese liegt einen Millimeter vor dem Block – das Flackern ist endgültig weg.",
+            ),
+            (
+                "Bauen in Classic zeigt wieder den ganzen Block",
+                "22. Nov. 2026",
+                "Der Block, den du setzen willst, wird wieder vollständig und massiv gezeichnet.",
+                "Beim Vorschau-Würfel waren die Flächen in der falschen Reihenfolge, deshalb sah man seine Seiten oder sein Inneres statt eines normalen Blocks. Behoben: Der Block, den du setzen willst, erscheint jetzt vollständig mit seiner Textur, genau wie 2009.",
             ),
         ],
     }
@@ -1522,13 +1593,16 @@ fn instances_path() -> Option<PathBuf> {
 /// id|name|version|coords|shots|fullscreen|grepeat|dir|width|height.
 /// Plain text keeps the launcher dependency-free and easy to repair by hand.
 fn load_instances() -> Vec<Instance> {
-    let seed = || GameVersion::ALL.iter().copied().map(Instance::fresh).collect();
-    let Some(p) = instances_path() else {
-        return seed();
-    };
-    let Ok(txt) = std::fs::read_to_string(&p) else {
-        return seed();
-    };
+    instances_path()
+        .and_then(|p| load_instances_from(&p))
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| GameVersion::ALL.iter().copied().map(Instance::fresh).collect())
+}
+
+/// Reads one instances file. `None` means it could not be read at all; an empty
+/// list means it was readable but had no usable line.
+fn load_instances_from(path: &Path) -> Option<Vec<Instance>> {
+    let txt = std::fs::read_to_string(path).ok()?;
     let mut out: Vec<Instance> = Vec::new();
     for line in txt.lines().map(str::trim) {
         if line.is_empty() || line.starts_with('#') {
@@ -1564,16 +1638,17 @@ fn load_instances() -> Vec<Instance> {
             height: f.next().and_then(|s| s.trim().parse().ok()).unwrap_or(0),
         });
     }
-    if out.is_empty() {
-        seed()
-    } else {
-        out
-    }
+    Some(out)
 }
 
 fn save_instances(instances: &[Instance]) {
-    let Some(p) = instances_path() else { return };
-    if let Some(dir) = p.parent() {
+    if let Some(p) = instances_path() {
+        save_instances_to(&p, instances);
+    }
+}
+
+fn save_instances_to(path: &Path, instances: &[Instance]) {
+    if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     let mut out = String::from(
@@ -1601,7 +1676,7 @@ fn save_instances(instances: &[Instance]) {
             i.height
         ));
     }
-    let _ = std::fs::write(&p, out);
+    let _ = std::fs::write(path, out);
 }
 
 fn clean_token(s: &str) -> String {
@@ -2414,6 +2489,34 @@ fn instance_dir(inst: &Instance) -> PathBuf {
         .clone()
         .filter(|d| !d.as_os_str().is_empty())
         .unwrap_or_else(|| worlds_root().join(&inst.id))
+}
+
+/// Deleting an instance keeps its world folder on disk, so an id is only free
+/// when no live instance uses it AND its default folder is not there either. A
+/// reused id would make the new instance open the world of the deleted one.
+fn instance_id_is_free(instances: &[Instance], root: &Path, id: &str) -> bool {
+    !instances.iter().any(|i| i.id == id) && !root.join(id).exists()
+}
+
+/// First free id for a new instance of `game`. The nine default instances own
+/// their build id while they exist; afterwards new copies get `<id>-2`, `-3`...
+fn unique_instance_id_in(instances: &[Instance], game: GameVersion, root: &Path) -> String {
+    let base = game.id();
+    if instance_id_is_free(instances, root, base) {
+        return base.to_string();
+    }
+    let mut n = 2;
+    loop {
+        let id = format!("{base}-{n}");
+        if instance_id_is_free(instances, root, &id) {
+            return id;
+        }
+        n += 1;
+    }
+}
+
+fn unique_instance_id(instances: &[Instance], game: GameVersion) -> String {
+    unique_instance_id_in(instances, game, &worlds_root())
 }
 
 /// The shared world older versions left next to the executables: copy it once to
@@ -3877,21 +3980,6 @@ mod ui {
             save_config(self.lang, inst.game, &inst.id);
         }
 
-        fn unique_instance_id(&self, game: GameVersion) -> String {
-            let base = game.id();
-            if !self.instances.iter().any(|i| i.id == base) {
-                return base.to_string();
-            }
-            let mut n = 2;
-            loop {
-                let id = format!("{base}-{n}");
-                if !self.instances.iter().any(|i| i.id == id) {
-                    return id;
-                }
-                n += 1;
-            }
-        }
-
         fn open_new_instance(&mut self) {
             let game = self
                 .instances
@@ -3922,7 +4010,7 @@ mod ui {
             if d.name.is_empty() {
                 d.name = d.game.id().to_string();
             }
-            let id = self.unique_instance_id(d.game);
+            let id = unique_instance_id(&self.instances, d.game);
             let (width, height) = parse_resolution(&d.width, &d.height);
             self.instances.push(Instance {
                 id,
@@ -3947,7 +4035,7 @@ mod ui {
         fn duplicate_instance(&mut self) {
             let Some(src) = self.instances.get(self.sel).cloned() else { return };
             let u = ui_texts(self.lang);
-            let id = self.unique_instance_id(src.game);
+            let id = unique_instance_id(&self.instances, src.game);
             let inst = Instance {
                 id,
                 name: format!("{} {}", src.name, u.instance_copy_suffix),
@@ -4067,7 +4155,7 @@ mod ui {
 
                     ui.add_space(14.0);
                     field_label(ui, u.instance_game_dir);
-                    let default_dir = worlds_root().join(self.unique_instance_id(d.game));
+                    let default_dir = worlds_root().join(unique_instance_id(&self.instances, d.game));
                     ui.horizontal(|ui| {
                         let browse_w = 124.0;
                         framed_input_hint(
@@ -5283,6 +5371,8 @@ mod ui {
                                             "rd-132328 · rd-20090515 · rd-160052 · rd-161348",
                                             "rd-131655 · Cave game tech test",
                                             "Rustium 0.1.15",
+                                            "Rustium 0.1.16",
+                                            "Rustium 0.1.16",
                                         ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             cards.push((
@@ -5381,6 +5471,22 @@ mod ui {
 
                             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                                 ui.label(RichText::new(t.legal_footer).size(11.0).color(MUTED));
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new(creator_label(self.lang))
+                                            .size(11.0)
+                                            .color(SOFT),
+                                    );
+                                    ui.label(RichText::new("·").size(11.0).color(MUTED));
+                                    if ui.link(RichText::new("YouTube @eldandimc").size(11.0)).clicked() {
+                                        open_in_browser("https://www.youtube.com/@eldandimc");
+                                    }
+                                    ui.label(RichText::new("·").size(11.0).color(MUTED));
+                                    if ui.link(RichText::new("GitHub DandiMC").size(11.0)).clicked() {
+                                        open_in_browser("https://github.com/DandiMC/Rustium");
+                                    }
+                                });
                             });
                         });
                 });
@@ -5844,6 +5950,69 @@ mod tests {
         assert_eq!(instance_dir(&inst), worlds_root().join(&inst.id));
         inst.dir = Some(std::env::temp_dir().join("rustium-instance-world"));
         assert_eq!(instance_dir(&inst), inst.dir.clone().unwrap());
+    }
+
+    #[test]
+    fn instances_save_and_load_with_folder_and_resolution() {
+        let base = std::env::temp_dir().join(format!("rustium-instances-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let file = base.join("instances.txt");
+        let carpeta = base.join("mi mundo con espacios");
+
+        let mut con_carpeta = Instance::fresh(GameVersion::Rd132211);
+        con_carpeta.name = "Cueva de prueba".to_string();
+        con_carpeta.dir = Some(carpeta.clone());
+        con_carpeta.width = 1280;
+        con_carpeta.height = 720;
+        con_carpeta.shots = false;
+
+        let mut automatica = Instance::fresh(GameVersion::C0011a);
+        automatica.width = 1024;
+        automatica.height = 0;
+
+        save_instances_to(&file, &[con_carpeta.clone(), automatica.clone()]);
+
+        let cargadas = load_instances_from(&file).expect("la lista guardada se tiene que leer");
+        assert_eq!(cargadas.len(), 2);
+        let a = &cargadas[0];
+        assert_eq!(a.id, con_carpeta.id);
+        assert_eq!(a.name, "Cueva de prueba");
+        assert_eq!(a.game, GameVersion::Rd132211);
+        assert_eq!(a.dir.as_deref(), Some(carpeta.as_path()));
+        assert_eq!((a.width, a.height), (1280, 720));
+        assert!(!a.shots && a.coords);
+        // El juego abre la carpeta cargada, no la que saldria del id.
+        assert_eq!(instance_dir(a), carpeta);
+
+        let b = &cargadas[1];
+        assert_eq!(b.dir, None);
+        assert_eq!(instance_dir(b), worlds_root().join(&b.id));
+        assert_eq!((b.width, b.height), (1024, 0));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_new_instance_never_takes_the_folder_of_a_deleted_one() {
+        let root = std::env::temp_dir().join(format!("rustium-ids-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        // The deleted instance kept its world folder, as the launcher promises.
+        std::fs::create_dir_all(root.join("c0.0.11a-2")).unwrap();
+        let vivas = vec![Instance::fresh(GameVersion::C0011a)];
+
+        assert_eq!(
+            unique_instance_id_in(&vivas, GameVersion::C0011a, &root),
+            "c0.0.11a-3"
+        );
+
+        // If that folder is gone too, the id can be used again safely.
+        std::fs::remove_dir_all(root.join("c0.0.11a-2")).unwrap();
+        assert_eq!(
+            unique_instance_id_in(&vivas, GameVersion::C0011a, &root),
+            "c0.0.11a-2"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

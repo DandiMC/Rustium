@@ -375,22 +375,28 @@ impl App {
             }
         }
         // RubyDung.init: 10 zombis en (128,0,128) con resetPos (posicion al azar
-        // en todo el mundo). RD_ZOMBIS_CERCA los pone delante para poder verlos.
+        // en todo el mundo). RD_ZOMBIS_CERCA los pone delante para poder verlos;
+        // RD_SMOKE_SIN_ZOMBIS deja la escena limpia para las capturas del velo.
         let cerca = std::env::var("RD_ZOMBIS_CERCA").is_ok();
+        let sin_zombis = std::env::var_os("RD_SMOKE_SIN_ZOMBIS").is_some();
         let mut zombis = Vec::new();
-        for i in 0..10 {
-            let mut z = Zombie::new(&nivel, 128.0, 0.0, 128.0);
-            if cerca {
-                z.e.set_pos(128.0 + (i % 5) as f32 * 1.5 - 3.0, 122.0 - (i / 5) as f32 * 2.0, DEPTH as f32 + 4.0);
-            } else {
-                z.e.reset_pos(&nivel);
+        if !sin_zombis {
+            for i in 0..10 {
+                let mut z = Zombie::new(&nivel, 128.0, 0.0, 128.0);
+                if cerca {
+                    z.e.set_pos(128.0 + (i % 5) as f32 * 1.5 - 3.0, 122.0 - (i / 5) as f32 * 2.0, DEPTH as f32 + 4.0);
+                } else {
+                    z.e.reset_pos(&nivel);
+                }
+                zombis.push(z);
             }
-            zombis.push(z);
         }
         App {
             version,
             modo,
-            edit_mode: 0,
+            // RD_SMOKE_PINTAR abre el arnes en modo construir para las capturas
+            // del preview de colocacion.
+            edit_mode: if std::env::var_os("RD_SMOKE_PINTAR").is_some() { 1 } else { 0 },
             chunk_updates: 0,
             tamano: tamano_inicial((1024, 768)),
             escape_libera: true,
@@ -1005,6 +1011,13 @@ impl ApplicationHandler for App {
             };
             r.pedir_captura = self.pedir_captura;
             self.pedir_captura = false;
+            // RD_SMOKE_CAPTURA guarda un frame del arnes en screenshots/ para
+            // comparar el resaltado con y sin RD_HIT_BIAS (reproduccion del
+            // z-fighting). Misma camara y mismo frame en las dos capturas.
+            if smoke && std::env::var_os("RD_SMOKE_CAPTURA").is_some() && self.smoke_frames == 4
+            {
+                r.pedir_captura = true;
+            }
             // El original siempre enseña el bloque elegido en la esquina
             r.hud_bloque = Some(self.pintura);
             r.render(eye, yaw, pitch, hit, fps, &mv, &mv_fondo);
