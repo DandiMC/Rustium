@@ -1921,14 +1921,12 @@ pub fn build_chunk_mesh(level: &Level, cx: usize, cy: usize, capa: u8) -> (Vec<V
                 if b == AIR {
                     continue;
                 }
-                // Tile por altura como el Chunk original: la capa mas alta de la
-                // columna es pasto y el resto roca. En rd-132211 el mundo es plano
-                // y `top` vale siempre 42; en rd-131655 la superficie cambia de
-                // altura y las cuevas dejan al descubierto bloques mas bajos, que
-                // tambien llevan pasto. En el terrain.png original: tile 0 = verde
-                // (pasto), tile 1 = gris (roca).
-                let top = level.light_depths[y as usize * crate::world::WIDTH + x as usize];
-                let tile = if z == top { 0.0 } else { 1.0 };
+                // Tile por altura como el Chunk original: en rd-132211/rd-132328
+                // es verde solo la cota fija depth*2/3 y gris todo lo demas (por
+                // eso colocar encima no cambia el bloque de abajo); en rd-131655,
+                // que no tuvo jar, manda la superficie de cada columna. En el
+                // terrain.png original: tile 0 = verde, tile 1 = gris.
+                let tile = level.tile_texture(x as i32, y as i32, z);
                 // UV como el original: 0.0624375 (= 16/256 menos un pelo) en vez del
                 // 1/16 exacto. Ese margen evita que, al muestrear, el borde de la cara
                 // agarre la ultima columna del tile vecino del atlas (la roca gris),

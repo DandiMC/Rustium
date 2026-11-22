@@ -21,7 +21,8 @@
 // from a terminal, --console still writes to that terminal as before.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-use std::io::Cursor;
+use flate2::read::GzDecoder;
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -536,6 +537,18 @@ struct UiTexts {
     sidebar_instances: &'static str,
     instance_ready: &'static str,
     instance_replacement: &'static str,
+    // Worlds and installs tab.
+    tab_worlds: &'static str,
+    worlds_title: &'static str,
+    worlds_intro: &'static str,
+    world_none: &'static str,
+    instances_title: &'static str,
+    instances_intro: &'static str,
+    instance_missing: &'static str,
+    delete: &'static str,
+    delete_sure: &'static str,
+    cancel: &'static str,
+    deleted: &'static str,
     version_label: &'static str,
     language_label: &'static str,
     news_shortcut: &'static str,
@@ -590,9 +603,9 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.1.14).
+/// Novedades de las versiones del launcher (0.1.4 a 0.1.15).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 8] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 9] {
     match l {
         Lang::En => [
             (
@@ -642,6 +655,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "21 Nov 2026",
                 "The first version ever recorded, which was never released, is now in the launcher.",
                 "Before the name Minecraft existed, Notch recorded a tech test called Cave game. It is the origin of everything: a world of grass and rock, huge caves, no inventory and no way to break blocks. Only you, the landscape and R to fall from the sky again. We rebuilt it from the Minecraft Wiki so you can walk through the very first piece of Minecraft history.",
+            ),
+            (
+                "Your worlds, in your hands",
+                "22 Nov 2026",
+                "Every world now has its place in the launcher: play it, open its folder or delete it.",
+                "Each build keeps its own world from now on, so a save never gets mixed with another version's. The new Worlds tab shows what each world takes up and when you last played it, opens its folder, and deletes it in one click (it asks 'Sure?' first). Below it you have the six installs with their folder. We also gave the earliest versions their original blocks back, and you no longer sink through the floor in the later pre-classics. Enjoy!",
             ),
         ],
         Lang::Es => [
@@ -693,6 +712,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "La primera versión que se grabó, y que nunca se publicó, ya está en el launcher.",
                 "Antes de que existiera el nombre Minecraft, Notch grabó una prueba llamada Cave game. Es el origen de todo: un mundo de hierba y roca, cuevas enormes, sin inventario y sin poder romper bloques. Solo tú, el paisaje y la R para volver a caer desde el cielo. La hemos reconstruido con la información de Minecraft Wiki para que puedas pisar el primer trocito de la historia de Minecraft.",
             ),
+            (
+                "Tus mundos, en tus manos",
+                "22 nov 2026",
+                "Cada mundo ya tiene su sitio en el launcher: juégalo, abre su carpeta o bórralo.",
+                "A partir de ahora cada versión guarda su propio mundo, así que una partida nunca se mezcla con la de otra versión. La nueva pestaña Mundos te dice cuánto ocupa y cuándo lo jugaste, abre su carpeta y lo borra con un clic (antes te pregunta «¿Seguro?»). Justo debajo tienes las seis instalaciones con su carpeta. Además, las primeras versiones vuelven a tener sus bloques originales y en las preclásicas posteriores ya no te hundes en el suelo. ¡A jugar!",
+            ),
         ],
         Lang::Pt => [
             (
@@ -742,6 +767,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "21 nov 2026",
                 "A primeira versão alguma vez gravada, que nunca foi publicada, já está no launcher.",
                 "Antes de o nome Minecraft existir, a Notch gravou um teste chamado Cave game. É a origem de tudo: um mundo de relva e rocha, cavernas enormes, sem inventário e sem poder quebrar blocos. Só tu, a paisagem e a tecla R para voltares a cair do céu. Reconstruímo-lo com a informação da Minecraft Wiki para que possas pisar o primeiro pedaço da história do Minecraft.",
+            ),
+            (
+                "Os teus mundos, nas tuas mãos",
+                "22 nov 2026",
+                "Cada mundo já tem o seu lugar no launcher: joga-o, abre a pasta ou apaga-o.",
+                "A partir de agora cada versão guarda o seu próprio mundo, por isso uma partida nunca se mistura com a de outra versão. O novo separador Mundos diz-te quanto ocupa e quando o jogaste, abre a pasta e apaga-o com um clique (pergunta «De certeza?» primeiro). Logo abaixo tens as seis instalações com a pasta. Além disso, as primeiras versões voltaram a ter os blocos originais e nas pré-clássicas seguintes já não te afundas no chão. Boa jogatina!",
             ),
         ],
         Lang::Fr => [
@@ -793,6 +824,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "La toute première version enregistrée, jamais publiée, est enfin dans le launcher.",
                 "Avant même que le nom Minecraft existe, Notch a filmé un test nommé Cave game. C'est l'origine de tout : un monde d'herbe et de roche, d'immenses cavernes, sans inventaire et sans pouvoir casser de blocs. Juste vous, le paysage et la touche R pour retomber du ciel. Nous l'avons reconstruit grâce aux informations du Minecraft Wiki pour que vous puissiez fouler le tout premier morceau de l'histoire de Minecraft.",
             ),
+            (
+                "Tes mondes, entre tes mains",
+                "22 nov. 2026",
+                "Chaque monde a désormais sa place dans le launcher : joue, ouvre son dossier ou supprime-le.",
+                "Désormais, chaque version garde son propre monde : une partie ne se mélange plus jamais avec celle d'une autre version. Le nouvel onglet Mondes te dit combien il occupe et quand tu y as joué, ouvre son dossier et le supprime en un clic (il demande d'abord « Sûr ? »). Juste en dessous, tu as les six installations avec leur dossier. Les premières versions ont aussi retrouvé leurs blocs d'origine, et dans les pré-classiques suivantes tu ne traverses plus le sol. Amuse-toi bien !",
+            ),
         ],
         Lang::De => [
             (
@@ -842,6 +879,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "21. Nov. 2026",
                 "Die erste je aufgezeichnete Version, die nie erschien, ist jetzt im Launcher.",
                 "Bevor der Name Minecraft überhaupt existierte, filmte Notch einen Test namens Cave game. Er ist der Ursprung von allem: eine Welt aus Gras und Stein, riesige Höhlen, kein Inventar und keine Möglichkeit, Blöcke abzubauen. Nur du, die Landschaft und die R-Taste, um wieder vom Himmel zu fallen. Wir haben ihn mit den Informationen aus dem Minecraft Wiki nachgebaut, damit du das allererste Stück Minecraft-Geschichte betreten kannst.",
+            ),
+            (
+                "Deine Welten, in deinen Händen",
+                "22. Nov. 2026",
+                "Jede Welt hat jetzt ihren Platz im Launcher: spielen, Ordner öffnen oder löschen.",
+                "Ab jetzt speichert jede Version ihre eigene Welt, eine Partie vermischt sich also nie mit der einer anderen Version. Der neue Welten-Tab zeigt dir, wie viel Platz sie braucht und wann du zuletzt gespielt hast, öffnet ihren Ordner und löscht sie mit einem Klick (vorher fragt er „Sicher?“). Direkt darunter findest du die sechs Installationen mit ihrem Ordner. Außerdem haben die ersten Versionen ihre Originalblöcke zurück, und in den späteren pre-classics fällst du nicht mehr durch den Boden. Viel Spaß!",
             ),
         ],
     }
@@ -930,6 +973,17 @@ fn ui_texts(l: Lang) -> UiTexts {
             sidebar_instances: "VERSIONS",
             instance_ready: "Ready",
             instance_replacement: "Replacement texture",
+            tab_worlds: "Worlds",
+            worlds_title: "Your worlds",
+            worlds_intro: "Each build keeps its own world, so they never mix. Open its folder, play it or delete it from here.",
+            world_none: "No world saved yet",
+            instances_title: "INSTALLS",
+            instances_intro: "The six builds the launcher can start, with the folder each one lives in.",
+            instance_missing: "Not installed",
+            delete: "Delete",
+            delete_sure: "Sure?",
+            cancel: "Cancel",
+            deleted: "World deleted.",
             version_label: "Launcher version",
             language_label: "LANGUAGE",
             news_shortcut: "What's new",
@@ -971,6 +1025,17 @@ fn ui_texts(l: Lang) -> UiTexts {
             sidebar_instances: "VERSIONES",
             instance_ready: "Listo",
             instance_replacement: "Textura de reemplazo",
+            tab_worlds: "Mundos",
+            worlds_title: "Tus mundos",
+            worlds_intro: "Cada versión guarda su propio mundo, así nunca se mezclan. Desde aquí puedes abrir su carpeta, jugarlo o borrarlo.",
+            world_none: "Todavía no hay mundo guardado",
+            instances_title: "INSTALACIONES",
+            instances_intro: "Las seis versiones que puede arrancar el launcher, con la carpeta de cada una.",
+            instance_missing: "No instalada",
+            delete: "Borrar",
+            delete_sure: "¿Seguro?",
+            cancel: "Cancelar",
+            deleted: "Mundo borrado.",
             version_label: "Versión de Launcher",
             language_label: "IDIOMA",
             news_shortcut: "Novedades",
@@ -1012,6 +1077,17 @@ fn ui_texts(l: Lang) -> UiTexts {
             sidebar_instances: "VERSÕES",
             instance_ready: "Pronto",
             instance_replacement: "Textura substituta",
+            tab_worlds: "Mundos",
+            worlds_title: "Os teus mundos",
+            worlds_intro: "Cada versão guarda o seu próprio mundo, por isso nunca se misturam. Aqui podes abrir a pasta, jogar ou apagar.",
+            world_none: "Ainda não há mundo guardado",
+            instances_title: "INSTALAÇÕES",
+            instances_intro: "As seis versões que o launcher pode iniciar, com a pasta de cada uma.",
+            instance_missing: "Não instalada",
+            delete: "Apagar",
+            delete_sure: "De certeza?",
+            cancel: "Cancelar",
+            deleted: "Mundo apagado.",
             version_label: "Versão do Launcher",
             language_label: "IDIOMA",
             news_shortcut: "Novidades",
@@ -1053,6 +1129,17 @@ fn ui_texts(l: Lang) -> UiTexts {
             sidebar_instances: "VERSIONS",
             instance_ready: "Prêt",
             instance_replacement: "Texture de remplacement",
+            tab_worlds: "Mondes",
+            worlds_title: "Vos mondes",
+            worlds_intro: "Chaque version garde son propre monde, ils ne se mélangent donc jamais. D'ici, tu peux ouvrir son dossier, jouer ou le supprimer.",
+            world_none: "Pas encore de monde enregistré",
+            instances_title: "INSTALLATIONS",
+            instances_intro: "Les six versions que le launcher peut lancer, avec le dossier de chacune.",
+            instance_missing: "Non installée",
+            delete: "Supprimer",
+            delete_sure: "Sûr ?",
+            cancel: "Annuler",
+            deleted: "Monde supprimé.",
             version_label: "Version du launcher",
             language_label: "LANGUE",
             news_shortcut: "Nouveautés",
@@ -1094,6 +1181,17 @@ fn ui_texts(l: Lang) -> UiTexts {
             sidebar_instances: "VERSIONEN",
             instance_ready: "Bereit",
             instance_replacement: "Ersatztextur",
+            tab_worlds: "Welten",
+            worlds_title: "Deine Welten",
+            worlds_intro: "Jede Version speichert ihre eigene Welt, so vermischen sie sich nie. Hier kannst du ihren Ordner öffnen, spielen oder sie löschen.",
+            world_none: "Noch keine Welt gespeichert",
+            instances_title: "INSTALLATIONEN",
+            instances_intro: "Die sechs Versionen, die der Launcher starten kann, mit ihrem Ordner.",
+            instance_missing: "Nicht installiert",
+            delete: "Löschen",
+            delete_sure: "Sicher?",
+            cancel: "Abbrechen",
+            deleted: "Welt gelöscht.",
             version_label: "Launcher-Version",
             language_label: "SPRACHE",
             news_shortcut: "Neuigkeiten",
@@ -1905,6 +2003,68 @@ fn version_textures(base: &Path, game: GameVersion) -> bool {
     atlas_ok(&base.join("versions").join(game.id()).join("terrain.png"))
 }
 
+// ---------------------------------------------------------------------- worlds
+// Each build saves its own level.dat. They used to share the one next to the
+// executable, but the two families write different block ids in the same 4 MiB
+// array, so a world from one was read by the other as a field of stone.
+const WORLD_BYTES: usize = 256 * 256 * 64;
+
+fn worlds_root() -> PathBuf {
+    std::env::var("APPDATA")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| std::env::var("LOCALAPPDATA").ok().map(PathBuf::from))
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default()
+        .join("Rustium")
+        .join("worlds")
+}
+
+fn world_dir(game: GameVersion) -> PathBuf {
+    worlds_root().join(game.id())
+}
+
+/// The shared world older versions left next to the executables: copy it once to
+/// the build that can read it, never to all six.
+fn migrate_old_world(game: GameVersion, exe_dir: Option<&Path>, dir: &Path) {
+    let dest = dir.join("level.dat");
+    if dest.exists() {
+        return;
+    }
+    let Some(parent) = exe_dir else { return };
+    let src = parent.join("level.dat");
+    if !src.exists() {
+        return;
+    }
+    let marker = parent.join("level.dat.migrated");
+    if marker.exists() {
+        return;
+    }
+    let Some(legacy) = world_looks_legacy(&src) else { return };
+    let owner = if legacy { GameVersion::Rd20090515 } else { GameVersion::Rd132211 };
+    if owner != game {
+        return;
+    }
+    if std::fs::copy(&src, &dest).is_ok() {
+        let _ = std::fs::write(marker, b"migrated by Rustium 0.1.15\n");
+    }
+}
+
+/// The A-family only writes ids 0 and 1; the legacy family adds grass, dirt,
+/// brick, wood and bush. Anything above 1 belongs to the legacy format.
+fn world_looks_legacy(path: &Path) -> Option<bool> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut data = Vec::with_capacity(WORLD_BYTES + 1);
+    GzDecoder::new(std::io::BufReader::new(file))
+        .take((WORLD_BYTES + 1) as u64)
+        .read_to_end(&mut data)
+        .ok()?;
+    if data.len() != WORLD_BYTES {
+        return None;
+    }
+    Some(data.iter().any(|&b| b > 1))
+}
+
 // ---------------------------------------------------------------------- game
 
 fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion) -> R<()> {
@@ -1912,15 +2072,13 @@ fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion) -> R<()> {
     say!();
     say!("{}", fill(&t.starting, "{path}", &exe.display().to_string()));
     let mut cmd = std::process::Command::new(&exe);
-    // level.dat is written next to the executable, so "Open folder" always
-    // shows the world that was just saved, whatever directory the launcher was
-    // started from (a shortcut, a terminal, another drive).
-    let game_dir = exe
-        .parent()
-        .map(Path::to_path_buf)
-        .or_else(|| std::env::current_dir().ok())
-        .ok_or_else(|| "cannot find the game folder".to_string())?;
-    cmd.current_dir(game_dir);
+    // The world lives in its own folder under the launcher's data directory, so
+    // the six builds cannot read each other's level.dat.
+    let game_dir = world_dir(game);
+    std::fs::create_dir_all(&game_dir)
+        .map_err(|e| format!("cannot create the world folder {}: {e}", game_dir.display()))?;
+    migrate_old_world(game, exe.parent(), &game_dir);
+    cmd.current_dir(&game_dir);
     // Each build reads its own terrain.png from its own jar; only the original
     // rd-132211 port takes the atlas the picker detected by hand.
     if let (Some(r), GameVersion::Rd132211) = (atlas, game) {
@@ -2215,6 +2373,26 @@ mod ui {
     enum Tab {
         Home,
         News,
+        Worlds,
+    }
+
+    /// One saved world (or the place where it would be saved) and the build that
+    /// writes it.
+    struct WorldRow {
+        game: GameVersion,
+        dir: PathBuf,
+        size: Option<u64>,
+        modified: Option<std::time::SystemTime>,
+        exe: Option<PathBuf>,
+    }
+
+    enum WorldAction {
+        Play(GameVersion),
+        OpenDir(usize),
+        OpenInstall(usize),
+        Ask(usize),
+        Cancel,
+        Delete(usize),
     }
 
     enum Msg {
@@ -2848,6 +3026,9 @@ mod ui {
         /// One flag per `GameVersion::ALL`, filled once so the rail can draw its
         /// ready/replacement dots without decoding five jars every frame.
         version_ready: Vec<bool>,
+        worlds: Vec<WorldRow>,
+        /// Two-step delete: the button turns into "Sure?" until it is confirmed.
+        confirm_delete: Option<GameVersion>,
         /// Where the selected build and its level.dat live; "Open folder" shows
         /// this instead of the .minecraft textures folder.
         game_dir: PathBuf,
@@ -2877,6 +3058,7 @@ mod ui {
             };
             let tab = match which.as_str() {
                 "news" | "novedades" => Tab::News,
+                "worlds" | "mundos" => Tab::Worlds,
                 _ => Tab::Home,
             };
 
@@ -2889,15 +3071,21 @@ mod ui {
                 .iter()
                 .map(|v| version_textures(&opts.dir_minecraft, *v))
                 .collect();
-            let game_dir = find_game(&t, opts.game)
-                .ok()
-                .and_then(|p| p.parent().map(Path::to_path_buf))
-                .or_else(|| {
-                    std::env::current_exe()
-                        .ok()
-                        .and_then(|p| p.parent().map(Path::to_path_buf))
+            let game_dir = world_dir(opts.game);
+            let worlds = GameVersion::ALL
+                .iter()
+                .map(|&g| {
+                    let dir = world_dir(g);
+                    let meta = std::fs::metadata(dir.join("level.dat")).ok();
+                    WorldRow {
+                        game: g,
+                        dir,
+                        size: meta.as_ref().map(|m| m.len()),
+                        modified: meta.and_then(|m| m.modified().ok()),
+                        exe: find_game(&t, g).ok(),
+                    }
                 })
-                .unwrap_or_default();
+                .collect();
 
             Window {
                 opts,
@@ -2930,6 +3118,8 @@ mod ui {
                 bench_fps: None,
                 bench_java: None,
                 version_ready,
+                worlds,
+                confirm_delete: None,
                 game_dir,
                 fade: 0.0,
                 shown_tab: Tab::Home,
@@ -3141,6 +3331,8 @@ mod ui {
                                 Ok(()) => t.done.to_string(),
                                 Err(e) => format!("Error: {e}"),
                             };
+                            // The game just saved its level.dat: show it now.
+                            self.refresh_worlds();
                         }
                         Err(_) => break,
                     }
@@ -3227,15 +3419,23 @@ mod ui {
             if let Some(v) = pick {
                 self.opts.game = v;
                 save_config(self.lang, v);
-                if let Ok(p) = find_game(&t, v) {
-                    if let Some(dir) = p.parent() {
-                        self.game_dir = dir.to_path_buf();
-                    }
-                }
+                self.game_dir = world_dir(v);
             }
 
             // Footer: reserved at the bottom so it never falls off a short window.
-            ui.add_space((ui.available_height() - 112.0).max(6.0));
+            ui.add_space((ui.available_height() - 140.0).max(6.0));
+            if ui
+                .add(
+                    egui::Button::new(RichText::new(u.tab_worlds).size(12.5).color(SOFT))
+                        .fill(Color32::TRANSPARENT)
+                        .corner_radius(6),
+                )
+                .clicked()
+            {
+                self.tab = Tab::Worlds;
+                self.confirm_delete = None;
+                self.refresh_worlds();
+            }
             if ui
                 .add(
                     egui::Button::new(RichText::new(u.news_shortcut).size(12.5).color(SOFT))
@@ -3292,6 +3492,195 @@ mod ui {
                     .size(10.5)
                     .color(MUTED),
             );
+        }
+
+        fn refresh_worlds(&mut self) {
+            let t = texts(self.lang);
+            self.worlds = GameVersion::ALL
+                .iter()
+                .map(|&g| {
+                    let dir = world_dir(g);
+                    let meta = std::fs::metadata(dir.join("level.dat")).ok();
+                    WorldRow {
+                        game: g,
+                        dir,
+                        size: meta.as_ref().map(|m| m.len()),
+                        modified: meta.and_then(|m| m.modified().ok()),
+                        exe: find_game(&t, g).ok(),
+                    }
+                })
+                .collect();
+        }
+
+        /// Worlds and installs: one row per build, so a world can be played,
+        /// opened in Explorer or deleted, and its installation located.
+        fn worlds_tab(&mut self, ui: &mut egui::Ui) {
+            let u = ui_texts(self.lang);
+            let t = texts(self.lang);
+            ui.label(disp(u.worlds_title, 32.0).color(Color32::from_rgb(250, 244, 250)));
+            ui.label(RichText::new(u.worlds_intro).size(12.5).color(SOFT));
+            ui.add_space(12.0);
+
+            let mut action: Option<WorldAction> = None;
+            let h = (ui.available_height() - 40.0).max(180.0);
+            egui::ScrollArea::vertical()
+                .max_height(h)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for (i, row) in self.worlds.iter().enumerate() {
+                        let confirm = self.confirm_delete == Some(row.game);
+                        egui::Frame::NONE
+                            .fill(GLASS)
+                            .stroke(egui::Stroke::new(1.0_f32, EDGE))
+                            .corner_radius(14)
+                            .inner_margin(egui::Margin::symmetric(16, 12))
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.horizontal(|ui| {
+                                    let (dot, _) = ui.allocate_exact_size(
+                                        egui::vec2(9.0, 9.0),
+                                        egui::Sense::hover(),
+                                    );
+                                    ui.painter().circle_filled(
+                                        dot.center(),
+                                        4.0,
+                                        if row.size.is_some() { GREEN } else { MUTED },
+                                    );
+                                    ui.add_space(4.0);
+                                    ui.label(
+                                        RichText::new(row.game.id())
+                                            .size(14.0)
+                                            .strong()
+                                            .color(TEXT),
+                                    );
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if plain_button(ui, t.play, 92.0, true).clicked() {
+                                                action = Some(WorldAction::Play(row.game));
+                                            }
+                                        },
+                                    );
+                                });
+                                ui.add_space(3.0);
+                                let info = match (row.size, row.modified) {
+                                    (Some(n), Some(m)) => {
+                                        format!("{} · {}", bytes_txt(n), fecha_txt(m))
+                                    }
+                                    (Some(n), None) => bytes_txt(n),
+                                    _ => u.world_none.to_string(),
+                                };
+                                ui.label(RichText::new(&info).size(12.0).color(if row.size.is_some() {
+                                    SOFT
+                                } else {
+                                    MUTED
+                                }));
+                                ui.label(
+                                    RichText::new(row.dir.display().to_string())
+                                        .size(10.5)
+                                        .color(MUTED),
+                                );
+                                ui.add_space(6.0);
+                                ui.horizontal(|ui| {
+                                    if plain_button(ui, u.folder, 150.0, true).clicked() {
+                                        action = Some(WorldAction::OpenDir(i));
+                                    }
+                                    if row.size.is_some() {
+                                        if confirm {
+                                            if plain_button(ui, u.delete_sure, 110.0, true)
+                                                .clicked()
+                                            {
+                                                action = Some(WorldAction::Delete(i));
+                                            }
+                                            if plain_button(ui, u.cancel, 100.0, true).clicked() {
+                                                action = Some(WorldAction::Cancel);
+                                            }
+                                        } else if plain_button(ui, u.delete, 110.0, true).clicked() {
+                                            action = Some(WorldAction::Ask(i));
+                                        }
+                                    }
+                                });
+                            });
+                        ui.add_space(10.0);
+                    }
+
+                    ui.add_space(6.0);
+                    ui.label(disp(u.instances_title, 11.5).color(MUTED));
+                    ui.label(RichText::new(u.instances_intro).size(12.0).color(SOFT));
+                    ui.add_space(8.0);
+                    for (i, row) in self.worlds.iter().enumerate() {
+                        egui::Frame::NONE
+                            .fill(GLASS)
+                            .stroke(egui::Stroke::new(1.0_f32, EDGE))
+                            .corner_radius(12)
+                            .inner_margin(egui::Margin::symmetric(16, 10))
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new(row.game.id()).size(13.0).color(TEXT),
+                                    );
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if plain_button(ui, u.folder, 150.0, row.exe.is_some())
+                                                .clicked()
+                                            {
+                                                action = Some(WorldAction::OpenInstall(i));
+                                            }
+                                        },
+                                    );
+                                });
+                                let info = match &row.exe {
+                                    Some(p) => p
+                                        .parent()
+                                        .map(|d| d.display().to_string())
+                                        .unwrap_or_else(|| p.display().to_string()),
+                                    None => u.instance_missing.to_string(),
+                                };
+                                ui.label(RichText::new(info).size(10.5).color(
+                                    if row.exe.is_some() { MUTED } else { AMBER },
+                                ));
+                            });
+                        ui.add_space(8.0);
+                    }
+                });
+
+            match action {
+                Some(WorldAction::Play(g)) => {
+                    self.opts.game = g;
+                    self.game_dir = world_dir(g);
+                    save_config(self.lang, g);
+                    self.play();
+                }
+                Some(WorldAction::OpenDir(i)) => {
+                    if let Some(row) = self.worlds.get(i) {
+                        reveal_dir(&row.dir);
+                    }
+                }
+                Some(WorldAction::OpenInstall(i)) => {
+                    if let Some(exe) = self.worlds.get(i).and_then(|r| r.exe.as_ref()) {
+                        if let Some(dir) = exe.parent() {
+                            reveal_dir(dir);
+                        }
+                    }
+                }
+                Some(WorldAction::Ask(i)) => {
+                    self.confirm_delete = self.worlds.get(i).map(|r| r.game);
+                }
+                Some(WorldAction::Cancel) => self.confirm_delete = None,
+                Some(WorldAction::Delete(i)) => {
+                    if let Some(row) = self.worlds.get(i) {
+                        match std::fs::remove_file(row.dir.join("level.dat")) {
+                            Ok(()) => self.log.push(u.deleted.to_string()),
+                            Err(e) => self.log.push(format!("level.dat: {e}")),
+                        }
+                        self.confirm_delete = None;
+                    }
+                    self.refresh_worlds();
+                }
+                None => {}
+            }
         }
 
         fn update_banner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -3457,6 +3846,12 @@ mod ui {
                                 if tab_button(ui, u.tab_news, tab == Tab::News).clicked() {
                                     self.tab = Tab::News;
                                     self.show = None;
+                                }
+                                if tab_button(ui, u.tab_worlds, tab == Tab::Worlds).clicked() {
+                                    self.tab = Tab::Worlds;
+                                    self.show = None;
+                                    self.confirm_delete = None;
+                                    self.refresh_worlds();
                                 }
                             });
                             ui.add_space(16.0);
@@ -3669,7 +4064,7 @@ mod ui {
                                         });
                                 }
 
-                            } else {
+                            } else if tab == Tab::News {
                                 // The cards grow when opened, so the list scrolls
                                 // instead of pushing the footer off the window.
                                 let h = (ui.available_height() - 46.0).max(140.0);
@@ -3737,6 +4132,7 @@ mod ui {
                                             "rd-160052 · rd-20090515 · rd-161348",
                                             "rd-132328 · rd-20090515 · rd-160052 · rd-161348",
                                             "rd-131655 · Cave game tech test",
+                                            "Rustium 0.1.15",
                                         ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             cards.push((
@@ -3753,6 +4149,7 @@ mod ui {
                                                     5 => Art::Growth,
                                                     6 => Art::Zombies,
                                                     7 => Art::Cave,
+                                                    8 => Art::Worlds,
                                                     _ => Art::World,
                                                 },
                                             ));
@@ -3781,6 +4178,8 @@ mod ui {
                                         ui.add_space(12.0);
                                         ui.label(RichText::new(more_news).size(12.0).color(MUTED));
                                     });
+                            } else {
+                                self.worlds_tab(ui);
                             }
 
                             if let Some(txt) = self.show {
@@ -3846,7 +4245,94 @@ mod ui {
         }
     }
 
-fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, width: f32) {
+/// Human size for a level.dat (a fresh world is about 1 MB).
+    fn bytes_txt(n: u64) -> String {
+        if n >= 1024 * 1024 {
+            format!("{:.1} MB", n as f64 / 1048576.0)
+        } else {
+            format!("{:.0} KB", n as f64 / 1024.0)
+        }
+    }
+
+    /// Local date and time from the file's mtime, without pulling in a calendar
+    /// crate. Only used as a label in the worlds list.
+    #[cfg(windows)]
+    fn local_parts(secs: i64) -> Option<(i32, u32, u32, u32, u32)> {
+        #[repr(C)]
+        struct FileTime {
+            low: u32,
+            high: u32,
+        }
+        #[repr(C)]
+        struct SystemTime {
+            year: u16,
+            month: u16,
+            dow: u16,
+            day: u16,
+            hour: u16,
+            minute: u16,
+            second: u16,
+            ms: u16,
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn FileTimeToLocalFileTime(ft: *const FileTime, out: *mut FileTime) -> i32;
+            fn FileTimeToSystemTime(ft: *const FileTime, out: *mut SystemTime) -> i32;
+        }
+        // 100 ns ticks between 1601-01-01 and 1970-01-01, plus the seconds.
+        let ticks = secs * 10_000_000 + 116_444_736_000_000_000;
+        let ft = FileTime {
+            low: ticks as u32,
+            high: (ticks >> 32) as u32,
+        };
+        unsafe {
+            let mut local = FileTime { low: 0, high: 0 };
+            if FileTimeToLocalFileTime(&ft, &mut local) == 0 {
+                return None;
+            }
+            let mut st = SystemTime {
+                year: 0, month: 0, dow: 0, day: 0,
+                hour: 0, minute: 0, second: 0, ms: 0,
+            };
+            if FileTimeToSystemTime(&local, &mut st) == 0 {
+                return None;
+            }
+            Some((
+                st.year as i32,
+                st.month as u32,
+                st.day as u32,
+                st.hour as u32,
+                st.minute as u32,
+            ))
+        }
+    }
+
+    fn fecha_txt(t: std::time::SystemTime) -> String {
+        let secs = t
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0) as i64;
+        #[cfg(windows)]
+        if let Some((y, m, d, h, min)) = local_parts(secs) {
+            return format!("{y:04}-{m:02}-{d:02} {h:02}:{min:02}");
+        }
+        let days = secs.div_euclid(86400);
+        let rem = secs.rem_euclid(86400);
+        // civil_from_days (Howard Hinnant's algorithm).
+        let z = days + 719468;
+        let era = if z >= 0 { z } else { z - 146096 } / 146097;
+        let doe = z - era * 146097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = if m <= 2 { y + 1 } else { y };
+        format!("{y:04}-{m:02}-{d:02} {:02}:{:02}", rem / 3600, (rem % 3600) / 60)
+    }
+
+    fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, width: f32) {
         egui::Frame::NONE
             .fill(GLASS)
             .stroke(egui::Stroke::new(1.0_f32, EDGE))
@@ -3879,6 +4365,8 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
         Growth,
         /// The terraced caves of rd-131655, the Cave game tech test.
         Cave,
+        /// The new Worlds tab.
+        Worlds,
     }
 
     fn news_shot(
@@ -3909,6 +4397,7 @@ fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32, 
                 Art::Ticks => ("news-ticks", include_bytes!("../../assets/news_ticks.rgb")),
                 Art::Growth => ("news-growth", include_bytes!("../../assets/news_growth.rgb")),
                 Art::Cave => ("news-cave", include_bytes!("../../assets/news_cave.rgb")),
+                Art::Worlds => ("news-worlds", include_bytes!("../../assets/news_worlds.rgb")),
                 Art::Launcher => unreachable!(),
             };
             let shot = news_shot(ui.ctx(), name, bytes);

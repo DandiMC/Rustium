@@ -11,13 +11,15 @@ y, si no hay ninguna, dibuja las suyas.
 
 ![El launcher de Rustium](docs/screenshots/launcher.png)
 
+![La pestaña Mundos](docs/screenshots/launcher-worlds.png)
+
 ![Panel de rendimiento comparando Java y Rust](docs/screenshots/launcher-performance.png)
 
 ![rd-131655, el Cave game tech test](docs/screenshots/rd-131655.png)
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.1.14-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.1.15-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -41,6 +43,14 @@ El selector encima de «Jugar» arranca cualquiera de las seis versiones pre-cl�
 
 rd-131655 (el «Cave game tech test») nunca tuvo jar publicado. Está reconstruido
 a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-132211.
+
+## Tus mundos
+
+Cada versión guarda su mundo en `%APPDATA%\Rustium\worlds\<versión>\level.dat`,
+así que una partida de rd-132211 nunca se abre con los bloques de otra familia.
+La pestaña **Mundos** del launcher enseña cuánto ocupa cada uno y cuándo lo
+jugaste, abre su carpeta y lo borra con confirmación. Justo debajo están las seis
+instalaciones con su carpeta.
 
 ## Para compilar desde el código
 
@@ -95,7 +105,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.1.14-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.1.15-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 

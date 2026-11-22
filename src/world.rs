@@ -28,6 +28,13 @@ pub struct Level {
     // lightDepths del original: altura del bloque solido mas alto de cada columna
     // (indice x + y*WIDTH). Base de las sombras: lo que queda por debajo va a SHADED.
     pub light_depths: Vec<i32>,
+    // Como elige la textura el original. En rd-132211/rd-132328 Chunk.rebuild no
+    // mira la columna: es verde solo el bloque que esta justo en depth*2/3 y gris
+    // todo lo demas. Por eso poner un bloque encima no cambia el de abajo, y uno
+    // con sombra encima sigue siendo verde. rd-131655 no tuvo jar (su superficie
+    // cambia de altura y las cuevas dejan terrazas al descubierto), asi que ahi la
+    // hierba es la tapa de cada columna.
+    pub grass_on_surface: bool,
 }
 
 // Caja alineada a los ejes, equivalente al AABB del original.
@@ -139,6 +146,7 @@ impl Level {
         let mut level = Level {
             blocks,
             light_depths: vec![0; WIDTH * HEIGHT],
+            grass_on_surface: false,
         };
         level.recalc_light();
         // El original carga level.dat justo despues de generar y de calcular la
@@ -163,9 +171,24 @@ impl Level {
         let mut level = Level {
             blocks,
             light_depths: vec![0; WIDTH * HEIGHT],
+            grass_on_surface: true,
         };
         level.recalc_light();
         level
+    }
+
+    /// Textura del bloque: 0 = verde (Tile.rock del original), 1 = gris
+    /// (Tile.grass). El id del bloque no la decide; la decide la altura, como
+    /// Chunk.rebuild.
+    pub fn tile_texture(&self, x: i32, y: i32, z: i32) -> f32 {
+        let grass = if self.grass_on_surface {
+            let top = self.light_depths[y as usize * WIDTH + x as usize];
+            z == top
+        } else {
+            // Level.depth * 2 / 3, la misma cota que escribe generateMap.
+            z == (DEPTH * 2 / 3) as i32
+        };
+        if grass { 0.0 } else { 1.0 }
     }
 
     fn recalc_light(&mut self) {
@@ -384,7 +407,41 @@ impl Mundo for Level {
 
 #[cfg(test)]
 mod tests {
-    use super::BlockBox;
+    use super::*;
+
+    #[test]
+    fn colocar_encima_no_cambia_la_textura_del_bloque_de_abajo() {
+        // rd-132211/rd-132328: verde solo en la cota fija 42, como Chunk.rebuild.
+        let mut level = Level::from_blocks(vec![0; WIDTH * HEIGHT * DEPTH]);
+        level.grass_on_surface = false;
+        for x in 0..3 {
+            for y in 0..3 {
+                for z in 0..=42 {
+                    level.set(x, y, z, GRASS);
+                }
+            }
+        }
+        assert_eq!(level.tile_texture(1, 1, 42), 0.0);
+        // Poner un bloque encima (y en sombra) no convierte el de abajo en gris.
+        level.set(1, 1, 43, GRASS);
+        assert_eq!(level.tile_texture(1, 1, 42), 0.0);
+        assert_eq!(level.tile_texture(1, 1, 43), 1.0);
+        assert_eq!(level.tile_texture(1, 1, 41), 1.0);
+    }
+
+    #[test]
+    fn rd131655_usa_la_superficie_de_cada_columna() {
+        let mut level = Level::from_blocks(vec![0; WIDTH * HEIGHT * DEPTH]);
+        for z in 0..=10 {
+            level.set(4, 5, z, GRASS);
+        }
+        for z in 0..=20 {
+            level.set(6, 5, z, GRASS);
+        }
+        assert_eq!(level.tile_texture(4, 5, 10), 0.0);
+        assert_eq!(level.tile_texture(6, 5, 20), 0.0);
+        assert_eq!(level.tile_texture(6, 5, 19), 1.0);
+    }
 
     #[test]
     fn grown_extends_both_sides() {

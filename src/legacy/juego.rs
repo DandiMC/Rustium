@@ -81,6 +81,12 @@ struct Jugador {
     y_rot: f32,
     x_rot: f32,
     on_ground: bool,
+    // La caja de colision se guarda, como en Entity del original. Antes se
+    // recalculaba desde la altura del ojo en cada tick (z - 1.62) y el redondeo
+    // de f32 la dejaba una milesima por debajo del suelo: el clip vertical ya no
+    // la reconocia como apoyo y el jugador se hundia un bloque entero a ciertas
+    // alturas.
+    bb: BlockBox,
 }
 
 impl Jugador {
@@ -117,7 +123,7 @@ impl Jugador {
                 pz = n[2];
             }
         }
-        Jugador {
+        let mut j = Jugador {
             x: px,
             y: py,
             z: pz,
@@ -128,15 +134,27 @@ impl Jugador {
             y_rot,
             x_rot,
             on_ground: false,
-        }
+            bb: BlockBox { x0: 0.0, x1: 0.0, y0: 0.0, y1: 0.0, z0: 0.0, z1: 0.0 },
+        };
+        j.set_pos(px, py, pz);
+        j
+    }
+
+    // Entity.setPos: la caja se coloca con la posicion, no se deriva de ella
+    // cada tick. Asi el borde superior de un bloque queda exacto al aterrizar.
+    fn set_pos(&mut self, x: f32, y: f32, z: f32) {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+        self.bb = BlockBox {
+            x0: x - 0.3, x1: x + 0.3,
+            y0: y - 0.3, y1: y + 0.3,
+            z0: z - 1.62, z1: z + 0.18,
+        };
     }
 
     fn bbox(&self) -> BlockBox {
-        BlockBox {
-            x0: self.x - 0.3, x1: self.x + 0.3,
-            y0: self.y - 0.3, y1: self.y + 0.3,
-            z0: self.z - 1.62, z1: self.z + 0.18,
-        }
+        self.bb
     }
 
     // Arnes de careo: RD_FIJA=1 fija la camara en cada frame, como el parche
@@ -148,9 +166,7 @@ impl Jugador {
         if let Ok(v) = std::env::var("RD_POS") {
             let n: Vec<f32> = v.split(',').filter_map(|t| t.trim().parse().ok()).collect();
             if n.len() == 3 {
-                self.x = n[0];
-                self.y = n[1];
-                self.z = n[2];
+                self.set_pos(n[0], n[1], n[2]);
                 self.xo = n[0];
                 self.yo = n[1];
                 self.zo = n[2];
@@ -172,7 +188,7 @@ impl Jugador {
         let (xa0, ya0, za0) = (xa, ya, za);
         let area = self.bbox().expanded(xa, ya, za);
         let cubes = nivel.cubes(&area);
-        let mut bb = self.bbox();
+        let mut bb = self.bb;
 
         let mut dz = za;
         for c in &cubes { dz = c.clip_z(&bb, dz); }
@@ -191,6 +207,7 @@ impl Jugador {
         if za0 != dz { self.zd = 0.0; }
         if ya0 != dy { self.yd = 0.0; }
 
+        self.bb = bb;
         self.x = (bb.x0 + bb.x1) / 2.0;
         self.y = (bb.y0 + bb.y1) / 2.0;
         self.z = bb.z0 + 1.62;
@@ -209,9 +226,11 @@ impl Jugador {
     // Entity.resetPos: posicion al azar en todo el mundo y velocidad a cero.
     // Lo usa la R del original en cada tick mientras se mantiene pulsada.
     fn reset_pos(&mut self) {
-        self.x = randf() * WIDTH as f32;
-        self.y = randf() * HEIGHT as f32;
-        self.z = DEPTH as f32 + 10.0;
+        self.set_pos(
+            randf() * WIDTH as f32,
+            randf() * HEIGHT as f32,
+            DEPTH as f32 + 10.0,
+        );
         // Entity.resetPos del original solo llama a setPos: conserva la
         // velocidad actual. No la pongas a cero aqui.
     }
@@ -792,6 +811,60 @@ mod tests {
         j.zd = 3.0;
         j.reset_pos();
         assert_eq!((j.xd, j.yd, j.zd), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn el_jugador_no_atraviesa_suelos_a_ninguna_altura() {
+        for altura in [18, 24, 30, 36, 42, 48, 52, 56, 60] {
+            let mut nivel = Nivel::new(12345);
+            // Una plataforma ancha y despejada: el jugador cae y luego camina
+            // por encima, sin colinas naturales de por medio.
+            for x in 64..192 {
+                for y in 64..192 {
+                    for z in 0..DEPTH {
+                        let id = if z <= altura { tiles::PIEDRA } else { tiles::AIRE };
+                        nivel.set(x as i32, y as i32, z as i32, id);
+                    }
+                }
+            }
+            let mut j = Jugador::new();
+            j.set_pos(100.5, 170.5, 63.0);
+            j.xo = j.x;
+            j.yo = j.y;
+            j.zo = j.z;
+            let mut peor = f32::INFINITY;
+            // 300 ticks son ~30 bloques andando: sigue dentro de la plataforma.
+            for i in 0..300 {
+                j.tick(&nivel, 1.0, 0.0, false, false);
+                if i > 80 {
+                    peor = peor.min(j.bb.z0);
+                }
+            }
+            println!("altura={altura} z={:.3} pie={:.3} peor={peor:.3} on={}", j.z, j.bb.z0, j.on_ground);
+            assert!(
+                peor >= altura as f32 + 1.0,
+                "altura={altura}: el jugador se hundio hasta pie={peor:.3}"
+            );
+        }
+    }
+
+    #[test]
+    fn el_jugador_cae_y_se_queda_sobre_el_suelo() {
+        let nivel = Nivel::new(12345);
+        let base = nivel.light[128 + 128 * WIDTH];
+        let mut j = Jugador::new();
+        j.set_pos(128.5, 128.5, 74.0);
+        j.xo = j.x;
+        j.yo = j.y;
+        j.zo = j.z;
+        for i in 0..400 {
+            j.tick(&nivel, 0.0, 0.0, false, false);
+            if i % 20 == 0 {
+                println!("i={i} z={:.3} z0={:.3} on={}", j.z, j.z - 1.62, j.on_ground);
+            }
+        }
+        println!("base={base} z={:.3}", j.z);
+        assert!(j.z >= base as f32 + 1.0, "se hundio: z={} base={}", j.z, base);
     }
 
     #[test]

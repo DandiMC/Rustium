@@ -11,13 +11,15 @@ and, if there is none, draws its own.
 
 ![The Rustium launcher](docs/screenshots/launcher.png)
 
+![The Worlds tab](docs/screenshots/launcher-worlds.png)
+
 ![Performance panel comparing Java and Rust](docs/screenshots/launcher-performance.png)
 
 ![rd-131655, the Cave game tech test](docs/screenshots/rd-131655.png)
 
 ## To play
 
-You only need **the installer**: `Rustium-0.1.14-setup.exe`.
+You only need **the installer**: `Rustium-0.1.15-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -41,6 +43,14 @@ The picker above the Play button starts any of the six pre-classic builds:
 
 rd-131655 (the "Cave game tech test") never had a released jar. It is reconstructed
 from the Minecraft Wiki and uses the same RubyDung textures as rd-132211.
+
+## Your worlds
+
+Each build saves its world in `%APPDATA%\Rustium\worlds\<build>\level.dat`, so a
+save from rd-132211 is never opened with another family's block ids. The launcher's
+**Worlds** tab shows how much space each one takes and when you last played it,
+opens its folder and deletes it after asking. The six installs sit right below,
+each with its own folder.
 
 ## To build from source
 
@@ -95,7 +105,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.1.14-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.1.15-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 
