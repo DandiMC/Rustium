@@ -13,7 +13,7 @@ use super::mesh;
 use super::particula::{self, Particula};
 use super::tiles;
 use crate::entity::{randf, Fisica, Zombie};
-use crate::render::{Renderer, Vertex};
+use crate::render::{tamano_inicial, Renderer, Vertex};
 use crate::world::BlockBox;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -68,7 +68,24 @@ pub fn correr(version: &'static str) {
 /// con NoiseMap, y los clics funcionan como alli (el izquierdo rompe o pinta
 /// segun el modo que cambia el derecho).
 pub fn correr_clasico(version: &'static str) {
-    correr_modo(version, Modo::Clasico);
+    correr_clasico_con(version, 1024, 768, true);
+}
+
+/// Reconstrucciones (sus jars no se conservan): 0.0.9a y 0.0.10a se montan
+/// sobre el codigo de c0.0.11a, que es el primero que queda. La wiki da dos
+/// cambios: 0.0.9a corria a 640x480 y Escape cerraba el juego; 0.0.10a anadio
+/// que Escape solo suelte el raton.
+pub fn correr_clasico_con(
+    version: &'static str,
+    ancho: u32,
+    alto: u32,
+    escape_libera: bool,
+) {
+    let event_loop = EventLoop::new().unwrap();
+    let mut app = App::new(version, Modo::Clasico);
+    app.tamano = tamano_inicial((ancho, alto));
+    app.escape_libera = escape_libera;
+    event_loop.run_app(&mut app).unwrap();
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -297,6 +314,9 @@ struct App {
     edit_mode: u8,
     // Classic cuenta los chunk updates que enseña en el HUD (Chunk.updates).
     chunk_updates: u32,
+    // Ventana de cada build y que hace Escape (antes de 0.0.10a cerraba).
+    tamano: (u32, u32),
+    escape_libera: bool,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     nivel: Nivel,
@@ -312,6 +332,16 @@ struct App {
     fps_t: Instant,
     fps: u32,
     show_fps: bool,
+    // Classic ya enseña los fps en su propio HUD: F3 lo oculta en vez de abrir
+    // otro contador. Empieza visible, como el original.
+    hud_visible: bool,
+    // Extras que el launcher activa por instancia (por defecto, todos menos G).
+    extra_coords: bool,
+    extra_shots: bool,
+    extra_fullscreen: bool,
+    g_repeat: bool,
+    fullscreen: bool,
+    pedir_captura: bool,
     hit: Option<((i32, i32, i32), (i32, i32, i32))>,
     smoke_frames: u32,
 }
@@ -362,6 +392,8 @@ impl App {
             modo,
             edit_mode: 0,
             chunk_updates: 0,
+            tamano: tamano_inicial((1024, 768)),
+            escape_libera: true,
             window: None,
             renderer: None,
             nivel,
@@ -377,8 +409,47 @@ impl App {
             fps_t: Instant::now(),
             fps: 0,
             show_fps: false,
+            hud_visible: true,
+            extra_coords: std::env::var_os("RD_F3_COORDS").is_some(),
+            extra_shots: std::env::var_os("RD_F2_SHOTS").is_some(),
+            extra_fullscreen: std::env::var_os("RD_F11_FULLSCREEN").is_some(),
+            g_repeat: std::env::var_os("RD_G_REPEAT").is_some(),
+            fullscreen: false,
+            pedir_captura: false,
             hit: None,
             smoke_frames: 0,
+        }
+    }
+
+    fn actualizar_hud(&mut self) {
+        if self.modo != Modo::Clasico {
+            return;
+        }
+        let mut lineas = if self.hud_visible {
+            vec![
+                (self.version.to_string(), 2.0, 2.0),
+                (
+                    format!("{} fps, {} chunk updates", self.fps, self.chunk_updates),
+                    2.0,
+                    12.0,
+                ),
+            ]
+        } else {
+            Vec::new()
+        };
+        // Extra de instancia: coordenadas junto al HUD, actualizadas por frame.
+        if self.hud_visible && self.extra_coords {
+            lineas.push((
+                format!(
+                    "x {:.1} y {:.1} z {:.1}",
+                    self.jugador.x, self.jugador.z, self.jugador.y
+                ),
+                2.0,
+                22.0,
+            ));
+        }
+        if let Some(r) = &mut self.renderer {
+            r.hud_lineas = lineas;
         }
     }
 
@@ -533,7 +604,7 @@ impl ApplicationHandler for App {
         if smoke {
             event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
         }
-        let (w, h) = if smoke { (480, 360) } else { (1024, 768) };
+        let (w, h) = if smoke { (480, 360) } else { self.tamano };
         let window = Arc::new(
             event_loop
                 .create_window(
@@ -557,6 +628,7 @@ impl ApplicationHandler for App {
         // negro para las caras a oscuras; su renderHit usa medio alfa.
         renderer.fog_densidad = 0.06;
         renderer.hit_alpha_escala = 0.5;
+        renderer.hit_preview = None;
         self.renderer = Some(renderer);
         // Mouse.setGrabbed(true) del original: el primer clic debe romper o
         // colocar, no quedarse solo en capturar el cursor.
@@ -583,14 +655,50 @@ impl ApplicationHandler for App {
                     r.surface.configure(&r.device, &r.config);
                 }
             }
-            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state, .. }, .. } => {
-                if state == ElementState::Pressed {
+            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state, repeat, .. }, .. } => {
+                // Las teclas autorepetidas no deben disparar acciones: mantener G
+                // generaba un zombi por cada repeticion en vez de uno por pulsacion.
+                // Solo G puede repetir, y unicamente si la instancia lo pide.
+                let g_repite = self.g_repeat
+                    && matches!(&logical_key, Key::Character(c) if c.eq_ignore_ascii_case("g"));
+                if state == ElementState::Pressed && (!repeat || g_repite) {
                     match &logical_key {
                         Key::Named(NamedKey::Escape) => {
-                            let _ = self.nivel.save();
-                            event_loop.exit();
+                            if self.escape_libera {
+                                // 0.0.10a: Escape suelta el raton en vez de cerrar.
+                                let _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                                window.set_cursor_visible(true);
+                                self.grabbed = false;
+                            } else {
+                                let _ = self.nivel.save();
+                                event_loop.exit();
+                            }
                         }
-                        Key::Named(NamedKey::F3) => self.show_fps = !self.show_fps,
+                        Key::Named(NamedKey::F3) => {
+                            if self.modo == Modo::Clasico {
+                                // Classic: F3 oculta o muestra su HUD (version y
+                                // "N fps, N chunk updates"), que ya viene visible.
+                                self.hud_visible = !self.hud_visible;
+                                self.actualizar_hud();
+                            } else {
+                                self.show_fps = !self.show_fps;
+                            }
+                        }
+                        Key::Named(NamedKey::F2) => {
+                            if self.extra_shots {
+                                self.pedir_captura = true;
+                            }
+                        }
+                        Key::Named(NamedKey::F11) => {
+                            if self.extra_fullscreen {
+                                self.fullscreen = !self.fullscreen;
+                                window.set_fullscreen(if self.fullscreen {
+                                    Some(winit::window::Fullscreen::Borderless(None))
+                                } else {
+                                    None
+                                });
+                            }
+                        }
                         // RubyDung: 1 -> piedra, 2 -> tierra, 3 -> ladrillo,
                         // 4 -> madera, 6 -> arbusto. El Java usa los keycodes
                         // 2/3/4/5/7, que en LWJGL son esas teclas fisicas.
@@ -791,10 +899,7 @@ impl ApplicationHandler for App {
             if self.modo == Modo::Clasico {
                 // Minecraft.run: "N fps, N chunk updates" y se pone a cero el
                 // contador cada segundo. La version va encima, en (2,2).
-                let stats = format!("{} fps, {} chunk updates", self.fps, self.chunk_updates);
-                if let Some(r) = &mut self.renderer {
-                    r.hud_lineas = vec![(self.version.to_string(), 2.0, 2.0), (stats, 2.0, 12.0)];
-                }
+                self.actualizar_hud();
                 self.chunk_updates = 0;
             }
             if std::env::var("RD_LOG_POS").is_ok() {
@@ -867,8 +972,12 @@ impl ApplicationHandler for App {
 
         // Classic renderHit: en modo pintar el velo va en la casilla donde
         // caeria el bloque, no en la apuntada.
+        // renderHit con mode 1: el preview va en la casilla contigua y dibuja
+        // el bloque elegido, no el velo blanco del modo romper.
         let mut hit = self.hit;
+        let mut preview = None;
         if self.modo == Modo::Clasico && self.edit_mode == 1 {
+            preview = Some(self.pintura);
             if let Some(((x, y, z), n)) = hit {
                 hit = Some(((x + n.0, y + n.1, z + n.2), n));
             }
@@ -876,8 +985,26 @@ impl ApplicationHandler for App {
         let fps = if self.show_fps { Some(self.fps) } else { None };
         let yaw = self.jugador.y_rot.to_radians();
         let pitch = self.jugador.x_rot.to_radians();
+        // El HUD de Classic se refresca cada frame: las coordenadas del extra
+        // tienen que seguir al jugador, no esperar al contador de medio segundo.
+        if self.modo == Modo::Clasico {
+            self.actualizar_hud();
+        }
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {
             r.set_particulas(&pv, &pv_fondo);
+            r.hit_preview = preview;
+            // Extras de instancia: coordenadas en las versiones sin HUD propio
+            // (F3) y captura de pantalla (F2).
+            r.coords = if self.modo != Modo::Clasico && self.show_fps && self.extra_coords {
+                Some(format!(
+                    "x {:.1} y {:.1} z {:.1}",
+                    self.jugador.x, self.jugador.z, self.jugador.y
+                ))
+            } else {
+                None
+            };
+            r.pedir_captura = self.pedir_captura;
+            self.pedir_captura = false;
             // El original siempre enseña el bloque elegido en la esquina
             r.hud_bloque = Some(self.pintura);
             r.render(eye, yaw, pitch, hit, fps, &mv, &mv_fondo);

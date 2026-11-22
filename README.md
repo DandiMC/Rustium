@@ -1,8 +1,8 @@
 # Rustium
 
 Launcher and Rust port of the pre-classic Minecraft builds (rd-131655, rd-132211,
-rd-132328, rd-20090515, rd-160052 and rd-161348) and the first Classic (c0.0.11a),
-with no Microsoft account and nothing
+rd-132328, rd-20090515, rd-160052 and rd-161348) and the first Classics
+(c0.0.9a, c0.0.10a and c0.0.11a), with no Microsoft account and nothing
 downloaded from Mojang: it reads the textures of the copy already on your computer
 and, if there is none, draws its own.
 
@@ -31,8 +31,8 @@ You only need **the installer**: `Rustium-0.1.15-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the seven builds (the six pre-classics
-and the first Classic):
+The picker above the Play button starts any of the nine builds (the six pre-classics
+and the first three Classics):
 
 | build | what it brings |
 |---|---|
@@ -42,18 +42,27 @@ and the first Classic):
 | rd-20090515 | particles, more blocks and the block cube in the corner |
 | rd-160052 | the same engine, one earlier build |
 | rd-161348 | the last pre-classic build (its jar is the same as rd-20090515's) |
-| c0.0.11a | the first Classic: `NoiseMap` terrain with caves, an fps/chunk-update HUD and the paint mode the right button toggles |
+| c0.0.9a | reconstructed: build mode with the white overlay on all sides, fps counter, 640×480 and Escape quits |
+| c0.0.10a | reconstructed: like 0.0.9a, but Escape only releases the mouse |
+| c0.0.11a | the first Classic that survives: `NoiseMap` terrain with caves, an fps/chunk-update HUD and the paint mode the right button toggles |
+
+c0.0.9a and c0.0.10a are **reconstructions**: their jars were never archived. They
+are built from c0.0.11a's code plus what the Minecraft Wiki documents for each, and
+use c0.0.11a's textures and font.
 
 rd-131655 (the "Cave game tech test") never had a released jar. It is reconstructed
 from the Minecraft Wiki and uses the same RubyDung textures as rd-132211.
 
 ## Your worlds
 
-Each build saves its world in `%APPDATA%\Rustium\worlds\<build>\level.dat`, so a
-save from rd-132211 is never opened with another family's block ids. The launcher's
-**Worlds** tab shows how much space each one takes and when you last played it,
-opens its folder and deletes it after asking. The seven installs sit right below,
-each with its own folder.
+Each instance saves its world in `%APPDATA%\Rustium\worlds\<instance>\level.dat` by
+default, and can point at any other folder from its options, so a save from
+rd-132211 is never opened with another family's block ids. The nine default
+instances reuse the build id, so worlds saved before instances existed stay where
+they are. Each instance also remembers its own initial window size; leave the
+resolution empty to use the size that build originally had. The launcher's **Worlds** tab shows how much space each one takes
+and when you last played it, opens its folder and deletes it after asking. The
+installs sit right below, each with its own folder.
 
 ## To build from source
 

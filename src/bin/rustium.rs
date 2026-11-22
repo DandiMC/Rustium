@@ -88,17 +88,21 @@ enum GameVersion {
     Rd20090515,
     Rd160052,
     Rd161348,
+    C009a,
+    C010a,
     C0011a,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 7] = [
+    const ALL: [GameVersion; 9] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
         GameVersion::Rd20090515,
         GameVersion::Rd160052,
         GameVersion::Rd161348,
+        GameVersion::C009a,
+        GameVersion::C010a,
         GameVersion::C0011a,
     ];
 
@@ -111,6 +115,8 @@ impl GameVersion {
             GameVersion::Rd20090515 => "rd-20090515",
             GameVersion::Rd160052 => "rd-160052",
             GameVersion::Rd161348 => "rd-161348",
+            GameVersion::C009a => "c0.0.9a",
+            GameVersion::C010a => "c0.0.10a",
             GameVersion::C0011a => "c0.0.11a",
         }
     }
@@ -137,6 +143,12 @@ impl GameVersion {
             GameVersion::Rd161348 => {
                 if win { "rd161348.exe" } else { "rd161348" }
             }
+            GameVersion::C009a => {
+                if win { "classic009a.exe" } else { "classic009a" }
+            }
+            GameVersion::C010a => {
+                if win { "classic010a.exe" } else { "classic010a" }
+            }
             GameVersion::C0011a => {
                 if win { "classic011a.exe" } else { "classic011a" }
             }
@@ -146,6 +158,87 @@ impl GameVersion {
     fn from_id(s: &str) -> Option<Self> {
         GameVersion::ALL.iter().copied().find(|v| v.id() == s.trim())
     }
+}
+
+/// One named copy of a build: its own world folder and its own extras. The
+/// nine default instances keep the old per-version folders, so existing worlds
+/// are picked up as they are.
+#[derive(Clone)]
+struct Instance {
+    id: String,
+    name: String,
+    game: GameVersion,
+    coords: bool,
+    shots: bool,
+    fullscreen: bool,
+    g_repeat: bool,
+    /// Custom game folder; None keeps the default `worlds/<id>`.
+    dir: Option<PathBuf>,
+    /// Initial window size; 0 on a side means that build's original size.
+    width: u32,
+    height: u32,
+}
+
+impl Instance {
+    fn fresh(game: GameVersion) -> Self {
+        Instance {
+            id: game.id().to_string(),
+            name: game.id().to_string(),
+            game,
+            // Sensible defaults: the extras are opt-out, except the G repeat,
+            // which changes how the original behaves.
+            coords: true,
+            shots: true,
+            fullscreen: true,
+            g_repeat: false,
+            dir: None,
+            width: 0,
+            height: 0,
+        }
+    }
+}
+
+/// Draft for the "new instance" dialog: nothing is written to disk until the
+/// player presses Create, so the + button never creates a surprise copy.
+#[derive(Clone)]
+struct NewInstance {
+    name: String,
+    game: GameVersion,
+    coords: bool,
+    shots: bool,
+    fullscreen: bool,
+    g_repeat: bool,
+    /// Empty means the default folder. Kept as text while editing.
+    dir: String,
+    width: String,
+    height: String,
+}
+
+impl NewInstance {
+    fn fresh(game: GameVersion, name: String) -> Self {
+        NewInstance {
+            name,
+            game,
+            coords: true,
+            shots: true,
+            fullscreen: true,
+            g_repeat: false,
+            dir: String::new(),
+            width: String::new(),
+            height: String::new(),
+        }
+    }
+}
+
+/// What the launcher passes to the game for the current instance.
+#[derive(Clone, Copy, Default)]
+struct Extras {
+    coords: bool,
+    shots: bool,
+    fullscreen: bool,
+    g_repeat: bool,
+    width: u32,
+    height: u32,
 }
 
 #[derive(Clone)]
@@ -544,6 +637,27 @@ struct UiTexts {
     sidebar_instances: &'static str,
     instance_ready: &'static str,
     instance_replacement: &'static str,
+    instance_new: &'static str,
+    instance_new_title: &'static str,
+    instance_version: &'static str,
+    instance_game_dir: &'static str,
+    instance_resolution: &'static str,
+    instance_dir_hint: &'static str,
+    instance_resolution_hint: &'static str,
+    browse: &'static str,
+    instance_extras: &'static str,
+    instance_create: &'static str,
+    instance_copy_suffix: &'static str,
+    instance_options: &'static str,
+    instance_name: &'static str,
+    extra_coords: &'static str,
+    extra_shots: &'static str,
+    extra_fullscreen: &'static str,
+    extra_grepeat: &'static str,
+    instance_duplicate: &'static str,
+    instance_delete: &'static str,
+    instance_delete_hint: &'static str,
+    close: &'static str,
     // Worlds and installs tab.
     tab_worlds: &'static str,
     worlds_title: &'static str,
@@ -977,15 +1091,36 @@ fn load_local_news() -> Vec<(String, String, String, String, String, String, usi
 fn ui_texts(l: Lang) -> UiTexts {
     match l {
         Lang::En => UiTexts {
-            sidebar_instances: "VERSIONS",
+            sidebar_instances: "INSTANCES",
             instance_ready: "Ready",
             instance_replacement: "Replacement texture",
+            instance_new: "New instance",
+            instance_new_title: "Create new installation",
+            instance_version: "VERSION",
+            instance_game_dir: "GAME DIRECTORY",
+            instance_resolution: "RESOLUTION",
+            instance_dir_hint: "Empty = {path}",
+            instance_resolution_hint: "auto = original window size",
+            browse: "Browse...",
+            instance_extras: "MORE OPTIONS",
+            instance_create: "Create instance",
+            instance_copy_suffix: "copy",
+            instance_options: "Instance options",
+            instance_name: "NAME",
+            extra_coords: "F3 coordinates",
+            extra_shots: "F2 screenshots",
+            extra_fullscreen: "F11 fullscreen",
+            extra_grepeat: "G auto-repeat",
+            instance_duplicate: "Duplicate",
+            instance_delete: "Delete instance",
+            instance_delete_hint: "The world folder is kept on disk.",
+            close: "Close",
             tab_worlds: "Worlds",
             worlds_title: "Your worlds",
-            worlds_intro: "Each build keeps its own world, so they never mix. Open its folder, play it or delete it from here.",
+            worlds_intro: "Each instance keeps its own world, so they never mix. Open its folder, play it or delete it from here.",
             world_none: "No world saved yet",
             instances_title: "INSTALLS",
-            instances_intro: "The seven builds the launcher can start, with the folder each one lives in.",
+            instances_intro: "The executable behind each instance, with the folder it lives in.",
             instance_missing: "Not installed",
             delete: "Delete",
             delete_sure: "Sure?",
@@ -1029,15 +1164,36 @@ fn ui_texts(l: Lang) -> UiTexts {
             bench_java_wait: "Measuring Java...",
         },
         Lang::Es => UiTexts {
-            sidebar_instances: "VERSIONES",
+            sidebar_instances: "INSTANCIAS",
             instance_ready: "Listo",
             instance_replacement: "Textura de reemplazo",
+            instance_new: "Nueva instancia",
+            instance_new_title: "Crear nueva instalación",
+            instance_version: "VERSIÓN",
+            instance_game_dir: "CARPETA DEL JUEGO",
+            instance_resolution: "RESOLUCIÓN",
+            instance_dir_hint: "Vacío = {path}",
+            instance_resolution_hint: "auto = tamaño original de la versión",
+            browse: "Examinar...",
+            instance_extras: "MÁS OPCIONES",
+            instance_create: "Crear instancia",
+            instance_copy_suffix: "copia",
+            instance_options: "Opciones de la instancia",
+            instance_name: "NOMBRE",
+            extra_coords: "Coordenadas con F3",
+            extra_shots: "Capturas con F2",
+            extra_fullscreen: "Pantalla completa con F11",
+            extra_grepeat: "Autorepetición de G",
+            instance_duplicate: "Duplicar",
+            instance_delete: "Borrar instancia",
+            instance_delete_hint: "La carpeta del mundo se conserva en el disco.",
+            close: "Cerrar",
             tab_worlds: "Mundos",
             worlds_title: "Tus mundos",
-            worlds_intro: "Cada versión guarda su propio mundo, así nunca se mezclan. Desde aquí puedes abrir su carpeta, jugarlo o borrarlo.",
+            worlds_intro: "Cada instancia guarda su propio mundo, así nunca se mezclan. Desde aquí puedes abrir su carpeta, jugarlo o borrarlo.",
             world_none: "Todavía no hay mundo guardado",
             instances_title: "INSTALACIONES",
-            instances_intro: "Las siete versiones que puede arrancar el launcher, con la carpeta de cada una.",
+            instances_intro: "El ejecutable de cada instancia, con la carpeta en la que está.",
             instance_missing: "No instalada",
             delete: "Borrar",
             delete_sure: "¿Seguro?",
@@ -1081,15 +1237,36 @@ fn ui_texts(l: Lang) -> UiTexts {
             bench_java_wait: "Midiendo Java...",
         },
         Lang::Pt => UiTexts {
-            sidebar_instances: "VERSÕES",
+            sidebar_instances: "INSTÂNCIAS",
             instance_ready: "Pronto",
             instance_replacement: "Textura substituta",
+            instance_new: "Nova instância",
+            instance_new_title: "Criar nova instalação",
+            instance_version: "VERSÃO",
+            instance_game_dir: "PASTA DO JOGO",
+            instance_resolution: "RESOLUÇÃO",
+            instance_dir_hint: "Vazio = {path}",
+            instance_resolution_hint: "auto = tamanho original da versão",
+            browse: "Procurar...",
+            instance_extras: "MAIS OPÇÕES",
+            instance_create: "Criar instância",
+            instance_copy_suffix: "cópia",
+            instance_options: "Opções da instância",
+            instance_name: "NOME",
+            extra_coords: "Coordenadas com F3",
+            extra_shots: "Capturas com F2",
+            extra_fullscreen: "Ecrã inteiro com F11",
+            extra_grepeat: "Repetição automática de G",
+            instance_duplicate: "Duplicar",
+            instance_delete: "Apagar instância",
+            instance_delete_hint: "A pasta do mundo fica no disco.",
+            close: "Fechar",
             tab_worlds: "Mundos",
             worlds_title: "Os teus mundos",
-            worlds_intro: "Cada versão guarda o seu próprio mundo, por isso nunca se misturam. Aqui podes abrir a pasta, jogar ou apagar.",
+            worlds_intro: "Cada instância guarda o seu próprio mundo, por isso nunca se misturam. Aqui podes abrir a pasta, jogar ou apagar.",
             world_none: "Ainda não há mundo guardado",
             instances_title: "INSTALAÇÕES",
-            instances_intro: "As sete versões que o launcher pode iniciar, com a pasta de cada uma.",
+            instances_intro: "O executável de cada instância, com a pasta onde está.",
             instance_missing: "Não instalada",
             delete: "Apagar",
             delete_sure: "De certeza?",
@@ -1133,15 +1310,36 @@ fn ui_texts(l: Lang) -> UiTexts {
             bench_java_wait: "A medir Java...",
         },
         Lang::Fr => UiTexts {
-            sidebar_instances: "VERSIONS",
+            sidebar_instances: "INSTANCES",
             instance_ready: "Prêt",
             instance_replacement: "Texture de remplacement",
+            instance_new: "Nouvelle instance",
+            instance_new_title: "Créer une nouvelle installation",
+            instance_version: "VERSION",
+            instance_game_dir: "DOSSIER DU JEU",
+            instance_resolution: "RÉSOLUTION",
+            instance_dir_hint: "Vide = {path}",
+            instance_resolution_hint: "auto = taille d'origine de la version",
+            browse: "Parcourir...",
+            instance_extras: "PLUS D'OPTIONS",
+            instance_create: "Créer l'instance",
+            instance_copy_suffix: "copie",
+            instance_options: "Options de l'instance",
+            instance_name: "NOM",
+            extra_coords: "Coordonnées avec F3",
+            extra_shots: "Captures avec F2",
+            extra_fullscreen: "Plein écran avec F11",
+            extra_grepeat: "Répétition de G",
+            instance_duplicate: "Dupliquer",
+            instance_delete: "Supprimer l'instance",
+            instance_delete_hint: "Le dossier du monde reste sur le disque.",
+            close: "Fermer",
             tab_worlds: "Mondes",
             worlds_title: "Vos mondes",
-            worlds_intro: "Chaque version garde son propre monde, ils ne se mélangent donc jamais. D'ici, tu peux ouvrir son dossier, jouer ou le supprimer.",
+            worlds_intro: "Chaque instance garde son propre monde, ils ne se mélangent donc jamais. D'ici, tu peux ouvrir son dossier, jouer ou le supprimer.",
             world_none: "Pas encore de monde enregistré",
             instances_title: "INSTALLATIONS",
-            instances_intro: "Les sept versions que le launcher peut lancer, avec le dossier de chacune.",
+            instances_intro: "L'exécutable de chaque instance, avec le dossier où il se trouve.",
             instance_missing: "Non installée",
             delete: "Supprimer",
             delete_sure: "Sûr ?",
@@ -1185,15 +1383,36 @@ fn ui_texts(l: Lang) -> UiTexts {
             bench_java_wait: "Mesure de Java...",
         },
         Lang::De => UiTexts {
-            sidebar_instances: "VERSIONEN",
+            sidebar_instances: "INSTANZEN",
             instance_ready: "Bereit",
             instance_replacement: "Ersatztextur",
+            instance_new: "Neue Instanz",
+            instance_new_title: "Neue Installation erstellen",
+            instance_version: "VERSION",
+            instance_game_dir: "SPIELVERZEICHNIS",
+            instance_resolution: "AUFLÖSUNG",
+            instance_dir_hint: "Leer = {path}",
+            instance_resolution_hint: "auto = ursprüngliche Fenstergröße",
+            browse: "Durchsuchen...",
+            instance_extras: "WEITERE OPTIONEN",
+            instance_create: "Instanz erstellen",
+            instance_copy_suffix: "Kopie",
+            instance_options: "Instanzoptionen",
+            instance_name: "NAME",
+            extra_coords: "Koordinaten mit F3",
+            extra_shots: "Screenshots mit F2",
+            extra_fullscreen: "Vollbild mit F11",
+            extra_grepeat: "G-Wiederholung",
+            instance_duplicate: "Duplizieren",
+            instance_delete: "Instanz löschen",
+            instance_delete_hint: "Der Weltordner bleibt auf der Festplatte.",
+            close: "Schließen",
             tab_worlds: "Welten",
             worlds_title: "Deine Welten",
-            worlds_intro: "Jede Version speichert ihre eigene Welt, so vermischen sie sich nie. Hier kannst du ihren Ordner öffnen, spielen oder sie löschen.",
+            worlds_intro: "Jede Instanz speichert ihre eigene Welt, so vermischen sie sich nie. Hier kannst du ihren Ordner öffnen, spielen oder sie löschen.",
             world_none: "Noch keine Welt gespeichert",
             instances_title: "INSTALLATIONEN",
-            instances_intro: "Die sieben Versionen, die der Launcher starten kann, mit ihrem Ordner.",
+            instances_intro: "Die ausführbare Datei jeder Instanz und der Ordner, in dem sie liegt.",
             instance_missing: "Nicht installiert",
             delete: "Löschen",
             delete_sure: "Sicher?",
@@ -1269,16 +1488,165 @@ fn saved_game() -> Option<GameVersion> {
         .and_then(GameVersion::from_id)
 }
 
-/// Language and the chosen build share one tiny file, so writing either keeps
-/// both. Older versions also wrote `inst=` lines for texture instances; they are
-/// simply ignored now that the rail lists the six versions themselves.
-fn save_config(l: Lang, game: GameVersion) {
+/// The instance chosen last time.
+fn saved_instance() -> Option<String> {
+    let txt = std::fs::read_to_string(config_path()?).ok()?;
+    txt.lines()
+        .map(str::trim)
+        .find_map(|l| l.strip_prefix("inst="))
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// Language, the chosen build and the chosen instance share one tiny file, so
+/// writing any of them keeps the rest.
+fn save_config(l: Lang, game: GameVersion, instance: &str) {
     let Some(p) = config_path() else { return };
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let out = format!("lang={}\ngame={}\n", l.code(), game.id());
+    let out = format!(
+        "lang={}\ngame={}\ninst={}\n",
+        l.code(),
+        game.id(),
+        instance.replace(['\n', '\r'], "")
+    );
     let _ = std::fs::write(&p, out);
+}
+
+fn instances_path() -> Option<PathBuf> {
+    Some(config_path()?.parent()?.join("instances.txt"))
+}
+
+/// One instance per line:
+/// id|name|version|coords|shots|fullscreen|grepeat|dir|width|height.
+/// Plain text keeps the launcher dependency-free and easy to repair by hand.
+fn load_instances() -> Vec<Instance> {
+    let seed = || GameVersion::ALL.iter().copied().map(Instance::fresh).collect();
+    let Some(p) = instances_path() else {
+        return seed();
+    };
+    let Ok(txt) = std::fs::read_to_string(&p) else {
+        return seed();
+    };
+    let mut out: Vec<Instance> = Vec::new();
+    for line in txt.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut f = line.split('|');
+        let (Some(id), Some(name), Some(version)) = (f.next(), f.next(), f.next()) else {
+            continue;
+        };
+        let Some(game) = GameVersion::from_id(version) else {
+            continue;
+        };
+        let id = clean_token(id);
+        if id.is_empty() || out.iter().any(|i: &Instance| i.id == id) {
+            continue;
+        }
+        let flag = |v: Option<&str>| v.map(|s| s.trim() != "0").unwrap_or(true);
+        let name = clean_name(name);
+        out.push(Instance {
+            id,
+            name: if name.is_empty() { game.id().to_string() } else { name },
+            game,
+            coords: flag(f.next()),
+            shots: flag(f.next()),
+            fullscreen: flag(f.next()),
+            g_repeat: f.next().map(|s| s.trim() == "1").unwrap_or(false),
+            dir: f
+                .next()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(PathBuf::from),
+            width: f.next().and_then(|s| s.trim().parse().ok()).unwrap_or(0),
+            height: f.next().and_then(|s| s.trim().parse().ok()).unwrap_or(0),
+        });
+    }
+    if out.is_empty() {
+        seed()
+    } else {
+        out
+    }
+}
+
+fn save_instances(instances: &[Instance]) {
+    let Some(p) = instances_path() else { return };
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let mut out = String::from(
+        "# id|name|version|coords|shots|fullscreen|grepeat|dir|width|height\n",
+    );
+    for i in instances {
+        let dir = i
+            .dir
+            .as_ref()
+            .map(|d| d.display().to_string())
+            .unwrap_or_default()
+            .replace('|', "-")
+            .replace(['\n', '\r'], " ");
+        out.push_str(&format!(
+            "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}\n",
+            i.id,
+            i.name.replace('|', "-").replace(['\n', '\r'], " "),
+            i.game.id(),
+            i.coords as u8,
+            i.shots as u8,
+            i.fullscreen as u8,
+            i.g_repeat as u8,
+            dir,
+            i.width,
+            i.height
+        ));
+    }
+    let _ = std::fs::write(&p, out);
+}
+
+fn clean_token(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
+        .collect::<String>()
+        .trim_matches('.')
+        .to_string()
+}
+
+fn clean_name(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_control() && *c != '|')
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(40)
+        .collect()
+}
+
+/// Empty text means the build's original window size. Each side can be auto
+/// independently; an invalid or out-of-range side falls back to auto.
+fn parse_resolution(width: &str, height: &str) -> (u32, u32) {
+    let side = |s: &str| {
+        s.trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|v| (320..=7680).contains(v))
+    };
+    (side(width).unwrap_or(0), side(height).unwrap_or(0))
+}
+
+fn parse_custom_dir(text: &str) -> Option<PathBuf> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(text);
+    // A relative path typed by hand would otherwise depend on the folder the
+    // launcher happened to be started from. Store it resolved once.
+    if path.is_absolute() {
+        Some(path)
+    } else {
+        Some(std::path::absolute(&path).unwrap_or(path))
+    }
 }
 
 #[cfg(windows)]
@@ -1782,6 +2150,10 @@ fn main() {
 }
 
 fn run(opts: &Options) -> R<()> {
+    run_with(opts, None)
+}
+
+fn run_with(opts: &Options, inst: Option<&Instance>) -> R<()> {
     let t = texts(opts.lang);
     let det = detect_atlas(opts);
     match &det.path {
@@ -1807,7 +2179,10 @@ fn run(opts: &Options) -> R<()> {
     if opts.status {
         return Ok(());
     }
-    launch_game(det.path.as_deref(), &t, opts.game)
+    match inst {
+        Some(i) => launch_instance(det.path.as_deref(), &t, i),
+        None => launch_game(det.path.as_deref(), &t, opts.game),
+    }
 }
 
 // ---------------------------------------------------------------- arguments
@@ -1998,11 +2373,12 @@ fn detect_atlas(opts: &Options) -> Detection {
 /// decoding the jar every frame; `Window::new` fills the cache once.
 fn version_textures(base: &Path, game: GameVersion) -> bool {
     // rd-131655 no tuvo jar: sus texturas son las mismas de RubyDung que
-    // trae rd-132211, asi que hereda su deteccion.
-    let game = if game == GameVersion::Rd131655 {
-        GameVersion::Rd132211
-    } else {
-        game
+    // trae rd-132211, asi que hereda su deteccion. 0.0.9a y 0.0.10a no se
+    // conservan: sus texturas son las de c0.0.11a.
+    let game = match game {
+        GameVersion::Rd131655 => GameVersion::Rd132211,
+        GameVersion::C009a | GameVersion::C010a => GameVersion::C0011a,
+        g => g,
     };
     if !installed_copies(base, game.id()).is_empty() {
         return true;
@@ -2029,6 +2405,15 @@ fn worlds_root() -> PathBuf {
 
 fn world_dir(game: GameVersion) -> PathBuf {
     worlds_root().join(game.id())
+}
+
+/// The instance's own world folder. Default instances reuse the version id, so
+/// worlds saved before instances existed land in the right place.
+fn instance_dir(inst: &Instance) -> PathBuf {
+    inst.dir
+        .clone()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or_else(|| worlds_root().join(&inst.id))
 }
 
 /// The shared world older versions left next to the executables: copy it once to
@@ -2076,26 +2461,133 @@ fn world_looks_legacy(path: &Path) -> Option<bool> {
 
 fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion) -> R<()> {
     let exe = find_game(t, game)?;
+    start_game(&exe, t, game, &world_dir(game), true, Extras::default(), atlas)
+}
+
+fn launch_instance(atlas: Option<&Path>, t: &Texts, inst: &Instance) -> R<()> {
+    let exe = find_game(t, inst.game)?;
+    start_game(
+        &exe,
+        t,
+        inst.game,
+        &instance_dir(inst),
+        false,
+        Extras {
+            coords: inst.coords,
+            shots: inst.shots,
+            fullscreen: inst.fullscreen,
+            g_repeat: inst.g_repeat,
+            width: inst.width,
+            height: inst.height,
+        },
+        atlas,
+    )
+}
+
+fn start_game(
+    exe: &Path,
+    t: &Texts,
+    game: GameVersion,
+    game_dir: &Path,
+    migrate: bool,
+    extras: Extras,
+    atlas: Option<&Path>,
+) -> R<()> {
     say!();
     say!("{}", fill(&t.starting, "{path}", &exe.display().to_string()));
-    let mut cmd = std::process::Command::new(&exe);
+    let mut cmd = std::process::Command::new(exe);
     // The world lives in its own folder under the launcher's data directory, so
-    // the six builds cannot read each other's level.dat.
-    let game_dir = world_dir(game);
-    std::fs::create_dir_all(&game_dir)
+    // the instances and builds cannot read each other's level.dat.
+    std::fs::create_dir_all(game_dir)
         .map_err(|e| format!("cannot create the world folder {}: {e}", game_dir.display()))?;
-    migrate_old_world(game, exe.parent(), &game_dir);
-    cmd.current_dir(&game_dir);
+    if migrate {
+        migrate_old_world(game, exe.parent(), game_dir);
+    }
+    cmd.current_dir(game_dir);
     // Each build reads its own terrain.png from its own jar; only the original
     // rd-132211 port takes the atlas the picker detected by hand.
     if let (Some(r), GameVersion::Rd132211) = (atlas, game) {
         cmd.env("RD_ATLAS", r);
     }
-    let status = cmd
-        .status()
+    if extras.coords {
+        cmd.env("RD_F3_COORDS", "1");
+    }
+    if extras.shots {
+        cmd.env("RD_F2_SHOTS", "1");
+    }
+    if extras.fullscreen {
+        cmd.env("RD_F11_FULLSCREEN", "1");
+    }
+    if extras.g_repeat {
+        cmd.env("RD_G_REPEAT", "1");
+    }
+    if extras.width > 0 {
+        cmd.env("RD_WIDTH", extras.width.to_string());
+    }
+    if extras.height > 0 {
+        cmd.env("RD_HEIGHT", extras.height.to_string());
+    }
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("could not start the game: {e}"))?;
+    // The launcher is the foreground window and Windows does not let a new
+    // process steal that spot by itself: bring the game's window forward from
+    // the process that still owns the foreground, then wait for it to exit.
+    #[cfg(windows)]
+    {
+        let pid = child.id();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(8);
+        while std::time::Instant::now() < until {
+            if enfocar_ventana(pid) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+    let status = child
+        .wait()
         .map_err(|e| format!("could not start the game: {e}"))?;
     say!("{}", fill(&t.game_exited, "{status}", &status.to_string()));
     Ok(())
+}
+
+/// Brings the game window of `pid` to the front. The launcher is allowed to do
+/// this because it is still the foreground process; the child is not.
+#[cfg(windows)]
+fn enfocar_ventana(pid: u32) -> bool {
+    use std::ffi::c_void;
+    type Hwnd = *mut c_void;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn EnumWindows(cb: extern "system" fn(Hwnd, isize) -> i32, lparam: isize) -> i32;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
+        fn IsWindowVisible(hwnd: Hwnd) -> i32;
+        fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
+        fn SetForegroundWindow(hwnd: Hwnd) -> i32;
+    }
+
+    extern "system" fn buscar(hwnd: Hwnd, lparam: isize) -> i32 {
+        let datos = unsafe { &mut *(lparam as *mut (u32, Hwnd)) };
+        let mut ventana_pid = 0u32;
+        unsafe { GetWindowThreadProcessId(hwnd, &mut ventana_pid) };
+        if ventana_pid == datos.0 && unsafe { IsWindowVisible(hwnd) } != 0 {
+            datos.1 = hwnd;
+            return 0;
+        }
+        1
+    }
+
+    let mut datos: (u32, Hwnd) = (pid, std::ptr::null_mut());
+    unsafe {
+        EnumWindows(buscar, &mut datos as *mut _ as isize);
+        if datos.1.is_null() {
+            return false;
+        }
+        ShowWindow(datos.1, 9); // SW_RESTORE
+        SetForegroundWindow(datos.1);
+    }
+    true
 }
 
 // ------------------------------------------------- measuring the Java original
@@ -2386,6 +2878,8 @@ mod ui {
     /// One saved world (or the place where it would be saved) and the build that
     /// writes it.
     struct WorldRow {
+        id: String,
+        name: String,
         game: GameVersion,
         dir: PathBuf,
         size: Option<u64>,
@@ -2394,7 +2888,7 @@ mod ui {
     }
 
     enum WorldAction {
-        Play(GameVersion),
+        Play(usize),
         OpenDir(usize),
         OpenInstall(usize),
         Ask(usize),
@@ -2561,6 +3055,30 @@ mod ui {
         let _ = std::process::Command::new("explorer").arg(dir).spawn();
         #[cfg(not(windows))]
         let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+    }
+
+    /// Native folder picker. It starts at the current custom folder when there
+    /// is one, otherwise at the default world folder.
+    fn elegir_carpeta(actual: &str, defecto: &Path) -> Option<PathBuf> {
+        let mut dialog = rfd::FileDialog::new();
+        let mut start = if actual.trim().is_empty() {
+            defecto.to_path_buf()
+        } else {
+            PathBuf::from(actual.trim())
+        };
+        // The default instance folder usually does not exist yet (creating it
+        // here would write to disk before the player presses Create). Walk up
+        // to the nearest folder that exists so the picker opens nearby.
+        while !start.is_dir() {
+            match start.parent() {
+                Some(parent) => start = parent.to_path_buf(),
+                None => break,
+            }
+        }
+        if start.is_dir() {
+            dialog = dialog.set_directory(&start);
+        }
+        dialog.pick_folder()
     }
 
     /// "Open folder" on a build that has never saved anything: Explorer would
@@ -2786,6 +3304,88 @@ mod ui {
         } else {
             resp
         }
+    }
+
+    fn field_label(ui: &mut egui::Ui, text: &str) {
+        ui.label(RichText::new(text).size(10.5).color(MUTED).strong());
+        ui.add_space(4.0);
+    }
+
+    fn framed_input(ui: &mut egui::Ui, value: &mut String) {
+        let w = ui.available_width();
+        framed_input_hint(ui, value, "", w, 40, 22.0);
+    }
+
+    /// Same dark field as `framed_input`, with a placeholder and an explicit
+    /// width. Used by the game folder and resolution inputs.
+    fn framed_input_hint(
+        ui: &mut egui::Ui,
+        value: &mut String,
+        hint: &str,
+        total_width: f32,
+        char_limit: usize,
+        text_height: f32,
+    ) {
+        let inner = (total_width - 20.0).max(80.0);
+        egui::Frame::NONE
+            .fill(Color32::from_rgb(26, 24, 28))
+            .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(76, 66, 82)))
+            .corner_radius(6)
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.set_width(inner);
+                ui.add_sized(
+                    [inner, text_height],
+                    egui::TextEdit::singleline(value)
+                        .frame(false)
+                        .hint_text(hint)
+                        .background_color(Color32::TRANSPARENT)
+                        .text_color(TEXT)
+                        .char_limit(char_limit),
+                );
+            });
+    }
+
+    /// Small isometric grass block for the create-installation page, where the
+    /// official launcher shows the installation icon.
+    fn block_icon(ui: &mut egui::Ui) {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(58.0, 58.0), egui::Sense::hover());
+        let c = rect.center();
+        let p = ui.painter();
+        let stroke = egui::Stroke::new(1.0_f32, Color32::from_rgb(38, 30, 26));
+        let top = vec![
+            c + egui::vec2(0.0, -22.0),
+            c + egui::vec2(23.0, -8.0),
+            c + egui::vec2(0.0, 7.0),
+            c + egui::vec2(-23.0, -8.0),
+        ];
+        let left = vec![
+            c + egui::vec2(-23.0, -8.0),
+            c + egui::vec2(0.0, 7.0),
+            c + egui::vec2(0.0, 31.0),
+            c + egui::vec2(-23.0, 16.0),
+        ];
+        let right = vec![
+            c + egui::vec2(23.0, -8.0),
+            c + egui::vec2(0.0, 7.0),
+            c + egui::vec2(0.0, 31.0),
+            c + egui::vec2(23.0, 16.0),
+        ];
+        p.add(egui::Shape::convex_polygon(
+            top,
+            Color32::from_rgb(100, 162, 65),
+            stroke,
+        ));
+        p.add(egui::Shape::convex_polygon(
+            left,
+            Color32::from_rgb(122, 81, 54),
+            stroke,
+        ));
+        p.add(egui::Shape::convex_polygon(
+            right,
+            Color32::from_rgb(91, 59, 40),
+            stroke,
+        ));
     }
 
     /// The big magenta action button, with a hover that eases instead of snapping.
@@ -3043,9 +3643,17 @@ mod ui {
         /// One flag per `GameVersion::ALL`, filled once so the rail can draw its
         /// ready/replacement dots without decoding five jars every frame.
         version_ready: Vec<bool>,
+        /// One entry per rail row, in the order they are drawn.
+        instances: Vec<Instance>,
+        sel: usize,
+        show_instance: bool,
+        show_new: bool,
+        new_inst: NewInstance,
+        /// Set after creating an instance so the rail reveals its new row.
+        scroll_to_sel: bool,
         worlds: Vec<WorldRow>,
         /// Two-step delete: the button turns into "Sure?" until it is confirmed.
-        confirm_delete: Option<GameVersion>,
+        confirm_delete: Option<String>,
         /// Where the selected build and its level.dat live; "Open folder" shows
         /// this instead of the .minecraft textures folder.
         game_dir: PathBuf,
@@ -3061,7 +3669,7 @@ mod ui {
     }
 
     impl Window {
-        fn new(opts: Options) -> Self {
+        fn new(mut opts: Options) -> Self {
             let lang = opts.lang;
             let t = texts(lang);
             let det = detect_atlas(&opts);
@@ -3088,22 +3696,39 @@ mod ui {
                 .iter()
                 .map(|v| version_textures(&opts.dir_minecraft, *v))
                 .collect();
-            let game_dir = world_dir(opts.game);
-            let worlds = GameVersion::ALL
+            let instances = load_instances();
+            if instances_path().map_or(false, |p| !p.exists()) {
+                save_instances(&instances);
+            }
+            // The saved instance wins; older configs only had a version, whose
+            // default instance has the same id.
+            let saved = saved_instance().or_else(|| saved_game().map(|g| g.id().to_string()));
+            let sel = saved
+                .and_then(|id| instances.iter().position(|i| i.id == id))
+                .unwrap_or(0);
+            opts.game = instances[sel].game;
+            let game_dir = instance_dir(&instances[sel]);
+            let worlds = instances
                 .iter()
-                .map(|&g| {
-                    let dir = world_dir(g);
+                .map(|inst| {
+                    let dir = instance_dir(inst);
                     let meta = std::fs::metadata(dir.join("level.dat")).ok();
                     WorldRow {
-                        game: g,
+                        id: inst.id.clone(),
+                        name: inst.name.clone(),
+                        game: inst.game,
                         dir,
                         size: meta.as_ref().map(|m| m.len()),
                         modified: meta.and_then(|m| m.modified().ok()),
-                        exe: find_game(&t, g).ok(),
+                        exe: find_game(&t, inst.game).ok(),
                     }
                 })
                 .collect();
 
+            let new_inst = NewInstance::fresh(
+                instances[sel].game,
+                ui_texts(lang).instance_new.to_string(),
+            );
             Window {
                 opts,
                 lang,
@@ -3135,6 +3760,12 @@ mod ui {
                 bench_fps: None,
                 bench_java: None,
                 version_ready,
+                instances,
+                sel,
+                show_instance: false,
+                show_new: false,
+                new_inst,
+                scroll_to_sel: false,
                 worlds,
                 confirm_delete: None,
                 game_dir,
@@ -3238,6 +3869,442 @@ mod ui {
             self.refresh();
         }
 
+        fn select_instance(&mut self, i: usize) {
+            let Some(inst) = self.instances.get(i) else { return };
+            self.sel = i;
+            self.opts.game = inst.game;
+            self.game_dir = instance_dir(inst);
+            save_config(self.lang, inst.game, &inst.id);
+        }
+
+        fn unique_instance_id(&self, game: GameVersion) -> String {
+            let base = game.id();
+            if !self.instances.iter().any(|i| i.id == base) {
+                return base.to_string();
+            }
+            let mut n = 2;
+            loop {
+                let id = format!("{base}-{n}");
+                if !self.instances.iter().any(|i| i.id == id) {
+                    return id;
+                }
+                n += 1;
+            }
+        }
+
+        fn open_new_instance(&mut self) {
+            let game = self
+                .instances
+                .get(self.sel)
+                .map(|i| i.game)
+                .unwrap_or(GameVersion::C0011a);
+            let u = ui_texts(self.lang);
+            let mut name = u.instance_new.to_string();
+            if self.instances.iter().any(|i| i.name == name) {
+                let base = name.clone();
+                let mut n = 2;
+                loop {
+                    name = format!("{base} {n}");
+                    if !self.instances.iter().any(|i| i.name == name) {
+                        break;
+                    }
+                    n += 1;
+                }
+            }
+            self.new_inst = NewInstance::fresh(game, name);
+            self.show_instance = false;
+            self.show_new = true;
+        }
+
+        fn create_instance(&mut self) {
+            let mut d = self.new_inst.clone();
+            d.name = clean_name(&d.name);
+            if d.name.is_empty() {
+                d.name = d.game.id().to_string();
+            }
+            let id = self.unique_instance_id(d.game);
+            let (width, height) = parse_resolution(&d.width, &d.height);
+            self.instances.push(Instance {
+                id,
+                name: d.name,
+                game: d.game,
+                coords: d.coords,
+                shots: d.shots,
+                fullscreen: d.fullscreen,
+                g_repeat: d.g_repeat,
+                dir: parse_custom_dir(&d.dir),
+                width,
+                height,
+            });
+            self.sel = self.instances.len() - 1;
+            save_instances(&self.instances);
+            self.select_instance(self.sel);
+            self.refresh_worlds();
+            self.scroll_to_sel = true;
+            self.show_new = false;
+        }
+
+        fn duplicate_instance(&mut self) {
+            let Some(src) = self.instances.get(self.sel).cloned() else { return };
+            let u = ui_texts(self.lang);
+            let id = self.unique_instance_id(src.game);
+            let inst = Instance {
+                id,
+                name: format!("{} {}", src.name, u.instance_copy_suffix),
+                // A copy gets its own default folder; sharing the source folder
+                // would make both instances save into the same level.dat.
+                dir: None,
+                ..src
+            };
+            self.instances.push(inst);
+            self.sel = self.instances.len() - 1;
+            save_instances(&self.instances);
+            self.select_instance(self.sel);
+            self.refresh_worlds();
+            self.scroll_to_sel = true;
+        }
+
+        fn delete_instance(&mut self) {
+            if self.instances.len() <= 1 || self.sel >= self.instances.len() {
+                return;
+            }
+            self.instances.remove(self.sel);
+            if self.sel >= self.instances.len() {
+                self.sel = self.instances.len() - 1;
+            }
+            save_instances(&self.instances);
+            self.select_instance(self.sel);
+            self.refresh_worlds();
+            self.show_instance = false;
+        }
+
+        fn new_instance_page(&mut self, ui: &mut egui::Ui) {
+            let u = ui_texts(self.lang);
+            let mut d = self.new_inst.clone();
+            let mut close = false;
+            let mut create = false;
+
+            let full = ui.max_rect();
+            ui.painter()
+                .rect_filled(full, 0.0, Color32::from_rgb(18, 17, 20));
+            let head_h = 54.0;
+            let head = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), head_h));
+            ui.painter().text(
+                head.center(),
+                egui::Align2::CENTER_CENTER,
+                u.instance_new_title,
+                egui::FontId::proportional(21.0),
+                TEXT,
+            );
+            let xr = egui::Rect::from_center_size(
+                egui::pos2(full.right() - 28.0, head.center().y),
+                egui::vec2(36.0, 36.0),
+            );
+            let x = ui.interact(xr, egui::Id::new("new_instance_close"), egui::Sense::click());
+            if x.hovered() {
+                ui.painter().circle_filled(
+                    xr.center(),
+                    15.0,
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 14),
+                );
+            }
+            ui.painter().text(
+                xr.center(),
+                egui::Align2::CENTER_CENTER,
+                "X",
+                display(18.0),
+                if x.hovered() { TEXT } else { SOFT },
+            );
+            if x.clicked() {
+                close = true;
+            }
+            ui.painter().hline(
+                full.x_range(),
+                head.bottom(),
+                egui::Stroke::new(1.0_f32, EDGE),
+            );
+            ui.allocate_space(egui::vec2(0.0, head_h + 16.0));
+
+            let col_w = 620.0_f32.min((ui.available_width() - 40.0).max(280.0));
+            let pad = ((ui.available_width() - col_w) * 0.5).max(0.0);
+            ui.horizontal(|ui| {
+                ui.add_space(pad);
+                ui.vertical(|ui| {
+                    ui.set_width(col_w);
+                    ui.vertical_centered(|ui| {
+                        block_icon(ui);
+                        ui.add_space(10.0);
+                    });
+
+                    field_label(ui, u.instance_name);
+                    framed_input(ui, &mut d.name);
+
+                    ui.add_space(14.0);
+                    field_label(ui, u.instance_version);
+                    ui.scope(|ui| {
+                        let visuals = &mut ui.style_mut().visuals;
+                        visuals.widgets.inactive.bg_fill = Color32::from_rgb(26, 24, 28);
+                        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(
+                            1.0_f32,
+                            Color32::from_rgb(76, 66, 82),
+                        );
+                        visuals.widgets.hovered.bg_fill = Color32::from_rgb(34, 30, 38);
+                        visuals.widgets.hovered.bg_stroke =
+                            egui::Stroke::new(1.0_f32, MAGENTA);
+                        visuals.widgets.active.bg_fill = Color32::from_rgb(40, 34, 44);
+                        visuals.selection.bg_fill = Color32::from_rgb(196, 40, 116);
+                        egui::ComboBox::from_id_salt("new_instance_version")
+                            .width(320.0)
+                            .selected_text(
+                                RichText::new(d.game.id()).size(13.5).color(TEXT),
+                            )
+                            .show_ui(ui, |ui| {
+                                for v in GameVersion::ALL {
+                                    ui.selectable_value(&mut d.game, v, v.id());
+                                }
+                            });
+                    });
+
+                    ui.add_space(14.0);
+                    field_label(ui, u.instance_game_dir);
+                    let default_dir = worlds_root().join(self.unique_instance_id(d.game));
+                    ui.horizontal(|ui| {
+                        let browse_w = 124.0;
+                        framed_input_hint(
+                            ui,
+                            &mut d.dir,
+                            &default_dir.display().to_string(),
+                            col_w - browse_w - 8.0,
+                            1024,
+                            22.0,
+                        );
+                        if plain_button(ui, u.browse, browse_w, true).clicked() {
+                            if let Some(p) = elegir_carpeta(&d.dir, &default_dir) {
+                                d.dir = p.display().to_string();
+                            }
+                        }
+                    });
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(fill(
+                            u.instance_dir_hint,
+                            "{path}",
+                            &default_dir.display().to_string(),
+                        ))
+                        .size(10.5)
+                        .color(MUTED),
+                    );
+
+                    ui.add_space(14.0);
+                    field_label(ui, u.instance_resolution);
+                    ui.horizontal(|ui| {
+                        framed_input_hint(ui, &mut d.width, "auto", 86.0, 4, 22.0);
+                        ui.label(RichText::new("×").size(14.0).color(SOFT).strong());
+                        framed_input_hint(ui, &mut d.height, "auto", 86.0, 4, 22.0);
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new(u.instance_resolution_hint)
+                                .size(10.5)
+                                .color(MUTED),
+                        );
+                    });
+
+                    ui.add_space(10.0);
+                    egui::CollapsingHeader::new(
+                        RichText::new(u.instance_extras)
+                            .size(11.5)
+                            .color(SOFT)
+                            .strong(),
+                    )
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        egui::Grid::new("new_instance_extras")
+                            .num_columns(2)
+                            .spacing([18.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.checkbox(&mut d.coords, u.extra_coords);
+                                ui.checkbox(&mut d.shots, u.extra_shots);
+                                ui.end_row();
+                                ui.checkbox(&mut d.fullscreen, u.extra_fullscreen);
+                                ui.checkbox(&mut d.g_repeat, u.extra_grepeat);
+                                ui.end_row();
+                            });
+                    });
+
+                    ui.add_space(16.0);
+                    ui.separator();
+                    ui.add_space(10.0);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if hero_button(ui, u.instance_create, 180.0, 44.0, true).clicked() {
+                            create = true;
+                        }
+                        ui.add_space(8.0);
+                        if plain_button(ui, u.cancel, 100.0, true).clicked() {
+                            close = true;
+                        }
+                    });
+                });
+            });
+
+            self.new_inst = d;
+            if close {
+                self.show_new = false;
+            }
+            if create {
+                self.create_instance();
+            }
+        }
+
+        fn instance_options(&mut self, ctx: &egui::Context) {
+            if !self.show_instance || self.instances.is_empty() {
+                return;
+            }
+            let u = ui_texts(self.lang);
+            let before = self.instances[self.sel].clone();
+            let mut inst = before.clone();
+            let default_dir = worlds_root().join(&before.id);
+            let mut dir_text = before
+                .dir
+                .as_ref()
+                .map(|d| d.display().to_string())
+                .unwrap_or_default();
+            let mut width_text = if before.width > 0 {
+                before.width.to_string()
+            } else {
+                String::new()
+            };
+            let mut height_text = if before.height > 0 {
+                before.height.to_string()
+            } else {
+                String::new()
+            };
+            let mut close = false;
+            let mut duplicate = false;
+            let mut delete = false;
+            egui::Window::new(u.instance_options)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.set_width(440.0);
+                    ui.label(RichText::new(inst.game.id()).size(12.0).color(SOFT));
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(u.instance_name).size(10.5).color(MUTED).strong());
+                    ui.add(
+                        egui::TextEdit::singleline(&mut inst.name)
+                            .char_limit(40)
+                            .desired_width(f32::INFINITY),
+                    );
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new(u.instance_game_dir)
+                            .size(10.5)
+                            .color(MUTED)
+                            .strong(),
+                    );
+                    ui.horizontal(|ui| {
+                        let browse_w = 124.0;
+                        framed_input_hint(
+                            ui,
+                            &mut dir_text,
+                            &default_dir.display().to_string(),
+                            (ui.available_width() - browse_w - 8.0).max(160.0),
+                            1024,
+                            22.0,
+                        );
+                        if plain_button(ui, u.browse, browse_w, true).clicked() {
+                            if let Some(p) = elegir_carpeta(&dir_text, &default_dir) {
+                                dir_text = p.display().to_string();
+                            }
+                        }
+                    });
+                    ui.label(
+                        RichText::new(fill(
+                            u.instance_dir_hint,
+                            "{path}",
+                            &default_dir.display().to_string(),
+                        ))
+                        .size(10.5)
+                        .color(MUTED),
+                    );
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(u.instance_resolution)
+                            .size(10.5)
+                            .color(MUTED)
+                            .strong(),
+                    );
+                    ui.horizontal(|ui| {
+                        framed_input_hint(ui, &mut width_text, "auto", 86.0, 4, 22.0);
+                        ui.label(RichText::new("×").size(14.0).color(SOFT).strong());
+                        framed_input_hint(ui, &mut height_text, "auto", 86.0, 4, 22.0);
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new(u.instance_resolution_hint)
+                                .size(10.5)
+                                .color(MUTED),
+                        );
+                    });
+                    ui.add_space(10.0);
+                    ui.checkbox(&mut inst.coords, u.extra_coords);
+                    ui.checkbox(&mut inst.shots, u.extra_shots);
+                    ui.checkbox(&mut inst.fullscreen, u.extra_fullscreen);
+                    ui.checkbox(&mut inst.g_repeat, u.extra_grepeat);
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(u.instance_delete_hint).size(10.5).color(MUTED));
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if plain_button(ui, u.instance_duplicate, 120.0, true).clicked() {
+                            duplicate = true;
+                        }
+                        if plain_button(ui, u.instance_delete, 140.0, self.instances.len() > 1)
+                            .clicked()
+                        {
+                            delete = true;
+                        }
+                        if plain_button(ui, u.close, 90.0, true).clicked() {
+                            close = true;
+                        }
+                    });
+                });
+            if close {
+                self.show_instance = false;
+            }
+            if delete {
+                self.delete_instance();
+                return;
+            }
+            if duplicate {
+                self.duplicate_instance();
+                return;
+            }
+            inst.name = clean_name(&inst.name);
+            if inst.name.is_empty() {
+                inst.name = inst.game.id().to_string();
+            }
+            inst.dir = parse_custom_dir(&dir_text);
+            let (width, height) = parse_resolution(&width_text, &height_text);
+            inst.width = width;
+            inst.height = height;
+            if inst.name != before.name
+                || inst.coords != before.coords
+                || inst.shots != before.shots
+                || inst.fullscreen != before.fullscreen
+                || inst.g_repeat != before.g_repeat
+                || inst.dir != before.dir
+                || inst.width != before.width
+                || inst.height != before.height
+            {
+                let dir_changed = inst.dir != before.dir;
+                self.instances[self.sel] = inst;
+                save_instances(&self.instances);
+                if dir_changed {
+                    self.game_dir = instance_dir(&self.instances[self.sel]);
+                }
+                self.refresh_worlds();
+            }
+        }
+
         fn play(&mut self) {
             if self.busy {
                 return;
@@ -3252,12 +4319,13 @@ mod ui {
             if opts.atlas.is_none() {
                 opts.atlas = self.det.path.clone();
             }
+            let inst = self.instances.get(self.sel).cloned();
             std::thread::spawn(move || {
                 let line = tx.clone();
                 set_report(Box::new(move |s: &str| {
                     let _ = line.send(Msg::Line(s.to_string()));
                 }));
-                let result = run(&opts);
+                let result = run_with(&opts, inst.as_ref());
                 clear_report();
                 let _ = tx.send(Msg::Done(result));
             });
@@ -3413,38 +4481,65 @@ mod ui {
             ui.label(RichText::new("RubyDung RS").size(12.0).color(MUTED));
             ui.add_space(26.0);
 
+            let mut nuevo = false;
             ui.horizontal(|ui| {
                 ui.label(RichText::new(u.sidebar_instances).size(10.5).color(MUTED).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let plus = egui::Button::new(
+                        RichText::new("+").size(16.0).color(TEXT),
+                    )
+                    .fill(GLASS_HI)
+                    .corner_radius(8)
+                    .min_size(egui::vec2(26.0, 22.0));
+                    if ui.add(plus).on_hover_text(u.instance_new).clicked() {
+                        nuevo = true;
+                    }
+                });
             });
             ui.add_space(8.0);
 
-            // The rail is the version picker: one list, no second combo box
-            // and no separate "new instance" dialog.
-            let mut pick: Option<GameVersion> = None;
-            // Siete filas ya no caben a 863 px de alto: el rail se desplaza y
-            // deja sitio fijo al pie (Mundos / Novedades / aviso / idiomas).
+            // Every row is an instance: a version plus its own world and extras.
+            let mut pick: Option<usize> = None;
             let rail_h = (ui.available_height() - 150.0).max(120.0);
             egui::ScrollArea::vertical()
                 .max_height(rail_h)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    for (i, v) in GameVersion::ALL.iter().enumerate() {
-                        let ok = self.version_ready.get(i).copied().unwrap_or(false);
-                        let (dot, sub) = if ok {
+                    for (i, inst) in self.instances.iter().enumerate() {
+                        let slot = GameVersion::ALL
+                            .iter()
+                            .position(|v| *v == inst.game)
+                            .unwrap_or(0);
+                        let ok = self.version_ready.get(slot).copied().unwrap_or(false);
+                        let (dot, ready) = if ok {
                             (GREEN, u.instance_ready)
                         } else {
                             (AMBER, u.instance_replacement)
                         };
-                        if instance_row(ui, v.id(), sub, dot, *v == self.opts.game).clicked() {
-                            pick = Some(*v);
+                        let sub = if inst.name == inst.game.id() {
+                            ready.to_string()
+                        } else {
+                            format!("{} · {}", inst.game.id(), ready)
+                        };
+                        let row = instance_row(ui, &inst.id, &inst.name, &sub, dot, i == self.sel);
+                        if row.clicked() {
+                            pick = Some(i);
+                        }
+                        if self.scroll_to_sel && i == self.sel {
+                            ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
                         }
                         ui.add_space(4.0);
                     }
                 });
-            if let Some(v) = pick {
-                self.opts.game = v;
-                save_config(self.lang, v);
-                self.game_dir = world_dir(v);
+            if self.scroll_to_sel {
+                self.scroll_to_sel = false;
+            }
+            if nuevo {
+                self.open_new_instance();
+            }
+            if let Some(i) = pick {
+                self.show_new = false;
+                self.select_instance(i);
             }
 
             // Footer: reserved at the bottom so it never falls off a short window.
@@ -3457,6 +4552,7 @@ mod ui {
                 )
                 .clicked()
             {
+                self.show_new = false;
                 self.tab = Tab::Worlds;
                 self.confirm_delete = None;
                 self.refresh_worlds();
@@ -3469,6 +4565,7 @@ mod ui {
                 )
                 .clicked()
             {
+                self.show_new = false;
                 self.tab = Tab::News;
             }
             if ui
@@ -3499,7 +4596,11 @@ mod ui {
             });
             if elegido != self.lang {
                 self.lang = elegido;
-                save_config(elegido, self.opts.game);
+                save_config(
+                    elegido,
+                    self.opts.game,
+                    &self.instances[self.sel].id,
+                );
                 let t2 = texts(elegido);
                 // Old messages were written in the old language: drop them.
                 self.log.clear();
@@ -3521,17 +4622,20 @@ mod ui {
 
         fn refresh_worlds(&mut self) {
             let t = texts(self.lang);
-            self.worlds = GameVersion::ALL
+            self.worlds = self
+                .instances
                 .iter()
-                .map(|&g| {
-                    let dir = world_dir(g);
+                .map(|inst| {
+                    let dir = instance_dir(inst);
                     let meta = std::fs::metadata(dir.join("level.dat")).ok();
                     WorldRow {
-                        game: g,
+                        id: inst.id.clone(),
+                        name: inst.name.clone(),
+                        game: inst.game,
                         dir,
                         size: meta.as_ref().map(|m| m.len()),
                         modified: meta.and_then(|m| m.modified().ok()),
-                        exe: find_game(&t, g).ok(),
+                        exe: find_game(&t, inst.game).ok(),
                     }
                 })
                 .collect();
@@ -3553,7 +4657,7 @@ mod ui {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for (i, row) in self.worlds.iter().enumerate() {
-                        let confirm = self.confirm_delete == Some(row.game);
+                        let confirm = self.confirm_delete.as_deref() == Some(row.id.as_str());
                         egui::Frame::NONE
                             .fill(GLASS)
                             .stroke(egui::Stroke::new(1.0_f32, EDGE))
@@ -3573,16 +4677,19 @@ mod ui {
                                     );
                                     ui.add_space(4.0);
                                     ui.label(
-                                        RichText::new(row.game.id())
+                                        RichText::new(&row.name)
                                             .size(14.0)
                                             .strong()
                                             .color(TEXT),
+                                    );
+                                    ui.label(
+                                        RichText::new(row.game.id()).size(10.5).color(SOFT),
                                     );
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {
                                             if plain_button(ui, t.play, 92.0, true).clicked() {
-                                                action = Some(WorldAction::Play(row.game));
+                                                action = Some(WorldAction::Play(i));
                                             }
                                         },
                                     );
@@ -3643,7 +4750,10 @@ mod ui {
                                 ui.set_width(ui.available_width());
                                 ui.horizontal(|ui| {
                                     ui.label(
-                                        RichText::new(row.game.id()).size(13.0).color(TEXT),
+                                        RichText::new(&row.name).size(13.0).color(TEXT),
+                                    );
+                                    ui.label(
+                                        RichText::new(row.game.id()).size(10.5).color(MUTED),
                                     );
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
@@ -3672,10 +4782,8 @@ mod ui {
                 });
 
             match action {
-                Some(WorldAction::Play(g)) => {
-                    self.opts.game = g;
-                    self.game_dir = world_dir(g);
-                    save_config(self.lang, g);
+                Some(WorldAction::Play(i)) => {
+                    self.select_instance(i);
                     self.play();
                 }
                 Some(WorldAction::OpenDir(i)) => {
@@ -3691,7 +4799,7 @@ mod ui {
                     }
                 }
                 Some(WorldAction::Ask(i)) => {
-                    self.confirm_delete = self.worlds.get(i).map(|r| r.game);
+                    self.confirm_delete = self.worlds.get(i).map(|r| r.id.clone());
                 }
                 Some(WorldAction::Cancel) => self.confirm_delete = None,
                 Some(WorldAction::Delete(i)) => {
@@ -3857,6 +4965,10 @@ mod ui {
                 .show(ctx, |ui| {
                     backdrop(ui);
                     ui.multiply_opacity(0.25 + 0.75 * self.fade);
+                    if self.show_new {
+                        self.new_instance_page(ui);
+                        return;
+                    }
                     egui::Frame::NONE
                         .inner_margin(egui::Margin { left: 30, right: 30, top: 22, bottom: 16 })
                         .show(ui, |ui| {
@@ -3895,9 +5007,22 @@ mod ui {
                                 ui.add_space(2.0);
                                 // The version lives in the rail (one list), so the
                                 // home tab goes straight to playing.
+                                if let Some(inst) = self.instances.get(self.sel) {
+                                    let label = if inst.name == inst.game.id() {
+                                        inst.name.clone()
+                                    } else {
+                                        format!("{} · {}", inst.name, inst.game.id())
+                                    };
+                                    ui.label(RichText::new(label).size(12.5).color(SOFT));
+                                    ui.add_space(6.0);
+                                }
                                 ui.horizontal(|ui| {
                                     if hero_button(ui, t.play, 210.0, 54.0, !busy).clicked() {
                                         self.play();
+                                    }
+                                    if plain_button(ui, u.instance_options, 150.0, !busy).clicked() {
+                                        self.show_new = false;
+                                        self.show_instance = true;
                                     }
                                     if plain_button(ui, t.refresh, 120.0, !busy).clicked() {
                                         self.refresh();
@@ -4259,6 +5384,7 @@ mod ui {
                             });
                         });
                 });
+            self.instance_options(ctx);
             self.splash(ctx);
             // The window was created hidden; show it now that this frame (black
             // curtain and all) is on its way to the screen.
@@ -4580,6 +5706,7 @@ mod ui {
     /// A clickable rail card; the whole panel reacts, like a list row.
     fn instance_row(
         ui: &mut egui::Ui,
+        key: &str,
         name: &str,
         sub: &str,
         dot: Color32,
@@ -4617,7 +5744,7 @@ mod ui {
         }
         let resp = ui.interact(
             inner.response.rect,
-            ui.id().with(("instance", name)),
+            ui.id().with(("instance", key)),
             egui::Sense::click(),
         );
         if resp.hovered() {
@@ -4702,6 +5829,21 @@ mod tests {
         assert!(!dest.exists());
 
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn resolution_and_folder_are_stored_per_instance() {
+        assert_eq!(parse_resolution("", ""), (0, 0));
+        assert_eq!(parse_resolution("1280", "720"), (1280, 720));
+        // A half-typed or out-of-range size falls back to the build's own size.
+        assert_eq!(parse_resolution("1280", ""), (1280, 0));
+        assert_eq!(parse_resolution("100", "720"), (0, 720));
+        assert_eq!(parse_custom_dir("   "), None);
+
+        let mut inst = Instance::fresh(GameVersion::C0011a);
+        assert_eq!(instance_dir(&inst), worlds_root().join(&inst.id));
+        inst.dir = Some(std::env::temp_dir().join("rustium-instance-world"));
+        assert_eq!(instance_dir(&inst), inst.dir.clone().unwrap());
     }
 
     #[test]

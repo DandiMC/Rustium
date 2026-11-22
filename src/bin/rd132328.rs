@@ -302,7 +302,7 @@ impl ApplicationHandler for App {
         } else if smoke {
             (480, 360)
         } else {
-            (1024, 768)
+            render::tamano_inicial((1024, 768))
         };
         let window = Arc::new(
             event_loop

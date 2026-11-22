@@ -30,6 +30,15 @@ path = "src/bin/rd20090515.rs"
 name = "rd161348"
 path = "src/bin/rd161348.rs"
 
+# Classic reconstruidas (sus jars no se conservan)
+[[bin]]
+name = "classic009a"
+path = "src/bin/classic009a.rs"
+
+[[bin]]
+name = "classic010a"
+path = "src/bin/classic010a.rs"
+
 # Primera version Classic conservada
 [[bin]]
 name = "classic011a"
@@ -46,6 +55,8 @@ flate2 = "1"
 ureq = "2.10"
 # Interfaz del launcher (misma familia wgpu 25 / winit 0.30 que el juego)
 eframe = "0.32"
+# Selector nativo de carpetas para el directorio del juego de cada instancia
+rfd = { version = "0.18", default-features = false }
 
 [profile.release]
 opt-level = 3

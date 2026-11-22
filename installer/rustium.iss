@@ -64,7 +64,9 @@ Source: "..\target\x86_64-pc-windows-gnu\release\rd132328.exe"; DestDir: "{app}"
 Source: "..\target\x86_64-pc-windows-gnu\release\rd20090515.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\rd160052.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\rd161348.exe"; DestDir: "{app}"; Flags: ignoreversion
-; La primera Classic portada.
+; Classic: la primera conservada y las dos reconstruidas.
+Source: "..\target\x86_64-pc-windows-gnu\release\classic009a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic010a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic011a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Apache 2.0 asks for the licence and the attribution notice to be handed to

@@ -1,8 +1,8 @@
 # Rustium
 
 Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-131655,
-rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348) y de la primera Classic
-(c0.0.11a), sin cuenta de Microsoft y sin
+rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348) y de las primeras Classic
+(c0.0.9a, c0.0.10a y c0.0.11a), sin cuenta de Microsoft y sin
 descargar nada de Mojang: lee las texturas de la copia que ya tengas en el ordenador
 y, si no hay ninguna, dibuja las suyas.
 
@@ -31,8 +31,8 @@ Solo hace falta **el instalador**: `Rustium-0.1.15-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las siete versiones (las seis
-pre-clásicas y la primera Classic):
+El selector encima de «Jugar» arranca cualquiera de las nueve versiones (las seis
+pre-clásicas y las tres primeras Classic):
 
 | versión | qué trae |
 |---|---|
@@ -42,18 +42,29 @@ pre-clásicas y la primera Classic):
 | rd-20090515 | partículas, más bloques y el cubo del bloque en la esquina |
 | rd-160052 | el mismo motor, un build anterior |
 | rd-161348 | el último build pre-clásico (su jar es el mismo que el de rd-20090515) |
-| c0.0.11a | la primera Classic: terreno con cuevas de `NoiseMap`, HUD con fps y chunk updates, y el modo pintar que cambia con el botón derecho |
+| c0.0.9a | reconstruida: el modo construir con el velo blanco por las seis caras, contador de fps, a 640×480 y Escape cierra |
+| c0.0.10a | reconstruida: igual que 0.0.9a pero Escape solo suelta el ratón |
+| c0.0.11a | la primera Classic conservada: terreno con cuevas de `NoiseMap`, HUD con fps y chunk updates, y el modo pintar que cambia con el botón derecho |
+
+c0.0.9a y c0.0.10a son **reconstrucciones**: sus jars nunca se archivaron. Salen
+del código de c0.0.11a y de lo que documenta la Minecraft Wiki de cada una, y
+llevan las texturas y la fuente de c0.0.11a.
 
 rd-131655 (el «Cave game tech test») nunca tuvo jar publicado. Está reconstruido
 a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-132211.
 
 ## Tus mundos
 
-Cada versión guarda su mundo en `%APPDATA%\Rustium\worlds\<versión>\level.dat`,
-así que una partida de rd-132211 nunca se abre con los bloques de otra familia.
-La pestaña **Mundos** del launcher enseña cuánto ocupa cada uno y cuándo lo
-jugaste, abre su carpeta y lo borra con confirmación. Justo debajo están las siete
-instalaciones con su carpeta.
+Cada instancia guarda su mundo en `%APPDATA%\Rustium\worlds\<instancia>\level.dat`
+por defecto, y puede apuntar a cualquier otra carpeta desde sus opciones, así que
+una partida de rd-132211 nunca se abre con los bloques de otra familia. Las nueve
+instancias por defecto reutilizan el id de la versión, así que los mundos guardados
+antes de que existieran las instancias siguen en su sitio. Cada instancia también
+recuerda el tamaño inicial de su ventana; deja la resolución vacía para usar el
+tamaño que tenía esa versión originalmente. La pestaña
+**Mundos** del launcher enseña cuánto ocupa cada uno y cuándo lo jugaste, abre su
+carpeta y lo borra con confirmación. Justo debajo están las instalaciones con su
+carpeta.
 
 ## Para compilar desde el código
 

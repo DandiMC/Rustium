@@ -165,7 +165,11 @@ impl ApplicationHandler for App {
         // El banco abre la misma ventana que el original (1024x768 de cliente) y se
         // queda encima, para que las dos cifras se midan en igualdad de condiciones.
         let bench = self.bench.is_some();
-        let size = (1024, 768);
+        let size = if bench {
+            (1024, 768)
+        } else {
+            render::tamano_inicial((1024, 768))
+        };
         let window = Arc::new(
             event_loop
                 .create_window(

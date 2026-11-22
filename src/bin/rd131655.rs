@@ -66,7 +66,11 @@ impl ApplicationHandler for App {
         if self.foto {
             event_loop.set_control_flow(ControlFlow::Poll);
         }
-        let (w, h) = if self.foto { (960, 720) } else { (1024, 768) };
+        let (w, h) = if self.foto {
+            (960, 720)
+        } else {
+            render::tamano_inicial((1024, 768))
+        };
         let window = Arc::new(
             event_loop
                 .create_window(
