@@ -810,7 +810,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Rustium 0.2: a new face for the launcher",
                 "22 Nov 2026",
                 "A cleaner launcher, social icons and a proper 0.2 release.",
-                "This update reworks the launcher footer and the news cards. You can now follow me through YouTube, Discord and Patreon icons instead of text links, and the cards give the text room to breathe. I also removed the repeated pictures from the new news: every story keeps its own, and the first one, the original, is still there. The whole launcher is now version 0.2.",
+                "This update reworks the launcher header and the news cards. You can now follow me through YouTube, Discord and Patreon icons instead of text links, and the cards give the text room to breathe. I also removed the repeated pictures from the new news: every story keeps its own, and the first one, the original, is still there. The whole launcher is now version 0.2.",
             ),
             (
                 "Walking no longer cuts out",
@@ -890,7 +890,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Rustium 0.2: el launcher cambia de cara",
                 "22 nov 2026",
                 "Un launcher más limpio, iconos de redes y una versión 0.2 a la altura.",
-                "Esta actualización rehace el pie del launcher y las novedades. Ahora puedes seguirme con iconos de YouTube, Discord y Patreon en lugar de enlaces de texto, y las tarjetas dejan respirar al contenido. También he quitado las imágenes repetidas de las novedades nuevas: cada noticia se queda con la suya, y la primera, la de siempre, sigue ahí. Todo el launcher pasa a la versión 0.2.",
+                "Esta actualización rehace la cabecera del launcher y las novedades. Ahora puedes seguirme con iconos de YouTube, Discord y Patreon en lugar de enlaces de texto, y las tarjetas dejan respirar al contenido. También he quitado las imágenes repetidas de las novedades nuevas: cada noticia se queda con la suya, y la primera, la de siempre, sigue ahí. Todo el launcher pasa a la versión 0.2.",
             ),
             (
                 "Caminar ya no se corta",
@@ -970,7 +970,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Rustium 0.2: o launcher muda de cara",
                 "22 nov 2026",
                 "Um launcher mais limpo, ícones das redes e a versão 0.2.",
-                "Esta atualização refaz o rodapé do launcher e as novidades. Agora podes seguir-me com ícones do YouTube, Discord e Patreon em vez de links de texto, e os cartões dão espaço ao conteúdo. Também removi as imagens repetidas das novidades novas: cada notícia fica com a sua, e a primeira, a de sempre, continua lá. Todo o launcher passa à versão 0.2.",
+                "Esta atualização refaz o cabeçalho do launcher e as novidades. Agora podes seguir-me com ícones do YouTube, Discord e Patreon em vez de links de texto, e os cartões dão espaço ao conteúdo. Também removi as imagens repetidas das novidades novas: cada notícia fica com a sua, e a primeira, a de sempre, continua lá. Todo o launcher passa à versão 0.2.",
             ),
             (
                 "Andar já não se corta",
@@ -1050,7 +1050,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Rustium 0.2 : un nouveau visage pour le launcher",
                 "22 nov. 2026",
                 "Un launcher plus propre, des icônes de réseaux et une vraie version 0.2.",
-                "Cette mise à jour refait le pied du launcher et les cartes de nouveautés. Tu peux maintenant me suivre avec des icônes YouTube, Discord et Patreon au lieu de liens texte, et les cartes laissent respirer le contenu. J'ai aussi retiré les images répétées des nouvelles nouveautés : chaque actualité garde la sienne, et la première, l'originale, est toujours là. Tout le launcher passe en version 0.2.",
+                "Cette mise à jour refait l'en-tête du launcher et les cartes de nouveautés. Tu peux maintenant me suivre avec des icônes YouTube, Discord et Patreon au lieu de liens texte, et les cartes laissent respirer le contenu. J'ai aussi retiré les images répétées des nouvelles nouveautés : chaque actualité garde la sienne, et la première, l'originale, est toujours là. Tout le launcher passe en version 0.2.",
             ),
             (
                 "La marche ne s'arrête plus",
@@ -1130,7 +1130,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Rustium 0.2: ein neues Gesicht für den Launcher",
                 "22. Nov. 2026",
                 "Ein sauberer Launcher, Social-Icons und eine echte Version 0.2.",
-                "Dieses Update überarbeitet die Fußzeile des Launchers und die News-Karten. Du kannst mir jetzt über YouTube-, Discord- und Patreon-Symbole statt Textlinks folgen, und die Karten lassen dem Inhalt mehr Luft. Außerdem habe ich die doppelten Bilder aus den neuen News entfernt: Jede Meldung behält ihr eigenes, und die erste, das Original, bleibt. Der ganze Launcher ist jetzt Version 0.2.",
+                "Dieses Update überarbeitet den Kopfbereich des Launchers und die News-Karten. Du kannst mir jetzt über YouTube-, Discord- und Patreon-Symbole statt Textlinks folgen, und die Karten lassen dem Inhalt mehr Luft. Außerdem habe ich die doppelten Bilder aus den neuen News entfernt: Jede Meldung behält ihr eigenes, und die erste, das Original, bleibt. Der ganze Launcher ist jetzt Version 0.2.",
             ),
             (
                 "Das Laufen bricht nicht mehr ab",
@@ -5141,7 +5141,50 @@ mod ui {
                             });
                             ui.add_space(16.0);
 
-                            ui.label(disp("Rustium", 54.0).color(Color32::from_rgb(250, 244, 250)));
+                            // Credito, redes y aviso legal junto al titulo: se ven
+                            // siempre, sin depender de la altura del contenido.
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    disp("Rustium", 54.0)
+                                        .color(Color32::from_rgb(250, 244, 250)),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        let brand_w = (ui.available_width() - 8.0).max(260.0);
+                                        ui.vertical(|ui| {
+                                            ui.set_max_width(brand_w);
+                                            ui.horizontal(|ui| {
+                                                ui.label(
+                                                    RichText::new(creator_label(self.lang))
+                                                        .size(11.0)
+                                                        .color(SOFT),
+                                                );
+                                                ui.add_space(2.0);
+                                                ui.spacing_mut().item_spacing.x = 4.0;
+                                                if social_icon(ui, Social::YouTube).clicked() {
+                                                    open_in_browser("https://www.youtube.com/@eldandimc");
+                                                }
+                                                if social_icon(ui, Social::Discord).clicked() {
+                                                    open_in_browser("https://discord.gg/HP2GPrcEXD");
+                                                }
+                                                if social_icon(ui, Social::Patreon).clicked() {
+                                                    open_in_browser("https://www.patreon.com/c/dandimc");
+                                                }
+                                            });
+                                            ui.add_space(2.0);
+                                            ui.add(
+                                                egui::Label::new(
+                                                    RichText::new(t.legal_footer)
+                                                        .size(9.5)
+                                                        .color(MUTED),
+                                                )
+                                                .wrap(),
+                                            );
+                                        });
+                                    },
+                                );
+                            });
                             // The long path is only worth showing when something is
                             // missing; otherwise it lives inside the texture card.
                             if !have {
@@ -5534,28 +5577,6 @@ mod ui {
                                     });
                             }
 
-                            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                                ui.label(RichText::new(t.legal_footer).size(11.0).color(MUTED));
-                                ui.add_space(4.0);
-                                ui.horizontal(|ui| {
-                                    ui.label(
-                                        RichText::new(creator_label(self.lang))
-                                            .size(11.0)
-                                            .color(SOFT),
-                                    );
-                                    ui.add_space(2.0);
-                                    ui.spacing_mut().item_spacing.x = 4.0;
-                                    if social_icon(ui, Social::YouTube).clicked() {
-                                        open_in_browser("https://www.youtube.com/@eldandimc");
-                                    }
-                                    if social_icon(ui, Social::Discord).clicked() {
-                                        open_in_browser("https://discord.gg/HP2GPrcEXD");
-                                    }
-                                    if social_icon(ui, Social::Patreon).clicked() {
-                                        open_in_browser("https://www.patreon.com/c/dandimc");
-                                    }
-                                });
-                            });
                         });
                 });
             self.instance_options(ctx);
