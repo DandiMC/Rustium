@@ -735,9 +735,9 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.1.16).
+/// Novedades de las versiones del launcher (0.1.4 a 0.2.0).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 11] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 13] {
     match l {
         Lang::En => [
             (
@@ -805,6 +805,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "22 Nov 2026",
                 "The block you are about to place is drawn complete and solid, as in the original.",
                 "The preview cube had its faces in the wrong order, so you saw its sides or its inside instead of a normal block. It is fixed: the block you are about to place now appears complete, with its texture, just like in 2009.",
+            ),
+            (
+                "Rustium 0.2: a new face for the launcher",
+                "22 Nov 2026",
+                "A cleaner launcher, social icons and a proper 0.2 release.",
+                "This update reworks the launcher footer and the news cards. You can now follow me through YouTube, Discord and Patreon icons instead of text links, and the cards give the text room to breathe. I also removed the repeated pictures from the new news: every story keeps its own, and the first one, the original, is still there. The whole launcher is now version 0.2.",
+            ),
+            (
+                "Walking no longer cuts out",
+                "22 Nov 2026",
+                "Hold W and keep going for as long as you like in the pre-classics and Classic.",
+                "When you hold a key, Windows repeats it many times per second. Those repeats were treated as if you had let go, so the player walked for half a second and stopped on their own. Presses and repeats are now told apart: you can walk without releasing W for as long as you want, including with capitals and the arrow keys.",
             ),
         ],
         Lang::Es => [
@@ -874,6 +886,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "El bloque que vas a colocar se dibuja completo y macizo, como en el original.",
                 "El cubo de vista previa tenía las caras en el orden equivocado, así que veías sus lados o su interior en vez de un bloque normal. Ya está arreglado: el bloque que vas a colocar aparece completo, con su textura, igual que en 2009.",
             ),
+            (
+                "Rustium 0.2: el launcher cambia de cara",
+                "22 nov 2026",
+                "Un launcher más limpio, iconos de redes y una versión 0.2 a la altura.",
+                "Esta actualización rehace el pie del launcher y las novedades. Ahora puedes seguirme con iconos de YouTube, Discord y Patreon en lugar de enlaces de texto, y las tarjetas dejan respirar al contenido. También he quitado las imágenes repetidas de las novedades nuevas: cada noticia se queda con la suya, y la primera, la de siempre, sigue ahí. Todo el launcher pasa a la versión 0.2.",
+            ),
+            (
+                "Caminar ya no se corta",
+                "22 nov 2026",
+                "Mantener W vuelve a llevarte tan lejos como quieras en las preclásicas y en Classic.",
+                "Al mantener una tecla, Windows la repite muchas veces por segundo. Esas repeticiones se colaban como si hubieras soltado la tecla, así que el jugador andaba medio segundo y se paraba solo. Ahora se distinguen de verdad las pulsaciones de las repeticiones: puedes caminar sin soltar W todo el rato que quieras, también con mayúsculas y con las flechas.",
+            ),
         ],
         Lang::Pt => [
             (
@@ -941,6 +965,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "22 nov 2026",
                 "O bloco que vais colocar é desenhado completo e maciço, como no original.",
                 "O cubo de pré-visualização tinha as faces na ordem errada, por isso vias os lados ou o interior em vez de um bloco normal. Já está corrigido: o bloco que vais colocar aparece completo, com a sua textura, tal como em 2009.",
+            ),
+            (
+                "Rustium 0.2: o launcher muda de cara",
+                "22 nov 2026",
+                "Um launcher mais limpo, ícones das redes e a versão 0.2.",
+                "Esta atualização refaz o rodapé do launcher e as novidades. Agora podes seguir-me com ícones do YouTube, Discord e Patreon em vez de links de texto, e os cartões dão espaço ao conteúdo. Também removi as imagens repetidas das novidades novas: cada notícia fica com a sua, e a primeira, a de sempre, continua lá. Todo o launcher passa à versão 0.2.",
+            ),
+            (
+                "Andar já não se corta",
+                "22 nov 2026",
+                "Mantém o W e continua a andar o tempo que quiseres nas pré-clássicas e na Classic.",
+                "Quando manténs uma tecla, o Windows repete-a muitas vezes por segundo. Essas repetições eram tratadas como se tivesses largado a tecla, por isso o jogador andava meio segundo e parava sozinho. Agora as pressões e as repetições são distinguidas: podes andar sem largar o W o tempo que quiseres, também com maiúsculas e com as setas.",
             ),
         ],
         Lang::Fr => [
@@ -1010,6 +1046,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Le bloc que tu vas poser est dessiné complet et plein, comme dans l'original.",
                 "Le cube d'aperçu avait ses faces dans le mauvais ordre : on voyait ses côtés ou son intérieur au lieu d'un bloc normal. C'est réglé : le bloc que tu vas poser apparaît complet, avec sa texture, comme en 2009.",
             ),
+            (
+                "Rustium 0.2 : un nouveau visage pour le launcher",
+                "22 nov. 2026",
+                "Un launcher plus propre, des icônes de réseaux et une vraie version 0.2.",
+                "Cette mise à jour refait le pied du launcher et les cartes de nouveautés. Tu peux maintenant me suivre avec des icônes YouTube, Discord et Patreon au lieu de liens texte, et les cartes laissent respirer le contenu. J'ai aussi retiré les images répétées des nouvelles nouveautés : chaque actualité garde la sienne, et la première, l'originale, est toujours là. Tout le launcher passe en version 0.2.",
+            ),
+            (
+                "La marche ne s'arrête plus",
+                "22 nov. 2026",
+                "Maintiens W et avance aussi longtemps que tu veux dans les pré-classiques et Classic.",
+                "Quand tu maintiens une touche, Windows la répète plusieurs fois par seconde. Ces répétitions étaient prises pour un relâchement, donc le joueur marchait une demi-seconde puis s'arrêtait tout seul. Les appuis et les répétitions sont maintenant distingués : tu peux marcher sans lâcher W aussi longtemps que tu veux, y compris en majuscules et avec les flèches.",
+            ),
         ],
         Lang::De => [
             (
@@ -1077,6 +1125,18 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "22. Nov. 2026",
                 "Der Block, den du setzen willst, wird wieder vollständig und massiv gezeichnet.",
                 "Beim Vorschau-Würfel waren die Flächen in der falschen Reihenfolge, deshalb sah man seine Seiten oder sein Inneres statt eines normalen Blocks. Behoben: Der Block, den du setzen willst, erscheint jetzt vollständig mit seiner Textur, genau wie 2009.",
+            ),
+            (
+                "Rustium 0.2: ein neues Gesicht für den Launcher",
+                "22. Nov. 2026",
+                "Ein sauberer Launcher, Social-Icons und eine echte Version 0.2.",
+                "Dieses Update überarbeitet die Fußzeile des Launchers und die News-Karten. Du kannst mir jetzt über YouTube-, Discord- und Patreon-Symbole statt Textlinks folgen, und die Karten lassen dem Inhalt mehr Luft. Außerdem habe ich die doppelten Bilder aus den neuen News entfernt: Jede Meldung behält ihr eigenes, und die erste, das Original, bleibt. Der ganze Launcher ist jetzt Version 0.2.",
+            ),
+            (
+                "Das Laufen bricht nicht mehr ab",
+                "22. Nov. 2026",
+                "Halte W gedrückt und laufe in den Pre-Classics und Classic so lange du willst.",
+                "Wenn du eine Taste hältst, wiederholt Windows sie viele Male pro Sekunde. Diese Wiederholungen wurden wie ein Loslassen behandelt, deshalb lief der Spieler eine halbe Sekunde und blieb dann von selbst stehen. Tastendruck und Wiederholung werden jetzt unterschieden: Du kannst ohne Loslassen von W so lange laufen, wie du willst, auch mit Großbuchstaben und den Pfeiltasten.",
             ),
         ],
     }
@@ -5323,14 +5383,14 @@ mod ui {
                                         // list can grow at runtime, so the open
                                         // flags are resized after it is built.
                                         // (title, date, summary, body, version tag, art)
-                                        let mut cards: Vec<(String, String, String, String, String, Art)> = vec![
+                                        let mut cards: Vec<(String, String, String, String, String, Option<Art>)> = vec![
                                             (
                                                 u.n1_title.to_string(),
                                                 u.n1_date.to_string(),
                                                 u.n1_short.to_string(),
                                                 u.n1_body.to_string(),
                                                 format!("v{VERSION}"),
-                                                Art::Launcher,
+                                                Some(Art::Launcher),
                                             ),
                                             (
                                                 u.n2_title.to_string(),
@@ -5338,7 +5398,7 @@ mod ui {
                                                 u.n2_short.to_string(),
                                                 u.n2_body.to_string(),
                                                 "rd-132211".to_string(),
-                                                Art::First,
+                                                Some(Art::First),
                                             ),
                                         ];
                                         for (lang, title, date, short, body, version, art) in &self.local_news {
@@ -5351,13 +5411,13 @@ mod ui {
                                                 short.clone(),
                                                 body.clone(),
                                                 version.clone(),
-                                                match *art {
+                                                Some(match *art {
                                                     1 => Art::Bush,
                                                     2 => Art::Zombies,
                                                     3 => Art::Upright,
                                                     4 => Art::First,
                                                     _ => Art::World,
-                                                },
+                                                }),
                                             ));
                                         }
                                         // The build each version card talks about.
@@ -5373,6 +5433,8 @@ mod ui {
                                             "Rustium 0.1.15",
                                             "Rustium 0.1.16",
                                             "Rustium 0.1.16",
+                                            "Rustium 0.2",
+                                            "Rustium 0.2",
                                         ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             cards.push((
@@ -5382,15 +5444,18 @@ mod ui {
                                                 item.3.to_string(),
                                                 tags.get(i).copied().unwrap_or("").to_string(),
                                                 match i {
-                                                    1 => Art::Bush,
-                                                    2 => Art::Zombies,
-                                                    3 => Art::Upright,
-                                                    4 => Art::Ticks,
-                                                    5 => Art::Growth,
-                                                    6 => Art::Zombies,
-                                                    7 => Art::Cave,
-                                                    8 => Art::Worlds,
-                                                    _ => Art::World,
+                                                    1 => Some(Art::Bush),
+                                                    2 => Some(Art::Zombies),
+                                                    3 => Some(Art::Upright),
+                                                    4 => Some(Art::Ticks),
+                                                    5 => Some(Art::Growth),
+                                                    6 => Some(Art::Zombies),
+                                                    7 => Some(Art::Cave),
+                                                    8 => Some(Art::Worlds),
+                                                    // Las novedades de 0.1.16 y 0.2 ya no repiten
+                                                    // la captura vieja: solo texto.
+                                                    9 | 10 | 11 | 12 => None,
+                                                    _ => Some(Art::World),
                                                 },
                                             ));
                                         }
@@ -5478,13 +5543,16 @@ mod ui {
                                             .size(11.0)
                                             .color(SOFT),
                                     );
-                                    ui.label(RichText::new("·").size(11.0).color(MUTED));
-                                    if ui.link(RichText::new("YouTube @eldandimc").size(11.0)).clicked() {
+                                    ui.add_space(2.0);
+                                    ui.spacing_mut().item_spacing.x = 4.0;
+                                    if social_icon(ui, Social::YouTube).clicked() {
                                         open_in_browser("https://www.youtube.com/@eldandimc");
                                     }
-                                    ui.label(RichText::new("·").size(11.0).color(MUTED));
-                                    if ui.link(RichText::new("GitHub DandiMC").size(11.0)).clicked() {
-                                        open_in_browser("https://github.com/DandiMC/Rustium");
+                                    if social_icon(ui, Social::Discord).clicked() {
+                                        open_in_browser("https://discord.gg/HP2GPrcEXD");
+                                    }
+                                    if social_icon(ui, Social::Patreon).clicked() {
+                                        open_in_browser("https://www.patreon.com/c/dandimc");
                                     }
                                 });
                             });
@@ -5626,6 +5694,83 @@ mod ui {
         Worlds,
     }
 
+    /// Redes del pie del launcher. Se dibujan como iconos para que la linea de
+    /// credito no sea una fila de enlaces de texto.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Social {
+        YouTube,
+        Discord,
+        Patreon,
+    }
+
+    fn social_icon(ui: &mut egui::Ui, social: Social) -> egui::Response {
+        let (rect, resp) =
+            ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::click());
+        let hover = resp.hovered();
+        let (brand, name) = match social {
+            Social::YouTube => (Color32::from_rgb(255, 70, 70), "YouTube"),
+            Social::Discord => (Color32::from_rgb(114, 137, 218), "Discord"),
+            Social::Patreon => (Color32::from_rgb(255, 92, 96), "Patreon"),
+        };
+        let p = ui.painter();
+        let bg = if hover { brand } else { GLASS_HI };
+        p.rect(
+            rect,
+            8.0,
+            bg,
+            egui::Stroke::new(1.0_f32, if hover { brand } else { EDGE }),
+            egui::StrokeKind::Inside,
+        );
+        let c = rect.center();
+        let fg = if hover { Color32::WHITE } else { brand };
+        match social {
+            Social::YouTube => {
+                // Rectangulo redondeado con el triangulo de play recortado.
+                p.rect_filled(
+                    egui::Rect::from_center_size(c, egui::vec2(16.0, 11.5)),
+                    3.5,
+                    fg,
+                );
+                p.add(egui::Shape::convex_polygon(
+                    vec![
+                        c + egui::vec2(-2.6, -3.4),
+                        c + egui::vec2(-2.6, 3.4),
+                        c + egui::vec2(3.6, 0.0),
+                    ],
+                    bg,
+                    egui::Stroke::NONE,
+                ));
+            }
+            Social::Discord => {
+                // La cara del logotipo: cuerpo redondeado, orejas y ojos
+                // recortados en el color del fondo.
+                p.rect_filled(
+                    egui::Rect::from_center_size(c + egui::vec2(0.0, 1.0), egui::vec2(16.0, 10.5)),
+                    5.0,
+                    fg,
+                );
+                p.circle_filled(c + egui::vec2(-6.2, -4.4), 2.8, fg);
+                p.circle_filled(c + egui::vec2(6.2, -4.4), 2.8, fg);
+                p.circle_filled(c + egui::vec2(-3.5, 1.0), 1.8, bg);
+                p.circle_filled(c + egui::vec2(3.5, 1.0), 1.8, bg);
+            }
+            Social::Patreon => {
+                // La marca de Patreon: barra vertical y circulo.
+                p.rect_filled(
+                    egui::Rect::from_min_max(
+                        c + egui::vec2(-7.5, -7.0),
+                        c + egui::vec2(-3.5, 7.0),
+                    ),
+                    1.6,
+                    fg,
+                );
+                p.circle_filled(c + egui::vec2(2.0, 0.0), 6.0, fg);
+            }
+        }
+        resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(name)
+    }
+
     fn news_shot(
         ctx: &egui::Context,
         name: &str,
@@ -5706,7 +5851,7 @@ mod ui {
         open: &mut bool,
         more: &str,
         less: &str,
-        art: Art,
+        art: Option<Art>,
     ) {
         egui::Frame::NONE
             .fill(GLASS)
@@ -5718,10 +5863,16 @@ mod ui {
                 // The picture and the margins are already spoken for; the text
                 // column must use what is left, or a long body widens the card
                 // past the window and the right edge gets clipped.
-                let text_w = (ui.available_width() - 176.0 - 16.0 - 8.0).max(220.0);
+                let text_w = if art.is_some() {
+                    (ui.available_width() - 176.0 - 16.0 - 8.0).max(220.0)
+                } else {
+                    ui.available_width()
+                };
                 ui.horizontal_top(|ui| {
-                    art_thumb(ui, art, 176.0, 108.0);
-                    ui.add_space(16.0);
+                    if let Some(art) = art {
+                        art_thumb(ui, art, 176.0, 108.0);
+                        ui.add_space(16.0);
+                    }
                     ui.vertical(|ui| {
                         ui.set_max_width(text_w);
                         ui.horizontal(|ui| {

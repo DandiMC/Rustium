@@ -665,6 +665,28 @@ impl ApplicationHandler for App {
                 // Las teclas autorepetidas no deben disparar acciones: mantener G
                 // generaba un zombi por cada repeticion en vez de uno por pulsacion.
                 // Solo G puede repetir, y unicamente si la instancia lo pide.
+                // Windows repite una tecla mantenida con state=Pressed y
+                // repeat=true. Esas repeticiones no pueden caer en la rama de
+                // soltar: borraban "w" del conjunto medio segundo despues de
+                // empezar a andar y el jugador se paraba solo.
+                if state == ElementState::Released {
+                    match &logical_key {
+                        Key::Character(c) => {
+                            self.keys.remove(c.to_ascii_lowercase().as_str());
+                        }
+                        Key::Named(NamedKey::Space)
+                        | Key::Named(NamedKey::Super)
+                        | Key::Named(NamedKey::Meta) => {
+                            self.keys.remove(" ");
+                        }
+                        Key::Named(NamedKey::ArrowUp) => { self.keys.remove("arrowup"); }
+                        Key::Named(NamedKey::ArrowDown) => { self.keys.remove("arrowdown"); }
+                        Key::Named(NamedKey::ArrowLeft) => { self.keys.remove("arrowleft"); }
+                        Key::Named(NamedKey::ArrowRight) => { self.keys.remove("arrowright"); }
+                        _ => {}
+                    }
+                    return;
+                }
                 let g_repite = self.g_repeat
                     && matches!(&logical_key, Key::Character(c) if c.eq_ignore_ascii_case("g"));
                 if state == ElementState::Pressed && (!repeat || g_repite) {
@@ -726,7 +748,9 @@ impl ApplicationHandler for App {
                                 z.e.set_pos(self.jugador.x, self.jugador.y, self.jugador.z);
                                 self.zombis.push(z);
                             } else {
-                                self.keys.insert(c.to_string());
+                                // En minusculas: con Mayusculas pulsadas el
+                                // movimiento tambien tiene que seguir.
+                                self.keys.insert(c.to_ascii_lowercase());
                             }
                         }
                         // La tecla Windows/Meta tambien salta (keycode 219).
@@ -749,21 +773,6 @@ impl ApplicationHandler for App {
                         }
                         _ => {}
                     }
-                } else if let Key::Character(c) = &logical_key {
-                    self.keys.remove(c.as_str());
-                } else if let Key::Named(NamedKey::Space)
-                | Key::Named(NamedKey::Super)
-                | Key::Named(NamedKey::Meta) = &logical_key
-                {
-                    self.keys.remove(" ");
-                } else if let Key::Named(NamedKey::ArrowUp) = &logical_key {
-                    self.keys.remove("arrowup");
-                } else if let Key::Named(NamedKey::ArrowDown) = &logical_key {
-                    self.keys.remove("arrowdown");
-                } else if let Key::Named(NamedKey::ArrowLeft) = &logical_key {
-                    self.keys.remove("arrowleft");
-                } else if let Key::Named(NamedKey::ArrowRight) = &logical_key {
-                    self.keys.remove("arrowright");
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
