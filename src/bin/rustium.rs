@@ -2556,6 +2556,16 @@ mod ui {
         let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
     }
 
+    /// "Open folder" on a build that has never saved anything: Explorer would
+    /// answer with its own error box, so the empty world folder is made first.
+    /// That keeps the launcher silent and gives the player somewhere to look.
+    fn reveal_world_dir(dir: &Path) {
+        if !dir.as_os_str().is_empty() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        reveal_dir(dir);
+    }
+
     /// Pixel face for the wordmark and the big title (Press Start 2P, OFL).
     ///
     /// The glyphs are drawn on an 8 px grid, so the requested size is turned into
@@ -3655,7 +3665,7 @@ mod ui {
                 }
                 Some(WorldAction::OpenDir(i)) => {
                     if let Some(row) = self.worlds.get(i) {
-                        reveal_dir(&row.dir);
+                        reveal_world_dir(&row.dir);
                     }
                 }
                 Some(WorldAction::OpenInstall(i)) => {
@@ -3878,7 +3888,7 @@ mod ui {
                                         self.refresh();
                                     }
                                     if plain_button(ui, u.folder, 150.0, !self.game_dir.as_os_str().is_empty()).clicked() {
-                                        reveal_dir(&self.game_dir);
+                                        reveal_world_dir(&self.game_dir);
                                     }
                                     if plain_button(ui, t.how, 160.0, !busy).clicked() {
                                         self.show = if self.show == Some(t.how_text) {
@@ -4636,6 +4646,47 @@ mod tests {
             piece.hex(),
             "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
         );
+    }
+
+    #[test]
+    fn a_family_world_migrates_to_rd132211_only() {
+        use std::io::Write;
+        let base = std::env::temp_dir().join(format!("rustium-migracion-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let exe_dir = base.join("juego");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+
+        // A Family-A world: only ids 0 (air) and 1 (block), nothing above.
+        let mut blocks = vec![0u8; WORLD_BYTES];
+        for i in blocks.iter_mut().step_by(97) {
+            *i = 1;
+        }
+        let src = exe_dir.join("level.dat");
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(&blocks).unwrap();
+        std::fs::write(&src, gz.finish().unwrap()).unwrap();
+
+        let legacy_dir = base.join("mundo-legacy");
+        let a_dir = base.join("mundo-a");
+        std::fs::create_dir_all(&legacy_dir).unwrap();
+        std::fs::create_dir_all(&a_dir).unwrap();
+
+        // The legacy build does not own this world, so it takes nothing.
+        migrate_old_world(GameVersion::Rd20090515, Some(&exe_dir), &legacy_dir);
+        assert!(!legacy_dir.join("level.dat").exists());
+
+        migrate_old_world(GameVersion::Rd132211, Some(&exe_dir), &a_dir);
+        let dest = a_dir.join("level.dat");
+        assert_eq!(std::fs::read(&dest).unwrap(), std::fs::read(&src).unwrap());
+        assert_eq!(world_looks_legacy(&dest), Some(false));
+        assert!(exe_dir.join("level.dat.migrated").exists());
+
+        // Once only: the marker stops a second copy after this one is deleted.
+        std::fs::remove_file(&dest).unwrap();
+        migrate_old_world(GameVersion::Rd132211, Some(&exe_dir), &a_dir);
+        assert!(!dest.exists());
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
