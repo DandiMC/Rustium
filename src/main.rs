@@ -214,6 +214,18 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                     return;
                 }
+                // F2: guarda una captura en screenshots/, como el original. El
+                // launcher la habilita por instancia con RD_F2_SHOTS.
+                if state == ElementState::Pressed
+                    && logical_key == Key::Named(NamedKey::F2)
+                    && std::env::var_os("RD_F2_SHOTS").is_some()
+                {
+                    if let Some(r) = &mut self.renderer {
+                        r.pedir_captura = true;
+                    }
+                    self.log("SCREENSHOT");
+                    return;
+                }
                 // F3: muestra/oculta el contador de FPS (como el depurador del original)
                 if state == ElementState::Pressed && logical_key == Key::Named(NamedKey::F3) {
                     self.show_fps = !self.show_fps;

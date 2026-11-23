@@ -70,6 +70,10 @@ const GAME_VERSION: &str = "rd-132211";
 /// Where we ask whether a newer launcher exists. Override with RUSTIUM_UPDATE_URL
 /// (useful for testing against a local file server).
 const UPDATE_URL: &str = "https://api.github.com/repos/DandiMC/Rustium/releases/latest";
+/// Where the live player count is published, as `{"online": 3}`. Point it at
+/// your own status endpoint with RUSTIUM_ONLINE_URL; when it cannot be read the
+/// chip simply does not appear.
+const ONLINE_URL: &str = "https://raw.githubusercontent.com/DandiMC/Rustium/main/web/online.json";
 /// Where the two games are compared: the fraction of the map their spawn is pinned
 /// to (the middle, above the terrain). The original gets it as -Drustium.spawn and
 /// the port as RD_SPAWN, so the spot is stated once here and each side works out
@@ -161,8 +165,8 @@ impl GameVersion {
 }
 
 /// One named copy of a build: its own world folder and its own extras. The
-/// nine default instances keep the old per-version folders, so existing worlds
-/// are picked up as they are.
+/// default instance keeps the old per-version folder, so worlds saved before
+/// instances existed are picked up as they are.
 #[derive(Clone)]
 struct Instance {
     id: String,
@@ -660,6 +664,16 @@ struct UiTexts {
     close: &'static str,
     // Worlds and installs tab.
     tab_worlds: &'static str,
+    // Screenshots tab.
+    tab_shots: &'static str,
+    shots_title: &'static str,
+    shots_intro: &'static str,
+    shots_none: &'static str,
+    shots_open: &'static str,
+    // Players online chip; `{n}` is filled in with `fill()`.
+    online_players: &'static str,
+    // Shown under the version picker in the instance options.
+    instance_version_hint: &'static str,
     worlds_title: &'static str,
     worlds_intro: &'static str,
     world_none: &'static str,
@@ -735,11 +749,17 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
-/// Novedades de las versiones del launcher (0.1.4 a 0.2.0).
+/// Novedades de las versiones del launcher (0.1.4 a 0.2.1).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 13] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 12] {
     match l {
         Lang::En => [
+            (
+                "Your screenshots, ready to open",
+                "23 Nov 2026",
+                "Press F2 while playing and your photos are saved for good.",
+                "Every capture goes into its instance's folder and shows up in the new Screenshots tab, with its date and size, ready to open with one click. Each instance keeps its own, and the tab gathers all of them.",
+            ),
             (
                 "The first five versions",
                 "18 Nov 2026",
@@ -763,18 +783,6 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 Nov 2026",
                 "In rd-20090515 and rd-161348 the bushes are upright again.",
                 "Their crossed planes were built with the depth axis as height, so they lay on their side. They now grow from the ground to the top of the block, exactly like the original.",
-            ),
-            (
-                "The world ticks at 20 Hz",
-                "20 Nov 2026",
-                "The pre-classic builds now move at the speed of the original Java game.",
-                "The legacy engine ran at 60 ticks per second, so the player, zombies and particles moved three times too fast. The world now ticks at 20 Hz, physics uses the original constants, and the camera interpolates between ticks.",
-            ),
-            (
-                "Grass and bushes update live",
-                "20 Nov 2026",
-                "Grass that grows and bushes that break update the world immediately.",
-                "When the level changed a block on its own, that part of the world kept showing the old block until the next click. Every change now marks its area and the mesh is rebuilt in the same frame. Bushes also no longer stop the player or block light, just like the original.",
             ),
             (
                 "Zombies can't crash the game anymore!",
@@ -821,6 +829,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
         ],
         Lang::Es => [
             (
+                "Tus capturas, listas para abrir",
+                "23 nov 2026",
+                "Pulsa F2 mientras juegas y tus fotos quedan guardadas.",
+                "Cada captura va a la carpeta de su instancia y aparece en la nueva pestaña Capturas, con su fecha y su tamaño, lista para abrir con un clic. Cada instancia guarda las suyas y la pestaña las reúne todas.",
+            ),
+            (
                 "Las cinco primeras versiones",
                 "18 nov 2026",
                 "Ya puedes jugar las cinco primeras versiones de Minecraft desde el mismo launcher.",
@@ -843,18 +857,6 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 nov 2026",
                 "En rd-20090515 y rd-161348 los arbustos ya se ven verticales.",
                 "Sus dos planos cruzados usaban la profundidad como altura y quedaban tumbados. Ahora van del suelo al techo del bloque, igual que en el original.",
-            ),
-            (
-                "El mundo late a 20 Hz",
-                "20 nov 2026",
-                "Las versiones preclásicas se mueven al ritmo del Java original.",
-                "El motor legacy corría a 60 ticks por segundo, así que el jugador, los zombis y las partículas iban tres veces más rápido. Ahora el mundo late a 20 Hz, la física usa las constantes del original y la cámara interpola entre ticks.",
-            ),
-            (
-                "La hierba cambia al instante",
-                "20 nov 2026",
-                "La hierba que crece y los arbustos que se rompen actualizan el mundo al instante.",
-                "Cuando el nivel cambiaba un bloque por su cuenta, el trozo de mundo seguía enseñando el bloque viejo hasta el siguiente clic. Ahora cada cambio marca su zona y la malla se reconstruye en el mismo fotograma. Además, los arbustos ya no frenan al jugador ni bloquean la luz, como en el original.",
             ),
             (
                 "¡Los zombis ya no se comen el juego!",
@@ -901,6 +903,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
         ],
         Lang::Pt => [
             (
+                "As tuas capturas, prontas a abrir",
+                "23 nov 2026",
+                "Carrega em F2 enquanto jogas e as tuas fotos ficam guardadas.",
+                "Cada captura vai para a pasta da sua instância e aparece no novo separador Capturas, com a data e o tamanho, pronta a abrir com um clique. Cada instância guarda as suas e o separador reúne-as todas.",
+            ),
+            (
                 "As cinco primeiras versões",
                 "18 nov 2026",
                 "Já podes jogar as cinco primeiras versões de Minecraft a partir do mesmo launcher.",
@@ -923,18 +931,6 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 nov 2026",
                 "Em rd-20090515 e rd-161348 os arbustos já aparecem verticais.",
                 "Os dois planos cruzados usavam a profundidade como altura e ficavam deitados. Agora vão do chão ao topo do bloco, tal como no original.",
-            ),
-            (
-                "O mundo corre a 20 Hz",
-                "20 nov 2026",
-                "As versões pré-clássicas voltam a mover-se ao ritmo do Java original.",
-                "O motor legacy corria a 60 ticks por segundo, por isso o jogador, os zombis e as partículas andavam três vezes mais depressa. Agora o mundo bate a 20 Hz, a física usa as constantes do original e a câmara interpola entre ticks.",
-            ),
-            (
-                "A relva muda ao instante",
-                "20 nov 2026",
-                "A relva que cresce e os arbustos que se quebram atualizam o mundo na hora.",
-                "Quando o nível mudava um bloco sozinho, aquela parte do mundo continuava a mostrar o bloco antigo até ao clique seguinte. Agora cada mudança marca a sua zona e a malha é reconstruída no mesmo fotograma. Além disso, os arbustos já não travam o jogador nem bloqueiam a luz, como no original.",
             ),
             (
                 "Os zombis já não fecham o jogo!",
@@ -981,6 +977,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
         ],
         Lang::Fr => [
             (
+                "Tes captures, prêtes à ouvrir",
+                "23 nov. 2026",
+                "Appuie sur F2 en jouant et tes photos sont enregistrées.",
+                "Chaque capture va dans le dossier de son instance et apparaît dans le nouvel onglet Captures, avec sa date et sa taille, prête à ouvrir en un clic. Chaque instance garde les siennes et l'onglet les rassemble toutes.",
+            ),
+            (
                 "Les cinq premières versions",
                 "18 nov. 2026",
                 "Tu peux maintenant jouer aux cinq premières versions de Minecraft depuis le même launcher.",
@@ -1003,18 +1005,6 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20 nov. 2026",
                 "Dans rd-20090515 et rd-161348, les buissons sont de nouveau verticaux.",
                 "Leurs deux plans croisés utilisaient la profondeur comme hauteur et restaient couchés. Ils vont maintenant du sol au haut du bloc, comme dans l'original.",
-            ),
-            (
-                "Le monde tourne à 20 Hz",
-                "20 nov. 2026",
-                "Les versions pré-classiques bougent au rythme du jeu Java original.",
-                "Le moteur legacy tournait à 60 ticks par seconde : le joueur, les zombies et les particules allaient trois fois trop vite. Le monde bat maintenant à 20 Hz, la physique utilise les constantes d'origine et la caméra interpole entre les ticks.",
-            ),
-            (
-                "L'herbe change à l'écran",
-                "20 nov. 2026",
-                "L'herbe qui pousse et les buissons qui se cassent mettent le monde à jour immédiatement.",
-                "Quand le niveau changeait un bloc tout seul, cette partie du monde continuait d'afficher l'ancien bloc jusqu'au clic suivant. Chaque changement marque maintenant sa zone et le maillage est reconstruit dans la même image. Les buissons ne bloquent plus le joueur ni la lumière, comme dans l'original.",
             ),
             (
                 "Les zombies ne font plus planter le jeu !",
@@ -1061,6 +1051,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
         ],
         Lang::De => [
             (
+                "Deine Screenshots, sofort griffbereit",
+                "23. Nov. 2026",
+                "Drücke beim Spielen F2 und deine Fotos werden gespeichert.",
+                "Jede Aufnahme landet im Ordner ihrer Instanz und erscheint im neuen Screenshots-Tab mit Datum und Größe, bereit zum Öffnen mit einem Klick. Jede Instanz behält ihre eigenen, der Tab sammelt alle.",
+            ),
+            (
                 "Die ersten fünf Versionen",
                 "18. Nov. 2026",
                 "Du kannst jetzt alle fünf frühen Minecraft-Versionen aus einem Launcher spielen.",
@@ -1083,18 +1079,6 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "20. Nov. 2026",
                 "In rd-20090515 und rd-161348 stehen die Büsche wieder aufrecht.",
                 "Ihre zwei gekreuzten Flächen nutzten die Tiefe als Höhe und lagen deshalb flach. Jetzt reichen sie vom Boden bis zur Blockoberseite, genau wie im Original.",
-            ),
-            (
-                "Die Welt läuft mit 20 Hz",
-                "20. Nov. 2026",
-                "Die pre-classic-Versionen bewegen sich im Tempo des Java-Originals.",
-                "Die Legacy-Engine lief mit 60 Ticks pro Sekunde, also waren Spieler, Zombies und Partikel dreimal zu schnell. Jetzt tickt die Welt mit 20 Hz, die Physik nutzt die Originalkonstanten und die Kamera interpoliert zwischen den Ticks.",
-            ),
-            (
-                "Gras ändert sich sofort",
-                "20. Nov. 2026",
-                "Wachsendes Gras und zerbrechende Büsche aktualisieren die Welt sofort.",
-                "Wenn das Level einen Block von selbst änderte, zeigte dieser Teil der Welt bis zum nächsten Klick noch den alten Block. Jede Änderung markiert jetzt ihre Zone und das Mesh wird im selben Frame neu gebaut. Büsche bremsen den Spieler außerdem nicht mehr und blockieren kein Licht, wie im Original.",
             ),
             (
                 "Zombies bringen das Spiel nicht mehr zum Absturz!",
@@ -1156,8 +1140,8 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
 /// ```
 ///
 /// `version` is optional (e.g. `rd-20090515`) and `art`: 0 world, 1 bush,
-/// 2 zombies, 3 upright bushes, 4 first version. A malformed block is skipped,
-/// never fatal.
+/// 2 zombies, 3 upright bushes, 4 first version, 5 block selection, 6 block
+/// preview, 7 walking. A malformed block is skipped, never fatal.
 fn load_local_news() -> Vec<(String, String, String, String, String, String, usize)> {
     let mut paths = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
@@ -1202,7 +1186,7 @@ fn load_local_news() -> Vec<(String, String, String, String, String, String, usi
                 "summary" => summary = v.trim().to_string(),
                 "body" => body = v.trim().to_string(),
                 "version" => version = v.trim().to_string(),
-                "art" => art = v.trim().parse().unwrap_or(0).min(4),
+                "art" => art = v.trim().parse().unwrap_or(0).min(7),
                 _ => {}
             }
         }
@@ -1247,6 +1231,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             instance_delete_hint: "The world folder is kept on disk.",
             close: "Close",
             tab_worlds: "Worlds",
+            tab_shots: "Screenshots",
+            shots_title: "Your screenshots",
+            shots_intro: "Every capture you take with F2 in Rustium shows up here, from any instance.",
+            shots_none: "No screenshots yet. Press F2 while playing.",
+            shots_open: "Open",
+            online_players: "{n} playing now",
+            instance_version_hint: "Changing the version keeps this instance's world, so you can update it or go back to an older build.",
             worlds_title: "Your worlds",
             worlds_intro: "Each instance keeps its own world, so they never mix. Open its folder, play it or delete it from here.",
             world_none: "No world saved yet",
@@ -1320,6 +1311,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             instance_delete_hint: "La carpeta del mundo se conserva en el disco.",
             close: "Cerrar",
             tab_worlds: "Mundos",
+            tab_shots: "Capturas",
+            shots_title: "Tus capturas",
+            shots_intro: "Aquí aparecen todas las capturas que hagas con F2 en Rustium, de cualquier instancia.",
+            shots_none: "Todavía no hay capturas. Pulsa F2 mientras juegas.",
+            shots_open: "Abrir",
+            online_players: "{n} jugando ahora",
+            instance_version_hint: "Al cambiar la versión se conserva el mundo de esta instancia, así puedes actualizarlo o volver a una versión anterior.",
             worlds_title: "Tus mundos",
             worlds_intro: "Cada instancia guarda su propio mundo, así nunca se mezclan. Desde aquí puedes abrir su carpeta, jugarlo o borrarlo.",
             world_none: "Todavía no hay mundo guardado",
@@ -1393,6 +1391,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             instance_delete_hint: "A pasta do mundo fica no disco.",
             close: "Fechar",
             tab_worlds: "Mundos",
+            tab_shots: "Capturas",
+            shots_title: "As tuas capturas",
+            shots_intro: "Aqui aparecem todas as capturas que fizeres com F2 no Rustium, de qualquer instância.",
+            shots_none: "Ainda não há capturas. Carrega em F2 enquanto jogas.",
+            shots_open: "Abrir",
+            online_players: "{n} a jogar agora",
+            instance_version_hint: "Ao mudar a versão, o mundo desta instância mantém-se, por isso podes atualizá-lo ou voltar a uma versão anterior.",
             worlds_title: "Os teus mundos",
             worlds_intro: "Cada instância guarda o seu próprio mundo, por isso nunca se misturam. Aqui podes abrir a pasta, jogar ou apagar.",
             world_none: "Ainda não há mundo guardado",
@@ -1466,6 +1471,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             instance_delete_hint: "Le dossier du monde reste sur le disque.",
             close: "Fermer",
             tab_worlds: "Mondes",
+            tab_shots: "Captures",
+            shots_title: "Tes captures",
+            shots_intro: "Toutes les captures prises avec F2 dans Rustium apparaissent ici, quelle que soit l'instance.",
+            shots_none: "Pas encore de capture. Appuie sur F2 en jouant.",
+            shots_open: "Ouvrir",
+            online_players: "{n} en ligne",
+            instance_version_hint: "Changer de version garde le monde de cette instance : tu peux le mettre à jour ou revenir à une version antérieure.",
             worlds_title: "Vos mondes",
             worlds_intro: "Chaque instance garde son propre monde, ils ne se mélangent donc jamais. D'ici, tu peux ouvrir son dossier, jouer ou le supprimer.",
             world_none: "Pas encore de monde enregistré",
@@ -1539,6 +1551,13 @@ fn ui_texts(l: Lang) -> UiTexts {
             instance_delete_hint: "Der Weltordner bleibt auf der Festplatte.",
             close: "Schließen",
             tab_worlds: "Welten",
+            tab_shots: "Screenshots",
+            shots_title: "Deine Screenshots",
+            shots_intro: "Hier erscheinen alle Aufnahmen, die du in Rustium mit F2 machst, aus jeder Instanz.",
+            shots_none: "Noch keine Aufnahmen. Drücke beim Spielen F2.",
+            shots_open: "Öffnen",
+            online_players: "{n} spielen gerade",
+            instance_version_hint: "Beim Versionswechsel bleibt die Welt dieser Instanz erhalten, du kannst sie also aktualisieren oder auf eine ältere Version zurückgehen.",
             worlds_title: "Deine Welten",
             worlds_intro: "Jede Instanz speichert ihre eigene Welt, so vermischen sie sich nie. Hier kannst du ihren Ordner öffnen, spielen oder sie löschen.",
             world_none: "Noch keine Welt gespeichert",
@@ -1649,14 +1668,55 @@ fn instances_path() -> Option<PathBuf> {
     Some(config_path()?.parent()?.join("instances.txt"))
 }
 
-/// One instance per line:
+/// The instances file, one instance per line:
 /// id|name|version|coords|shots|fullscreen|grepeat|dir|width|height.
 /// Plain text keeps the launcher dependency-free and easy to repair by hand.
+/// One instance out of the box, on the first version the launcher ships
+/// (rd-132211): the other builds are one click away in its options, and its
+/// world moves with it when the version changes.
+fn default_instance() -> Instance {
+    Instance::fresh(GameVersion::Rd132211)
+}
+
 fn load_instances() -> Vec<Instance> {
-    instances_path()
+    let list = instances_path()
         .and_then(|p| load_instances_from(&p))
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| GameVersion::ALL.iter().copied().map(Instance::fresh).collect())
+        .unwrap_or_else(|| vec![default_instance()]);
+    collapse_untouched_defaults(list)
+}
+
+/// Older launchers created one untouched instance per build. Those rows are not
+/// a choice the player made, so they fold into the single default instance;
+/// anything renamed, moved or tuned is kept exactly as it is. Nothing is deleted
+/// from disk: the worlds of the folded rows stay in their folders.
+fn collapse_untouched_defaults(list: Vec<Instance>) -> Vec<Instance> {
+    let untouched = |i: &Instance| {
+        i.name == i.game.id()
+            && i.dir.is_none()
+            && i.width == 0
+            && i.height == 0
+            && i.coords
+            && i.shots
+            && i.fullscreen
+            && !i.g_repeat
+    };
+    if list.iter().filter(|i| untouched(i)).count() < 2 {
+        return list;
+    }
+    let mut out = Vec::new();
+    let mut kept = false;
+    for i in list {
+        if untouched(&i) {
+            if !kept {
+                out.push(default_instance());
+                kept = true;
+            }
+        } else {
+            out.push(i);
+        }
+    }
+    out
 }
 
 /// Reads one instances file. `None` means it could not be read at all; an empty
@@ -2059,6 +2119,22 @@ fn parse_release(body: &str) -> Option<Update> {
 /// Asks the project's release list whether there is something newer. Returns None
 /// on any failure: no network, no releases yet, or a malformed answer. The UI never
 /// shows an error for this.
+/// Players in Rustium right now, as published by the project. Only the count is
+/// read; no information about this computer is sent.
+fn check_online() -> Option<u64> {
+    let url = std::env::var("RUSTIUM_ONLINE_URL")
+        .ok()
+        .filter(|u| https_ok(u))
+        .unwrap_or_else(|| ONLINE_URL.to_string());
+    let body = ureq::get(&url)
+        .timeout(std::time::Duration::from_secs(6))
+        .call()
+        .ok()?
+        .into_string()
+        .ok()?;
+    json_number(&body, "online").or_else(|| json_number(&body, "players"))
+}
+
 fn check_update() -> Option<Update> {
     let url = std::env::var("RUSTIUM_UPDATE_URL").unwrap_or_else(|_| UPDATE_URL.to_string());
     let agent = ureq::AgentBuilder::new()
@@ -3036,6 +3112,50 @@ mod ui {
         Home,
         News,
         Worlds,
+        Shots,
+    }
+
+    /// One PNG saved by F2 in the game, with the instance that took it.
+    struct ShotRow {
+        path: PathBuf,
+        label: String,
+        when: Option<std::time::SystemTime>,
+        size: u64,
+    }
+
+    /// Every screenshot under every instance's world folder, newest first.
+    fn collect_all_shots(instances: &[Instance]) -> Vec<ShotRow> {
+        let mut out = Vec::new();
+        for inst in instances {
+            let dir = instance_dir(inst).join("screenshots");
+            let label = if inst.name == inst.game.id() {
+                inst.game.id().to_string()
+            } else {
+                format!("{} · {}", inst.name, inst.game.id())
+            };
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd.flatten() {
+                let path = e.path();
+                let is_png = path
+                    .extension()
+                    .map_or(false, |x| x.eq_ignore_ascii_case("png"));
+                if !is_png {
+                    continue;
+                }
+                let Ok(meta) = e.metadata() else { continue };
+                if !meta.is_file() {
+                    continue;
+                }
+                out.push(ShotRow {
+                    path,
+                    label: label.clone(),
+                    when: meta.modified().ok(),
+                    size: meta.len(),
+                });
+            }
+        }
+        out.sort_by(|a, b| b.when.cmp(&a.when).then_with(|| b.path.cmp(&a.path)));
+        out
     }
 
     /// One saved world (or the place where it would be saved) and the build that
@@ -3048,6 +3168,11 @@ mod ui {
         size: Option<u64>,
         modified: Option<std::time::SystemTime>,
         exe: Option<PathBuf>,
+    }
+
+    enum ShotAction {
+        Open(usize),
+        Folder(usize),
     }
 
     enum WorldAction {
@@ -3218,6 +3343,45 @@ mod ui {
         let _ = std::process::Command::new("explorer").arg(dir).spawn();
         #[cfg(not(windows))]
         let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+    }
+
+    /// Opens a file with whatever program owns it (the photo viewer, usually).
+    /// Windows gets ShellExecuteW so a path with spaces or `&` is one argument.
+    fn open_with_system(path: &Path) {
+        let target = path.display().to_string();
+        #[cfg(windows)]
+        {
+            fn wide(s: &str) -> Vec<u16> {
+                s.encode_utf16().chain(std::iter::once(0)).collect()
+            }
+            #[link(name = "shell32")]
+            extern "system" {
+                fn ShellExecuteW(
+                    hwnd: *mut std::ffi::c_void,
+                    op: *const u16,
+                    file: *const u16,
+                    params: *const u16,
+                    dir: *const u16,
+                    show: i32,
+                ) -> isize;
+            }
+            let op = wide("open");
+            let file = wide(&target);
+            unsafe {
+                ShellExecuteW(
+                    std::ptr::null_mut(),
+                    op.as_ptr(),
+                    file.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    1,
+                );
+            }
+        }
+        #[cfg(target_os = "macos")]
+        let _ = std::process::Command::new("open").arg(path).spawn();
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
     }
 
     /// Native folder picker. It starts at the current custom folder when there
@@ -3825,6 +3989,11 @@ mod ui {
         shown_tab: Tab,
         /// Kept while the panel fades out, so it does not vanish mid-animation.
         panel_text: &'static str,
+        shots: Vec<ShotRow>,
+        /// Players online, as published by the project's status file.
+        online: Option<u64>,
+        online_rx: Option<Receiver<Option<u64>>>,
+        online_t: std::time::Instant,
         /// When the window opened, for the intro animation.
         t0: std::time::Instant,
         /// Set on the first drawn frame, when the window is allowed to show.
@@ -3847,12 +4016,17 @@ mod ui {
             let tab = match which.as_str() {
                 "news" | "novedades" => Tab::News,
                 "worlds" | "mundos" => Tab::Worlds,
+                "shots" | "capturas" => Tab::Shots,
                 _ => Tab::Home,
             };
 
             let (utx, urx) = channel();
             std::thread::spawn(move || {
                 let _ = utx.send(check_update());
+            });
+            let (otx, orx) = channel();
+            std::thread::spawn(move || {
+                let _ = otx.send(check_online());
             });
 
             let version_ready = GameVersion::ALL
@@ -3919,6 +4093,10 @@ mod ui {
                     Vec::new()
                 },
                 local_news: load_local_news(),
+                shots: collect_all_shots(&instances),
+                online: None,
+                online_rx: Some(orx),
+                online_t: std::time::Instant::now(),
                 bench: None,
                 bench_fps: None,
                 bench_java: None,
@@ -4335,8 +4513,28 @@ mod ui {
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(ctx, |ui| {
                     ui.set_width(440.0);
-                    ui.label(RichText::new(inst.game.id()).size(12.0).color(SOFT));
-                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(u.instance_version)
+                            .size(10.5)
+                            .color(MUTED)
+                            .strong(),
+                    );
+                    ui.add_space(3.0);
+                    egui::ComboBox::from_id_salt("instance_version")
+                        .width(200.0)
+                        .selected_text(RichText::new(inst.game.id()).size(13.0).color(TEXT))
+                        .show_ui(ui, |ui| {
+                            for v in GameVersion::ALL {
+                                ui.selectable_value(&mut inst.game, v, v.id());
+                            }
+                        });
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(u.instance_version_hint)
+                            .size(10.5)
+                            .color(MUTED),
+                    );
+                    ui.add_space(10.0);
                     ui.label(RichText::new(u.instance_name).size(10.5).color(MUTED).strong());
                     ui.add(
                         egui::TextEdit::singleline(&mut inst.name)
@@ -4435,6 +4633,7 @@ mod ui {
             inst.width = width;
             inst.height = height;
             if inst.name != before.name
+                || inst.game != before.game
                 || inst.coords != before.coords
                 || inst.shots != before.shots
                 || inst.fullscreen != before.fullscreen
@@ -4444,9 +4643,18 @@ mod ui {
                 || inst.height != before.height
             {
                 let dir_changed = inst.dir != before.dir;
+                let version_changed = inst.game != before.game;
                 self.instances[self.sel] = inst;
                 save_instances(&self.instances);
-                if dir_changed {
+                if version_changed {
+                    self.opts.game = self.instances[self.sel].game;
+                    save_config(
+                        self.lang,
+                        self.opts.game,
+                        &self.instances[self.sel].id,
+                    );
+                }
+                if dir_changed || version_changed {
                     self.game_dir = instance_dir(&self.instances[self.sel]);
                 }
                 self.refresh_worlds();
@@ -4500,6 +4708,23 @@ mod ui {
         }
 
         fn pump(&mut self) {
+            if let Some(rx) = self.online_rx.take() {
+                match rx.try_recv() {
+                    Ok(n) => self.online = n,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => self.online_rx = Some(rx),
+                    Err(_) => self.online = None,
+                }
+            }
+            // Kept fresh without a timer per frame: one slow poll a minute is
+            // enough for a count nobody watches change by the second.
+            if self.online_rx.is_none() && self.online_t.elapsed().as_secs() >= 60 {
+                self.online_t = std::time::Instant::now();
+                let (tx, rx) = channel();
+                self.online_rx = Some(rx);
+                std::thread::spawn(move || {
+                    let _ = tx.send(check_online());
+                });
+            }
             if let Some(rx) = self.upd_rx.take() {
                 match rx.try_recv() {
                     Ok(found) => self.upd = found,
@@ -4691,7 +4916,7 @@ mod ui {
             }
 
             // Footer: reserved at the bottom so it never falls off a short window.
-            ui.add_space((ui.available_height() - 140.0).max(6.0));
+            ui.add_space((ui.available_height() - 165.0).max(6.0));
             if ui
                 .add(
                     egui::Button::new(RichText::new(u.tab_worlds).size(12.5).color(SOFT))
@@ -4704,6 +4929,18 @@ mod ui {
                 self.tab = Tab::Worlds;
                 self.confirm_delete = None;
                 self.refresh_worlds();
+            }
+            if ui
+                .add(
+                    egui::Button::new(RichText::new(u.tab_shots).size(12.5).color(SOFT))
+                        .fill(Color32::TRANSPARENT)
+                        .corner_radius(6),
+                )
+                .clicked()
+            {
+                self.show_new = false;
+                self.tab = Tab::Shots;
+                self.refresh_shots();
             }
             if ui
                 .add(
@@ -4766,6 +5003,10 @@ mod ui {
                     .size(10.5)
                     .color(MUTED),
             );
+        }
+
+        fn refresh_shots(&mut self) {
+            self.shots = collect_all_shots(&self.instances);
         }
 
         fn refresh_worlds(&mut self) {
@@ -4964,6 +5205,93 @@ mod ui {
             }
         }
 
+        /// Every capture taken with F2, from every instance, on one wall.
+        fn shots_tab(&mut self, ui: &mut egui::Ui) {
+            let u = ui_texts(self.lang);
+            ui.label(disp(u.shots_title, 32.0).color(Color32::from_rgb(250, 244, 250)));
+            ui.label(RichText::new(u.shots_intro).size(12.5).color(SOFT));
+            ui.add_space(12.0);
+            if self.shots.is_empty() {
+                card(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(RichText::new(u.shots_none).size(12.5).color(MUTED));
+                });
+                return;
+            }
+            let mut action: Option<ShotAction> = None;
+            let tile = 238.0;
+            let h = (ui.available_height() - 30.0).max(180.0);
+            egui::ScrollArea::vertical()
+                .max_height(h)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(12.0, 12.0);
+                        for (i, row) in self.shots.iter().enumerate() {
+                            egui::Frame::NONE
+                                .fill(GLASS)
+                                .stroke(egui::Stroke::new(1.0_f32, EDGE))
+                                .corner_radius(14)
+                                .inner_margin(egui::Margin::symmetric(10, 10))
+                                .show(ui, |ui| {
+                                    // The wall lays its children out in a row;
+                                    // each card stacks its own content.
+                                    ui.vertical(|ui| {
+                                        ui.set_width(tile);
+                                        ui.set_max_width(tile);
+                                        shot_thumb(ui, row, tile, tile * 0.5625);
+                                        ui.add_space(6.0);
+                                        ui.label(
+                                            RichText::new(&row.label)
+                                                .size(12.0)
+                                                .strong()
+                                                .color(TEXT),
+                                        );
+                                        let when = row.when.map(fecha_txt).unwrap_or_default();
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "{} · {}",
+                                                when,
+                                                bytes_txt(row.size)
+                                            ))
+                                            .size(10.5)
+                                            .color(MUTED),
+                                        );
+                                        ui.add_space(4.0);
+                                        ui.horizontal(|ui| {
+                                            if plain_button(ui, u.shots_open, 96.0, true)
+                                                .clicked()
+                                            {
+                                                action = Some(ShotAction::Open(i));
+                                            }
+                                            if plain_button(ui, u.folder, 116.0, true).clicked()
+                                            {
+                                                action = Some(ShotAction::Folder(i));
+                                            }
+                                        });
+                                    });
+                                });
+                        }
+                    });
+                });
+            match action {
+                Some(ShotAction::Open(i)) => {
+                    if let Some(row) = self.shots.get(i) {
+                        open_with_system(&row.path);
+                    }
+                }
+                Some(ShotAction::Folder(i)) => {
+                    if let Some(row) = self.shots.get(i) {
+                        let dir = row.path.parent().map(Path::to_path_buf);
+                        if let Some(dir) = dir {
+                            reveal_dir(&dir);
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+
         fn update_banner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
             let u = ui_texts(self.lang);
             let Some(upd) = self.upd.clone() else { return };
@@ -5075,7 +5403,11 @@ mod ui {
                 self.fade = (self.fade + dt / 0.18).min(1.0);
                 ctx.request_repaint();
             }
-            if self.busy || self.upd_rx.is_some() || self.dl_rx.is_some() || self.bench.is_some()
+            if self.busy
+                || self.upd_rx.is_some()
+                || self.dl_rx.is_some()
+                || self.online_rx.is_some()
+                || self.bench.is_some()
             {
                 ctx.request_repaint_after(std::time::Duration::from_millis(120));
             }
@@ -5138,53 +5470,68 @@ mod ui {
                                     self.confirm_delete = None;
                                     self.refresh_worlds();
                                 }
+                                if tab_button(ui, u.tab_shots, tab == Tab::Shots).clicked() {
+                                    self.tab = Tab::Shots;
+                                    self.show = None;
+                                    self.refresh_shots();
+                                }
                             });
                             ui.add_space(16.0);
 
-                            // Credito, redes y aviso legal junto al titulo: se ven
-                            // siempre, sin depender de la altura del contenido.
+                            // Titulo en su linea y, debajo, el credito con las
+                            // redes y el aviso legal: asi los iconos tienen sitio y
+                            // nada se apila contra el titulo por la derecha.
+                            ui.label(
+                                disp("Rustium", 54.0).color(Color32::from_rgb(250, 244, 250)),
+                            );
+                            ui.add_space(2.0);
                             ui.horizontal(|ui| {
                                 ui.label(
-                                    disp("Rustium", 54.0)
-                                        .color(Color32::from_rgb(250, 244, 250)),
+                                    RichText::new(creator_label(self.lang))
+                                        .size(11.5)
+                                        .color(SOFT),
                                 );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        let brand_w = (ui.available_width() - 8.0).max(260.0);
-                                        ui.vertical(|ui| {
-                                            ui.set_max_width(brand_w);
-                                            ui.horizontal(|ui| {
-                                                ui.label(
-                                                    RichText::new(creator_label(self.lang))
-                                                        .size(11.0)
-                                                        .color(SOFT),
-                                                );
-                                                ui.add_space(2.0);
-                                                ui.spacing_mut().item_spacing.x = 4.0;
-                                                if social_icon(ui, Social::YouTube).clicked() {
-                                                    open_in_browser("https://www.youtube.com/@eldandimc");
-                                                }
-                                                if social_icon(ui, Social::Discord).clicked() {
-                                                    open_in_browser("https://discord.gg/HP2GPrcEXD");
-                                                }
-                                                if social_icon(ui, Social::Patreon).clicked() {
-                                                    open_in_browser("https://www.patreon.com/c/dandimc");
-                                                }
-                                            });
-                                            ui.add_space(2.0);
-                                            ui.add(
-                                                egui::Label::new(
-                                                    RichText::new(t.legal_footer)
-                                                        .size(9.5)
-                                                        .color(MUTED),
-                                                )
-                                                .wrap(),
+                                ui.add_space(2.0);
+                                ui.spacing_mut().item_spacing.x = 5.0;
+                                if social_icon(ui, Social::YouTube).clicked() {
+                                    open_in_browser("https://www.youtube.com/@eldandimc");
+                                }
+                                if social_icon(ui, Social::Discord).clicked() {
+                                    open_in_browser("https://discord.gg/HP2GPrcEXD");
+                                }
+                                if social_icon(ui, Social::Patreon).clicked() {
+                                    open_in_browser("https://www.patreon.com/c/dandimc");
+                                }
+                                if let Some(n) = self.online.filter(|n| *n > 0) {
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            let (rect, _) = ui.allocate_exact_size(
+                                                egui::vec2(9.0, 9.0),
+                                                egui::Sense::hover(),
                                             );
-                                        });
-                                    },
-                                );
+                                            ui.painter().circle_filled(rect.center(), 4.0, GREEN);
+                                            ui.add_space(2.0);
+                                            ui.label(
+                                                RichText::new(fill(
+                                                    u.online_players,
+                                                    "{n}",
+                                                    &n.to_string(),
+                                                ))
+                                                .size(11.0)
+                                                .color(GREEN),
+                                            );
+                                        },
+                                    );
+                                }
                             });
+                            ui.add_space(3.0);
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(t.legal_footer).size(9.5).color(MUTED),
+                                )
+                                .wrap(),
+                            );
                             // The long path is only worth showing when something is
                             // missing; otherwise it lives inside the texture card.
                             if !have {
@@ -5459,18 +5806,20 @@ mod ui {
                                                     2 => Art::Zombies,
                                                     3 => Art::Upright,
                                                     4 => Art::First,
+                                                    5 => Art::ClassicHit,
+                                                    6 => Art::ClassicBuild,
+                                                    7 => Art::Walk,
                                                     _ => Art::World,
                                                 }),
                                             ));
                                         }
                                         // The build each version card talks about.
                                         let tags = [
+                                            "Rustium 0.2.1",
                                             "rd-132211 … rd-161348",
                                             "rd-20090515",
                                             "rd-132328",
                                             "rd-20090515 · rd-161348",
-                                            "rd-160052 · rd-20090515 · rd-161348",
-                                            "rd-160052 · rd-20090515 · rd-161348",
                                             "rd-132328 · rd-20090515 · rd-160052 · rd-161348",
                                             "rd-131655 · Cave game tech test",
                                             "Rustium 0.1.15",
@@ -5487,17 +5836,17 @@ mod ui {
                                                 item.3.to_string(),
                                                 tags.get(i).copied().unwrap_or("").to_string(),
                                                 match i {
-                                                    1 => Some(Art::Bush),
-                                                    2 => Some(Art::Zombies),
-                                                    3 => Some(Art::Upright),
-                                                    4 => Some(Art::Ticks),
-                                                    5 => Some(Art::Growth),
-                                                    6 => Some(Art::Zombies),
-                                                    7 => Some(Art::Cave),
-                                                    8 => Some(Art::Worlds),
-                                                    // Las novedades de 0.1.16 y 0.2 ya no repiten
-                                                    // la captura vieja: solo texto.
-                                                    9 | 10 | 11 | 12 => None,
+                                                    0 => Some(Art::Shots),
+                                                    2 => Some(Art::Bush),
+                                                    3 => Some(Art::Zombies),
+                                                    4 => Some(Art::Upright),
+                                                    5 => Some(Art::Zombies),
+                                                    6 => Some(Art::Cave),
+                                                    7 => Some(Art::Worlds),
+                                                    8 => Some(Art::ClassicHit),
+                                                    9 => Some(Art::ClassicBuild),
+                                                    10 => Some(Art::LauncherShot),
+                                                    11 => Some(Art::Walk),
                                                     _ => Some(Art::World),
                                                 },
                                             ));
@@ -5526,6 +5875,8 @@ mod ui {
                                         ui.add_space(12.0);
                                         ui.label(RichText::new(more_news).size(12.0).color(MUTED));
                                     });
+                            } else if tab == Tab::Shots {
+                                self.shots_tab(ui);
                             } else {
                                 self.worlds_tab(ui);
                             }
@@ -5705,14 +6056,20 @@ mod ui {
         Upright,
         /// The flat world of the very first version, rd-132211.
         First,
-        /// The legacy world ticking at the original 20 Hz.
-        Ticks,
-        /// Grass and bushes updating after a level tick.
-        Growth,
         /// The terraced caves of rd-131655, the Cave game tech test.
         Cave,
         /// The new Worlds tab.
         Worlds,
+        /// The single white face that lights up under the crosshair in Classic.
+        ClassicHit,
+        /// The complete block preview drawn while building in Classic.
+        ClassicBuild,
+        /// Holding W across a pre-classic world.
+        Walk,
+        /// The 0.2 launcher itself, captured from the running window.
+        LauncherShot,
+        /// The Screenshots tab with a couple of captures in it.
+        Shots,
     }
 
     /// Redes del pie del launcher. Se dibujan como iconos para que la linea de
@@ -5724,72 +6081,202 @@ mod ui {
         Patreon,
     }
 
+    /// The real logo of each network, shipped as a PNG with its own
+    /// transparency and drawn as a white silhouette on a glass button, so the
+    /// row belongs to the launcher's palette instead of three brand colours.
     fn social_icon(ui: &mut egui::Ui, social: Social) -> egui::Response {
         let (rect, resp) =
-            ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::click());
+            ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::click());
         let hover = resp.hovered();
-        let (brand, name) = match social {
-            Social::YouTube => (Color32::from_rgb(255, 70, 70), "YouTube"),
-            Social::Discord => (Color32::from_rgb(114, 137, 218), "Discord"),
-            Social::Patreon => (Color32::from_rgb(255, 92, 96), "Patreon"),
+        let (brand, name, file, bytes): (Color32, &str, &str, &'static [u8]) = match social {
+            Social::YouTube => (
+                Color32::from_rgb(255, 70, 70),
+                "YouTube",
+                "social-youtube",
+                include_bytes!("../../assets/social_youtube.png"),
+            ),
+            Social::Discord => (
+                Color32::from_rgb(114, 137, 218),
+                "Discord",
+                "social-discord",
+                include_bytes!("../../assets/social_discord.png"),
+            ),
+            Social::Patreon => (
+                Color32::from_rgb(255, 92, 96),
+                "Patreon",
+                "social-patreon",
+                include_bytes!("../../assets/social_patreon.png"),
+            ),
         };
         let p = ui.painter();
-        let bg = if hover { brand } else { GLASS_HI };
         p.rect(
             rect,
             8.0,
-            bg,
+            if hover {
+                Color32::from_rgba_unmultiplied(brand.r(), brand.g(), brand.b(), 46)
+            } else {
+                GLASS_HI
+            },
             egui::Stroke::new(1.0_f32, if hover { brand } else { EDGE }),
             egui::StrokeKind::Inside,
         );
-        let c = rect.center();
-        let fg = if hover { Color32::WHITE } else { brand };
-        match social {
-            Social::YouTube => {
-                // Rectangulo redondeado con el triangulo de play recortado.
-                p.rect_filled(
-                    egui::Rect::from_center_size(c, egui::vec2(16.0, 11.5)),
-                    3.5,
-                    fg,
-                );
-                p.add(egui::Shape::convex_polygon(
-                    vec![
-                        c + egui::vec2(-2.6, -3.4),
-                        c + egui::vec2(-2.6, 3.4),
-                        c + egui::vec2(3.6, 0.0),
-                    ],
-                    bg,
-                    egui::Stroke::NONE,
-                ));
-            }
-            Social::Discord => {
-                // La cara del logotipo: cuerpo redondeado, orejas y ojos
-                // recortados en el color del fondo.
-                p.rect_filled(
-                    egui::Rect::from_center_size(c + egui::vec2(0.0, 1.0), egui::vec2(16.0, 10.5)),
-                    5.0,
-                    fg,
-                );
-                p.circle_filled(c + egui::vec2(-6.2, -4.4), 2.8, fg);
-                p.circle_filled(c + egui::vec2(6.2, -4.4), 2.8, fg);
-                p.circle_filled(c + egui::vec2(-3.5, 1.0), 1.8, bg);
-                p.circle_filled(c + egui::vec2(3.5, 1.0), 1.8, bg);
-            }
-            Social::Patreon => {
-                // La marca de Patreon: barra vertical y circulo.
-                p.rect_filled(
-                    egui::Rect::from_min_max(
-                        c + egui::vec2(-7.5, -7.0),
-                        c + egui::vec2(-3.5, 7.0),
-                    ),
-                    1.6,
-                    fg,
-                );
-                p.circle_filled(c + egui::vec2(2.0, 0.0), 6.0, fg);
-            }
+        if let Some(tex) = png_texture(ui.ctx(), file, bytes) {
+            let logo = egui::Rect::from_center_size(rect.center(), egui::vec2(21.0, 21.0));
+            p.image(
+                tex.id(),
+                logo,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
         }
         resp.on_hover_cursor(egui::CursorIcon::PointingHand)
             .on_hover_text(name)
+    }
+
+    /// Decodes a PNG into RGBA for egui. The launcher already carries the `png`
+    /// crate for the game, so the real icons and the screenshots need no extra
+    /// dependency and no baked raw copy.
+    fn png_color_image(bytes: &[u8]) -> Option<egui::ColorImage> {
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+        decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+        let mut reader = decoder.read_info().ok()?;
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).ok()?;
+        let (w, h) = (info.width as usize, info.height as usize);
+        if w == 0 || h == 0 {
+            return None;
+        }
+        let px = &buf[..info.buffer_size()];
+        let rgba: Vec<u8> = match info.color_type {
+            png::ColorType::Rgba => px.to_vec(),
+            png::ColorType::Rgb => px
+                .chunks_exact(3)
+                .flat_map(|p| [p[0], p[1], p[2], 255])
+                .collect(),
+            png::ColorType::GrayscaleAlpha => {
+                px.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect()
+            }
+            png::ColorType::Grayscale => {
+                px.iter().flat_map(|g| [*g, *g, *g, 255]).collect()
+            }
+            png::ColorType::Indexed => return None,
+        };
+        if rgba.len() < w * h * 4 {
+            return None;
+        }
+        Some(egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba))
+    }
+
+    /// A PNG logo uploaded once, as a white silhouette, and kept in egui's temp
+    /// store.
+    fn png_texture(
+        ctx: &egui::Context,
+        name: &str,
+        bytes: &'static [u8],
+    ) -> Option<egui::TextureHandle> {
+        let id = egui::Id::new(("png-icon", name));
+        if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+            return Some(t);
+        }
+        let mut img = png_color_image(bytes)?;
+        // The logos arrive in their brand colours; painting them near-white keeps
+        // the shape and the transparency and matches the rest of the launcher.
+        for px in &mut img.pixels {
+            *px = egui::Color32::from_rgba_unmultiplied(246, 241, 248, px.a());
+        }
+        let tex = ctx.load_texture(name, img, egui::TextureOptions::LINEAR);
+        ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
+        Some(tex)
+    }
+
+    /// Box-sampled shrink, so a 1024x768 capture becomes a sharp little tile
+    /// instead of a texture the GPU has to keep at full size.
+    fn shrink_image(img: &egui::ColorImage, max_w: usize, max_h: usize) -> egui::ColorImage {
+        let (w, h) = (img.size[0], img.size[1]);
+        let scale = ((max_w as f32 / w as f32).min(max_h as f32 / h as f32)).min(1.0);
+        let nw = ((w as f32 * scale).round() as usize).max(1);
+        let nh = ((h as f32 * scale).round() as usize).max(1);
+        if nw == w && nh == h {
+            return img.clone();
+        }
+        let mut out = Vec::with_capacity(nw * nh);
+        for y in 0..nh {
+            let y0 = y * h / nh;
+            let y1 = (((y + 1) * h).div_ceil(nh)).min(h).max(y0 + 1);
+            for x in 0..nw {
+                let x0 = x * w / nw;
+                let x1 = (((x + 1) * w).div_ceil(nw)).min(w).max(x0 + 1);
+                let mut sum = [0u32; 4];
+                let mut n = 0u32;
+                for yy in y0..y1 {
+                    for xx in x0..x1 {
+                        let p = img.pixels[yy * w + xx];
+                        sum[0] += p.r() as u32;
+                        sum[1] += p.g() as u32;
+                        sum[2] += p.b() as u32;
+                        sum[3] += p.a() as u32;
+                        n += 1;
+                    }
+                }
+                let n = n.max(1);
+                out.push(egui::Color32::from_rgba_unmultiplied(
+                    (sum[0] / n) as u8,
+                    (sum[1] / n) as u8,
+                    (sum[2] / n) as u8,
+                    (sum[3] / n) as u8,
+                ));
+            }
+        }
+        egui::ColorImage {
+            size: [nw, nh],
+            pixels: out,
+            ..Default::default()
+        }
+    }
+
+    /// A screenshot tile: decoded once, shrunk to twice its display size and
+    /// cached until the file changes.
+    fn shot_thumb(ui: &mut egui::Ui, row: &ShotRow, w: f32, h: f32) {
+        let stamp = row
+            .when
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let key = format!("{}|{stamp}", row.path.display());
+        let id = egui::Id::new(("shot-thumb", key.clone()));
+        let mut tex = ui
+            .ctx()
+            .data(|d| d.get_temp::<egui::TextureHandle>(id.clone()));
+        if tex.is_none() {
+            if let Ok(bytes) = std::fs::read(&row.path) {
+                if let Some(img) = png_color_image(&bytes) {
+                    let small = shrink_image(&img, (w * 2.0) as usize, (h * 2.0) as usize);
+                    let t = ui
+                        .ctx()
+                        .load_texture(key, small, egui::TextureOptions::LINEAR);
+                    ui.ctx().data_mut(|d| d.insert_temp(id, t.clone()));
+                    tex = Some(t);
+                }
+            }
+        }
+        // One tile size for the whole wall, with the picture inside it kept at
+        // its own proportions instead of being stretched to fill the frame.
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
+        let p = ui.painter().with_clip_rect(rect);
+        p.rect_filled(rect, 10.0, Color32::from_rgb(24, 18, 25));
+        if let Some(t) = tex {
+            let s = t.size_vec2();
+            if s.x > 0.0 && s.y > 0.0 {
+                let scale = (w / s.x).min(h / s.y);
+                let dst = egui::Rect::from_center_size(rect.center(), s * scale);
+                p.image(
+                    t.id(),
+                    dst,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            }
+        }
     }
 
     fn news_shot(
@@ -5817,10 +6304,25 @@ mod ui {
                 Art::Zombies => ("news-zombies", include_bytes!("../../assets/news_zombies.rgb")),
                 Art::Upright => ("news-upright", include_bytes!("../../assets/news_upright.rgb")),
                 Art::First => ("news-first", include_bytes!("../../assets/news_first.rgb")),
-                Art::Ticks => ("news-ticks", include_bytes!("../../assets/news_ticks.rgb")),
-                Art::Growth => ("news-growth", include_bytes!("../../assets/news_growth.rgb")),
                 Art::Cave => ("news-cave", include_bytes!("../../assets/news_cave.rgb")),
                 Art::Worlds => ("news-worlds", include_bytes!("../../assets/news_worlds.rgb")),
+                Art::ClassicHit => (
+                    "news-classic-hit",
+                    include_bytes!("../../assets/news_classic_hit.rgb"),
+                ),
+                Art::ClassicBuild => (
+                    "news-classic-build",
+                    include_bytes!("../../assets/news_classic_build.rgb"),
+                ),
+                Art::Walk => ("news-walk", include_bytes!("../../assets/news_walk.rgb")),
+                Art::LauncherShot => (
+                    "news-020",
+                    include_bytes!("../../assets/news_020.rgb"),
+                ),
+                Art::Shots => (
+                    "news-shots",
+                    include_bytes!("../../assets/news_shots.rgb"),
+                ),
                 Art::Launcher => unreachable!(),
             };
             let shot = news_shot(ui.ctx(), name, bytes);
@@ -5896,30 +6398,29 @@ mod ui {
                     }
                     ui.vertical(|ui| {
                         ui.set_max_width(text_w);
+                        // The headline gets the full width and wraps, then the
+                        // date and the build tag sit on their own line: drawn
+                        // beside it, a long tag used to land on top of the title.
+                        ui.label(disp(title, 19.0).color(TEXT));
+                        ui.add_space(3.0);
                         ui.horizontal(|ui| {
-                            ui.label(disp(title, 19.0).color(TEXT));
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.label(RichText::new(date).size(11.5).color(MUTED));
-                                    if !version.is_empty() {
-                                        egui::Frame::NONE
-                                            .fill(GLASS_HI)
-                                            .corner_radius(6)
-                                            .inner_margin(egui::Margin::symmetric(6, 2))
-                                            .show(ui, |ui| {
-                                                ui.label(
-                                                    RichText::new(version)
-                                                        .size(10.5)
-                                                        .strong()
-                                                        .color(MAGENTA),
-                                                );
-                                            });
-                                    }
-                                },
-                            );
+                            ui.label(RichText::new(date).size(11.5).color(MUTED));
+                            if !version.is_empty() {
+                                egui::Frame::NONE
+                                    .fill(GLASS_HI)
+                                    .corner_radius(6)
+                                    .inner_margin(egui::Margin::symmetric(6, 2))
+                                    .show(ui, |ui| {
+                                        ui.label(
+                                            RichText::new(version)
+                                                .size(10.5)
+                                                .strong()
+                                                .color(MAGENTA),
+                                        );
+                                    });
+                            }
                         });
-                        ui.add_space(7.0);
+                        ui.add_space(6.0);
                         // The body grows instead of jumping and its text fades
                         // in with it. The index (not the title) is the id, so two
                         // cards with the same headline never share an animation
@@ -6122,6 +6623,32 @@ mod tests {
         assert_eq!(instance_dir(&inst), worlds_root().join(&inst.id));
         inst.dir = Some(std::env::temp_dir().join("rustium-instance-world"));
         assert_eq!(instance_dir(&inst), inst.dir.clone().unwrap());
+    }
+
+    #[test]
+    fn untouched_default_instances_fold_into_one() {
+        let all: Vec<Instance> = GameVersion::ALL
+            .iter()
+            .copied()
+            .map(Instance::fresh)
+            .collect();
+        let folded = collapse_untouched_defaults(all);
+        assert_eq!(folded.len(), 1);
+        assert_eq!(folded[0].game, GameVersion::Rd132211);
+        assert_eq!(folded[0].name, GameVersion::Rd132211.id());
+
+        // A renamed row is a choice the player made: it survives the fold, next
+        // to the one default instance.
+        let mut renamed: Vec<Instance> = GameVersion::ALL
+            .iter()
+            .copied()
+            .map(Instance::fresh)
+            .collect();
+        renamed[3].name = "Mi mundo".to_string();
+        let kept = collapse_untouched_defaults(renamed);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].game, GameVersion::Rd132211);
+        assert_eq!(kept[1].name, "Mi mundo");
     }
 
     #[test]
