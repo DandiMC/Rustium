@@ -585,7 +585,10 @@ impl ApplicationHandler for App {
     }
 }
 
+#[path = "../crash.rs"]
+mod crash;
 fn main() {
+    crash::install();
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::new();
     event_loop.run_app(&mut app).unwrap();

@@ -23,6 +23,9 @@
 // from a terminal, --console still writes to that terminal as before.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+#[path = "../crash.rs"]
+mod crash;
+
 use flate2::read::GzDecoder;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -738,7 +741,6 @@ struct UiTexts {
     folder: &'static str,
     tab_home: &'static str,
     tab_news: &'static str,
-    news_title: &'static str,
     n1_title: &'static str,
     n1_date: &'static str,
     n1_short: &'static str,
@@ -1417,7 +1419,6 @@ fn ui_texts(l: Lang) -> UiTexts {
             folder: "Open folder",
             tab_home: "Home",
             tab_news: "News",
-            news_title: "WHAT'S NEW",
             n1_title: "Rustium is now available",
             n1_short: "The launcher and the first Minecraft version are ready, with no account and nothing downloaded from Mojang.",
             n1_date: "16 Nov 2026",
@@ -1498,7 +1499,6 @@ fn ui_texts(l: Lang) -> UiTexts {
             folder: "Abrir carpeta",
             tab_home: "Inicio",
             tab_news: "Novedades",
-            news_title: "NOVEDADES",
             n1_title: "¡Rustium ya está disponible!",
             n1_short: "El launcher y la primera versión de Minecraft ya funcionan, sin cuenta y sin descargar nada de Mojang.",
             n1_date: "16 nov 2026",
@@ -1579,7 +1579,6 @@ fn ui_texts(l: Lang) -> UiTexts {
             folder: "Abrir pasta",
             tab_home: "Início",
             tab_news: "Novidades",
-            news_title: "NOVIDADES",
             n1_title: "O Rustium já está disponível!",
             n1_short: "O launcher e a primeira versão de Minecraft já funcionam, sem conta e sem descarregar nada da Mojang.",
             n1_date: "16 nov 2026",
@@ -1660,7 +1659,6 @@ fn ui_texts(l: Lang) -> UiTexts {
             folder: "Ouvrir le dossier",
             tab_home: "Accueil",
             tab_news: "Nouveautés",
-            news_title: "NOUVEAUTÉS",
             n1_title: "Rustium est maintenant disponible !",
             n1_short: "Le launcher et la première version de Minecraft fonctionnent, sans compte et sans rien télécharger de Mojang.",
             n1_date: "16 nov. 2026",
@@ -1741,7 +1739,6 @@ fn ui_texts(l: Lang) -> UiTexts {
             folder: "Ordner öffnen",
             tab_home: "Start",
             tab_news: "Neuigkeiten",
-            news_title: "NEUIGKEITEN",
             n1_title: "Rustium ist jetzt verfügbar!",
             n1_short: "Der Launcher und die erste Minecraft-Version funktionieren, ohne Konto und ohne Download von Mojang.",
             n1_date: "16. Nov. 2026",
@@ -2556,6 +2553,7 @@ mod sha256 {
 // ----------------------------------------------------------------------- main
 
 fn main() {
+    crash::install();
     let opts = match options() {
         Ok(o) => o,
         Err(e) => {
@@ -4156,8 +4154,8 @@ mod ui {
     pub fn gui(opts: Options) -> R<()> {
         let options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
-                .with_inner_size([1120.0, 690.0])
-                .with_min_inner_size([960.0, 600.0])
+                .with_inner_size([1080.0, 630.0])
+                .with_min_inner_size([960.0, 560.0])
                 .with_icon(app_icon())
                 // Shown once the first frame is drawn, so the light background
                 // Windows paints on a fresh window never flashes at the user.
@@ -5287,7 +5285,6 @@ mod ui {
         fn worlds_tab(&mut self, ui: &mut egui::Ui) {
             let u = ui_texts(self.lang);
             let t = texts(self.lang);
-            ui.label(disp(u.worlds_title, 32.0).color(Color32::from_rgb(250, 244, 250)));
             ui.label(RichText::new(u.worlds_intro).size(12.5).color(SOFT));
             ui.add_space(12.0);
 
@@ -5318,10 +5315,14 @@ mod ui {
                                     );
                                     ui.add_space(4.0);
                                     ui.label(
-                                        RichText::new(&row.name)
-                                            .size(14.0)
-                                            .strong()
-                                            .color(TEXT),
+                                        RichText::new(instance_title(
+                                            self.lang,
+                                            &row.name,
+                                            row.game,
+                                        ))
+                                        .size(14.0)
+                                        .strong()
+                                        .color(TEXT),
                                     );
                                     ui.label(
                                         RichText::new(row.game.id()).size(10.5).color(SOFT),
@@ -5391,7 +5392,13 @@ mod ui {
                                 ui.set_width(ui.available_width());
                                 ui.horizontal(|ui| {
                                     ui.label(
-                                        RichText::new(&row.name).size(13.0).color(TEXT),
+                                        RichText::new(instance_title(
+                                            self.lang,
+                                            &row.name,
+                                            row.game,
+                                        ))
+                                        .size(13.0)
+                                        .color(TEXT),
                                     );
                                     ui.label(
                                         RichText::new(row.game.id()).size(10.5).color(MUTED),
@@ -5460,7 +5467,6 @@ mod ui {
         /// Every capture taken with F2, from every instance, on one wall.
         fn shots_tab(&mut self, ui: &mut egui::Ui) {
             let u = ui_texts(self.lang);
-            ui.label(disp(u.shots_title, 32.0).color(Color32::from_rgb(250, 244, 250)));
             ui.label(RichText::new(u.shots_intro).size(12.5).color(SOFT));
             ui.add_space(12.0);
             if self.shots.is_empty() {
@@ -5770,13 +5776,24 @@ mod ui {
                                     self.refresh_shots();
                                 }
                             });
-                            ui.add_space(16.0);
+                            ui.add_space(14.0);
 
-                            // El contador vive junto al titulo; el credito, las
-                            // redes y el aviso de Mojang viven en la barra inferior.
+                            // One page heading for every tab. The brand is already
+                            // in the rail, so the old repeated "Rustium" title is
+                            // gone; the space goes to the content instead.
+                            let heading = match tab {
+                                Tab::Home => self
+                                    .instances
+                                    .get(self.sel)
+                                    .map(|inst| instance_title(self.lang, &inst.name, inst.game))
+                                    .unwrap_or_else(|| "Rustium".to_string()),
+                                Tab::News => u.tab_news.to_string(),
+                                Tab::Worlds => u.worlds_title.to_string(),
+                                Tab::Shots => u.shots_title.to_string(),
+                            };
                             ui.horizontal(|ui| {
                                 ui.label(
-                                    disp("Rustium", 54.0)
+                                    disp(heading, 34.0)
                                         .color(Color32::from_rgb(250, 244, 250)),
                                 );
                                 if let Some(n) = self.online.filter(|n| *n > 0) {
@@ -5806,40 +5823,48 @@ mod ui {
                                     );
                                 }
                             });
-                            ui.add_space(10.0);
-                            // The long path is only worth showing when something is
-                            // missing; otherwise it lives inside the texture card.
-                            if !have {
-                                ui.label(RichText::new(&self.status).size(13.0).color(SOFT));
+                            if tab == Tab::Home {
+                                if let Some(inst) = self.instances.get(self.sel) {
+                                    let ready = if have {
+                                        u.instance_ready
+                                    } else {
+                                        u.instance_replacement
+                                    };
+                                    ui.label(
+                                        RichText::new(format!("{} · {}", inst.game.id(), ready))
+                                            .size(12.5)
+                                            .color(if have { GREEN } else { AMBER }),
+                                    );
+                                }
+                                // The long path is only worth showing when something
+                                // is missing; otherwise it lives inside the texture card.
+                                if !have {
+                                    ui.label(RichText::new(&self.status).size(12.0).color(SOFT));
+                                }
                             }
-                            ui.add_space(14.0);
+                            ui.add_space(10.0);
 
                             self.update_banner(ui, ctx);
 
                             if tab == Tab::Home {
-                                ui.add_space(2.0);
-                                // The version lives in the rail (one list), so the
-                                // home tab goes straight to playing.
-                                if let Some(inst) = self.instances.get(self.sel) {
-                                    let label = format!(
-                                        "{} · {}",
-                                        instance_title(self.lang, &inst.name, inst.game),
-                                        inst.game.id()
-                                    );
-                                    ui.label(RichText::new(label).size(12.5).color(SOFT));
-                                    ui.add_space(6.0);
-                                }
-                                ui.horizontal(|ui| {
-                                    if hero_button(ui, t.play, 210.0, 54.0, !busy).clicked() {
+                                let home_h = (ui.available_height() - 4.0).max(160.0);
+                                egui::ScrollArea::vertical()
+                                    .id_salt("home_scroll")
+                                    .max_height(home_h)
+                                    .auto_shrink([false, false])
+                                    .show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+                                    if hero_button(ui, t.play, 190.0, 54.0, !busy).clicked() {
                                         self.play();
                                     }
-                                    if plain_button(ui, t.refresh, 120.0, !busy).clicked() {
+                                    if plain_button(ui, t.refresh, 112.0, !busy).clicked() {
                                         self.refresh();
                                     }
-                                    if plain_button(ui, u.folder, 140.0, !self.game_dir.as_os_str().is_empty()).clicked() {
+                                    if plain_button(ui, u.folder, 130.0, !self.game_dir.as_os_str().is_empty()).clicked() {
                                         reveal_world_dir(&self.game_dir);
                                     }
-                                    if plain_button(ui, t.how, 145.0, !busy).clicked() {
+                                    if plain_button(ui, t.how, 136.0, !busy).clicked() {
                                         self.show = if self.show == Some(t.how_text) {
                                             None
                                         } else {
@@ -5851,7 +5876,7 @@ mod ui {
                                     }
                                 });
 
-                                ui.add_space(18.0);
+                                ui.add_space(16.0);
                                 card(ui, |ui| {
                                     ui.set_width(ui.available_width());
                                     let (title, color) = if have {
@@ -6022,6 +6047,7 @@ mod ui {
                                             }
                                         });
                                 }
+                                });
 
                             } else if tab == Tab::News {
                                 // The cards grow when opened, so the list scrolls
@@ -6033,13 +6059,6 @@ mod ui {
                                     .auto_shrink([false, false])
                                     .show(ui, |ui| {
                                         ui.add_space(2.0);
-                                        ui.label(
-                                            RichText::new(u.news_title)
-                                                .size(14.0)
-                                                .strong()
-                                                .color(SOFT),
-                                        );
-                                        ui.add_space(10.0);
                                         // Intro cards, the local extras from
                                         // news.txt and the version history all go
                                         // through the same date sort, so the

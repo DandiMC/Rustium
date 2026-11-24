@@ -10,10 +10,6 @@ use super::noisemap;
 use super::perlin;
 use super::tiles;
 use crate::world::BlockBox;
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use std::io::{Read, Write};
 
 pub const WIDTH: usize = 256;
 pub const HEIGHT: usize = 256;
@@ -373,22 +369,16 @@ impl Nivel {
     // GZIP normal, como el DataOutputStream(GZIPOutputStream) del original:
     // cualquier lector de gzip (Java incluido) puede abrirlo.
     pub fn save(&self) -> std::io::Result<()> {
-        let file = std::fs::File::create("level.dat")?;
-        let mut gz = GzEncoder::new(std::io::BufWriter::new(file), Compression::default());
-        gz.write_all(&self.blocks)?;
-        gz.finish()?.flush()
+        crate::world::save_gzip_atomic(std::path::Path::new("level.dat"), &self.blocks)
     }
 
-    // Lee cualquier level.dat gzip (tambien los del Java original).
+    // Lee cualquier level.dat gzip (tambien los del Java original). Si el
+    // principal esta truncado, prueba el temporal y luego la copia anterior.
     pub fn load(&mut self) -> Option<()> {
-        let file = std::fs::File::open("level.dat").ok()?;
-        let mut data = Vec::with_capacity(self.blocks.len());
-        GzDecoder::new(std::io::BufReader::new(file))
-            .read_to_end(&mut data)
-            .ok()?;
-        if data.len() != self.blocks.len() {
-            return None;
-        }
+        let data = crate::world::load_gzip_with_backup(
+            std::path::Path::new("level.dat"),
+            self.blocks.len(),
+        )?;
         self.blocks.copy_from_slice(&data);
         Some(())
     }

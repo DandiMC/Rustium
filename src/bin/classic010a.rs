@@ -13,6 +13,9 @@ mod entity;
 #[path = "../legacy/mod.rs"]
 mod legacy;
 
+#[path = "../crash.rs"]
+mod crash;
 fn main() {
+    crash::install();
     legacy::juego::correr_clasico_con("c0.0.10a", 640, 480, true);
 }

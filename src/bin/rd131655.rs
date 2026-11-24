@@ -202,7 +202,10 @@ impl ApplicationHandler for App {
     }
 }
 
+#[path = "../crash.rs"]
+mod crash;
 fn main() {
+    crash::install();
     // La version no guarda nada; el level.dat de rd-132211 no se toca.
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::new();

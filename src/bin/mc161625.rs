@@ -12,6 +12,9 @@ mod entity;
 #[path = "../legacy/mod.rs"]
 mod legacy;
 
+#[path = "../crash.rs"]
+mod crash;
 fn main() {
+    crash::install();
     legacy::juego::correr_clasico_reconstruida("mc-161625", true, false, true);
 }

@@ -1,3 +1,4 @@
+mod crash;
 mod player;
 mod render;
 mod world;
@@ -418,6 +419,7 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
+    crash::install();
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::new();
     event_loop.run_app(&mut app).unwrap();

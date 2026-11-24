@@ -4,7 +4,8 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, Read, Write};
+use std::path::{Path, PathBuf};
 
 pub const WIDTH: usize = 256;
 pub const HEIGHT: usize = 256;
@@ -137,6 +138,87 @@ impl BlockBox {
         }
         d
     }
+}
+
+fn backup_path(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".bak");
+    PathBuf::from(name)
+}
+
+fn temp_path(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".tmp");
+    PathBuf::from(name)
+}
+
+/// Writes a gzip level through a temporary file, keeps the previous save as
+/// `.bak`, and only then puts the new file in place. A crash before the last
+/// rename leaves either the old save or the new one complete, never half a
+/// level.
+pub fn save_gzip_atomic(path: &Path, blocks: &[u8]) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let tmp = temp_path(path);
+    let bak = backup_path(path);
+
+    {
+        let file = File::create(&tmp)?;
+        let mut gz = GzEncoder::new(file, Compression::default());
+        gz.write_all(blocks)?;
+        let file = gz.finish()?;
+        file.sync_all()?;
+    }
+
+    if path.exists() {
+        if bak.exists() {
+            if let Err(e) = std::fs::remove_file(&bak) {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(e);
+            }
+        }
+        if let Err(e) = std::fs::rename(path, &bak) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+    }
+
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        if !path.exists() && bak.exists() {
+            let _ = std::fs::rename(&bak, path);
+        }
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+
+    // Make the directory entry durable too on systems that support it.
+    #[cfg(unix)]
+    if let Ok(dir) = File::open(parent) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
+}
+
+/// Loads a gzip level from the main file, a completed temporary file, or the
+/// previous `.bak`. The length check rejects a truncated save.
+pub fn load_gzip_with_backup(path: &Path, expected_len: usize) -> Option<Vec<u8>> {
+    for candidate in [path.to_path_buf(), temp_path(path), backup_path(path)] {
+        let Ok(file) = File::open(&candidate) else {
+            continue;
+        };
+        let mut data = Vec::with_capacity(expected_len);
+        if GzDecoder::new(BufReader::new(file))
+            .read_to_end(&mut data)
+            .is_ok()
+            && data.len() == expected_len
+        {
+            return Some(data);
+        }
+    }
+    None
 }
 
 impl Level {
@@ -300,25 +382,19 @@ impl Level {
     /// Si el fichero no existe, no es gzip o no tiene el tamano exacto, se
     /// conserva el mundo recien generado y se devuelve false.
     pub fn load(&mut self) -> bool {
-        let Ok(file) = File::open("level.dat") else {
+        let Some(data) = load_gzip_with_backup(Path::new("level.dat"), self.blocks.len()) else {
             return false;
         };
-        let mut data = Vec::with_capacity(self.blocks.len());
-        let mut gz = GzDecoder::new(BufReader::new(file));
-        if gz.read_to_end(&mut data).is_err() || data.len() != self.blocks.len() {
-            return false;
-        }
         self.blocks.copy_from_slice(&data);
         self.recalc_light();
         true
     }
 
     /// Original: Level.save() escribe el array de bloques en level.dat, gzip.
+    /// El archivo se escribe aparte y se cambia al final; la version anterior
+    /// queda en `level.dat.bak` para poder recuperarla.
     pub fn save(&self) -> std::io::Result<()> {
-        let file = File::create("level.dat")?;
-        let mut gz = GzEncoder::new(BufWriter::new(file), Compression::default());
-        gz.write_all(&self.blocks)?;
-        gz.finish()?.flush()
+        save_gzip_atomic(Path::new("level.dat"), &self.blocks)
     }
 
     fn generate(blocks: &mut [u8]) {
@@ -449,5 +525,50 @@ mod tests {
         let g = b.grown(3.0, 2.0, 1.0);
         assert_eq!((g.x0, g.y0, g.z0), (-2.0, 0.0, 2.0));
         assert_eq!((g.x1, g.y1, g.z1), (7.0, 7.0, 7.0));
+    }
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "rustium-{tag}-{}-{stamp}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn atomic_save_keeps_previous_as_backup() {
+        let dir = temp_dir("atomic");
+        let path = dir.join("level.dat");
+        let first = vec![1u8; 64];
+        let second = vec![2u8; 64];
+
+        save_gzip_atomic(&path, &first).unwrap();
+        assert_eq!(load_gzip_with_backup(&path, 64).unwrap(), first);
+        save_gzip_atomic(&path, &second).unwrap();
+        assert_eq!(load_gzip_with_backup(&path, 64).unwrap(), second);
+
+        // If the main file disappears after the swap, the previous save is next.
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(load_gzip_with_backup(&path, 64).unwrap(), first);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn corrupt_primary_falls_back_to_backup() {
+        let dir = temp_dir("corrupt");
+        let path = dir.join("level.dat");
+        let first = vec![3u8; 64];
+        let second = vec![4u8; 64];
+
+        save_gzip_atomic(&path, &first).unwrap();
+        save_gzip_atomic(&path, &second).unwrap();
+        std::fs::write(&path, b"not a gzip level").unwrap();
+        assert_eq!(load_gzip_with_backup(&path, 64).unwrap(), first);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
