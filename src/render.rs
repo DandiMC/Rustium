@@ -315,6 +315,20 @@ struct UiU { color: vec4<f32>, };
 @fragment fn fs() -> @location(0) vec4<f32> { return u.color; }
 "#;
 
+// Overlay con color por vertice: la tarjeta de "captura realizada" necesita
+// varios colores en el mismo draw (panel, borde, insignia y textos), y el
+// pipeline de UI usa un unico color uniforme.
+pub const UI_COLOR_SHADER: &str = r#"
+struct VOut { @builtin(position) clip: vec4<f32>, @location(0) color: vec4<f32> };
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) c: vec4<f32>) -> VOut {
+    var o: VOut;
+    o.clip = vec4<f32>(p, 1.0);
+    o.color = c;
+    return o;
+}
+@fragment fn fs(v: VOut) -> @location(0) vec4<f32> { return v.color; }
+"#;
+
 // Vertices reservados para el overlay (cada pixel del glifo son 6 vertices).
 const UI_MAX_VERTS: usize = 32768;
 
@@ -364,6 +378,30 @@ const FONT_CHARS: &[(char, [u8; 7])] = &[
     ('F', [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000]),
     ('P', [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000]),
     ('S', [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]),
+    ('A', [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001]),
+    ('B', [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110]),
+    ('C', [0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110]),
+    ('D', [0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110]),
+    ('E', [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111]),
+    ('G', [0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01111]),
+    ('H', [0b10001, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001]),
+    ('I', [0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]),
+    ('J', [0b00111, 0b00010, 0b00010, 0b00010, 0b00010, 0b10010, 0b01100]),
+    ('K', [0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001]),
+    ('L', [0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111]),
+    ('M', [0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001]),
+    ('N', [0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001]),
+    ('O', [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]),
+    ('Q', [0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101]),
+    ('R', [0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001]),
+    ('T', [0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100]),
+    ('U', [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]),
+    ('V', [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]),
+    ('W', [0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b10101, 0b01010]),
+    ('X', [0b10001, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b10001]),
+    ('Y', [0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100]),
+    ('Z', [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111]),
+    ('+', [0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000]),
 ];
 
 // Genera los triangulos del texto en coordenadas de recorte. Cada pixel encendido
@@ -477,6 +515,125 @@ fn fuente_quads(
 // Texto del HUD en coordenadas de la GUI del original (alto 240). Cada pixel
 // de la fuente es una unidad de GUI, asi que a 854x480 la letra mide 8 px y a
 // 1024x768 unos 25, como el default.gif del jar.
+fn ui_rect(out: &mut Vec<f32>, x: f32, y: f32, w: f32, h: f32, color: [f32; 4], width: u32, height: u32) {
+    let dx = 2.0 / width.max(1) as f32;
+    let dy = 2.0 / height.max(1) as f32;
+    let x0 = -1.0 + x * dx;
+    let x1 = -1.0 + (x + w) * dx;
+    let y0 = 1.0 - y * dy;
+    let y1 = 1.0 - (y + h) * dy;
+    let v = |px: f32, py: f32| [px, py, 0.0, color[0], color[1], color[2], color[3]];
+    let (a, b, d, e) = (v(x0, y0), v(x1, y0), v(x1, y1), v(x0, y1));
+    out.extend_from_slice(&a);
+    out.extend_from_slice(&b);
+    out.extend_from_slice(&d);
+    out.extend_from_slice(&a);
+    out.extend_from_slice(&d);
+    out.extend_from_slice(&e);
+}
+
+fn ui_texto_color(out: &mut Vec<f32>, text: &str, width: u32, height: u32, x: f32, y: f32, escala: f32, color: [f32; 4]) {
+    let dx = 2.0 / width.max(1) as f32;
+    let dy = 2.0 / height.max(1) as f32;
+    let mut cx = x;
+    for ch in text.chars() {
+        if let Some((_, rows)) = FONT_CHARS.iter().find(|(c, _)| *c == ch) {
+            for (r, bits) in rows.iter().enumerate() {
+                for c in 0..5u32 {
+                    if *bits & (1u8 << (4 - c)) != 0 {
+                        let px = cx + c as f32 * escala;
+                        let py = y + r as f32 * escala;
+                        ui_rect(out, px, py, escala, escala, color, width, height);
+                    }
+                }
+            }
+        }
+        cx += 6.0 * escala;
+    }
+}
+
+// Tarjeta de captura, al estilo del aviso de XP de Fortnite: entra deslizandose
+// desde la derecha, la insignia late, la barra se llena y se va sola. Se dibuja
+// en el renderer compartido, asi que sale en las 14 versiones.
+const TOAST_DURACION: f32 = 2.6;
+const TOAST_ANCHO: f32 = 292.0;
+const TOAST_ALTO: f32 = 58.0;
+
+fn toast_quads(edad: f32, width: u32, height: u32, y_base: f32) -> Vec<f32> {
+    let mut out: Vec<f32> = Vec::new();
+    if !(0.0..TOAST_DURACION).contains(&edad) || width < 360 {
+        return out;
+    }
+    let entrada = (edad / 0.30).min(1.0);
+    let ease = 1.0 - (1.0 - entrada).powi(3);
+    let salida = ((edad - (TOAST_DURACION - 0.40)) / 0.40).clamp(0.0, 1.0);
+    let ease_sal = salida * salida;
+    let panel_w = TOAST_ANCHO.min(width as f32 - 28.0);
+    let panel_h = TOAST_ALTO;
+    // La posicion se mide en pixeles de pantalla, como el resto del HUD.
+    let x = width as f32 - panel_w - 14.0
+        + (1.0 - ease) * (panel_w + 24.0)
+        + ease_sal * (panel_w + 24.0);
+    let y = y_base - (1.0 - ease) * 5.0;
+    let a = (1.0 - salida).clamp(0.0, 1.0);
+    let violeta = [0.63, 0.44, 1.0, 0.95 * a];
+    let oro = [1.0, 0.78, 0.20, a];
+
+    // Sombra y panel con borde violeta y filo dorado a la izquierda.
+    ui_rect(&mut out, x + 4.0, y + 4.0, panel_w, panel_h, [0.0, 0.0, 0.0, 0.30 * a], width, height);
+    ui_rect(&mut out, x, y, panel_w, panel_h, [0.075, 0.045, 0.13, 0.94 * a], width, height);
+    ui_rect(&mut out, x, y, panel_w, 2.0, violeta, width, height);
+    ui_rect(&mut out, x, y + panel_h - 2.0, panel_w, 2.0, violeta, width, height);
+    ui_rect(&mut out, x, y, 2.0, panel_h, violeta, width, height);
+    ui_rect(&mut out, x + panel_w - 2.0, y, 2.0, panel_h, violeta, width, height);
+    ui_rect(&mut out, x, y, 5.0, panel_h, oro, width, height);
+    // Esquinas doradas, el detalle de tarjeta de recompensa.
+    ui_rect(&mut out, x + panel_w - 22.0, y, 22.0, 3.0, oro, width, height);
+    ui_rect(&mut out, x + panel_w - 3.0, y + panel_h - 22.0, 3.0, 22.0, oro, width, height);
+
+    // Brillo que barre la tarjeta al entrar.
+    let barrido = ((edad - 0.14) / 0.52).clamp(0.0, 1.0);
+    if barrido > 0.0 && barrido < 1.0 {
+        let sx = x - 26.0 + barrido * (panel_w + 52.0);
+        ui_rect(&mut out, sx, y + 2.0, 26.0, panel_h - 4.0, [1.0, 1.0, 1.0, 0.055 * a], width, height);
+        ui_rect(&mut out, sx + 26.0, y + 2.0, 8.0, panel_h - 4.0, [1.0, 1.0, 1.0, 0.035 * a], width, height);
+    }
+
+    // Insignia: marco dorado con una camara de pixeles.
+    let ix = x + 10.0;
+    let iy = y + 9.0;
+    ui_rect(&mut out, ix, iy, 40.0, 40.0, [0.13, 0.08, 0.24, a], width, height);
+    ui_rect(&mut out, ix, iy, 40.0, 2.0, oro, width, height);
+    ui_rect(&mut out, ix, iy + 38.0, 40.0, 2.0, oro, width, height);
+    ui_rect(&mut out, ix, iy, 2.0, 40.0, oro, width, height);
+    ui_rect(&mut out, ix + 38.0, iy, 2.0, 40.0, oro, width, height);
+    // Cuerpo, visor y flash de la camara.
+    ui_rect(&mut out, ix + 8.0, iy + 16.0, 24.0, 15.0, oro, width, height);
+    ui_rect(&mut out, ix + 14.0, iy + 12.0, 10.0, 4.0, oro, width, height);
+    ui_rect(&mut out, ix + 16.0, iy + 19.0, 9.0, 9.0, [0.13, 0.08, 0.24, a], width, height);
+    ui_rect(&mut out, ix + 18.0, iy + 21.0, 5.0, 5.0, [1.0, 0.92, 0.55, a], width, height);
+    ui_rect(&mut out, ix + 27.0, iy + 13.0, 4.0, 3.0, [0.13, 0.08, 0.24, a], width, height);
+
+    // Textos: titulo blanco y recompensa en dorado.
+    ui_texto_color(&mut out, "CAPTURA REALIZADA", width, height, x + 60.0, y + 9.0, 2.0, [1.0, 1.0, 1.0, a]);
+    ui_texto_color(&mut out, "+1 CAPTURA", width, height, x + 60.0, y + 28.0, 2.0, oro);
+
+    // Barra de XP: fondo, relleno que sube y punta que brilla al completarse.
+    let bx = x + 60.0;
+    let by = y + 47.0;
+    let bw = panel_w - 72.0;
+    ui_rect(&mut out, bx, by, bw, 5.0, [0.18, 0.12, 0.28, a], width, height);
+    let progreso = ((edad - 0.10) / 0.55).clamp(0.0, 1.0);
+    let lleno = 1.0 - (1.0 - progreso).powi(2);
+    let pulso = 0.80 + 0.20 * ((edad * 10.0).sin() * 0.5 + 0.5);
+    let brillo = [1.0, 0.84, 0.30, pulso * a];
+    ui_rect(&mut out, bx, by, bw * lleno, 5.0, brillo, width, height);
+    if progreso > 0.02 {
+        ui_rect(&mut out, bx + (bw * lleno - 5.0).max(0.0), by - 1.0, 5.0, 7.0, [1.0, 1.0, 0.85, a], width, height);
+    }
+    out
+}
+
 fn ui_text_gui(text: &str, width: u32, height: u32, x_gui: f32, y_gui: f32) -> Vec<f32> {
     let sh = 240.0f32;
     let sw = width as f32 * sh / height.max(1) as f32;
@@ -720,6 +877,11 @@ pub struct Renderer {
     pub coords: Option<String>,
     /// F2: copia el frame actual a PNG al terminar de dibujarlo.
     pub pedir_captura: bool,
+    /// Aviso de captura realizada: `Some` mientras corre la animacion.
+    pub toast_inicio: Option<std::time::Instant>,
+    pub toast_vbuf: wgpu::Buffer,
+    pub toast_verts: usize,
+    pub toast_pipeline: wgpu::RenderPipeline,
     // Cubo del bloque elegido en la esquina (RubyDung.drawGui)
     pub hud_bloque: Option<u8>,
     pub hud_uniform: wgpu::Buffer,
@@ -1547,6 +1709,57 @@ impl Renderer {
             multiview: None,
             cache: None,
         });
+        // Tarjeta de captura: color por vertice, sin bind groups.
+        let ui_color_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("ui color shader"),
+            source: wgpu::ShaderSource::Wgsl(UI_COLOR_SHADER.into()),
+        });
+        let toast_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("toast pipeline"),
+            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("toast pl"),
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            })),
+            vertex: wgpu::VertexState {
+                module: &ui_color_shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 28,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute { offset: 0, shader_location: 0, format: wgpu::VertexFormat::Float32x3 },
+                        wgpu::VertexAttribute { offset: 12, shader_location: 1, format: wgpu::VertexFormat::Float32x4 },
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &ui_color_shader,
+                entry_point: Some("fs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
         // Particulas: buffer de vertices reutilizable + indices precalculados
         let part_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("part vbuf"),
@@ -1579,6 +1792,13 @@ impl Renderer {
         let ui_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ui vbuf"),
             size: (UI_MAX_VERTS * 12) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let toast_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("toast vbuf"),
+            // La tarjeta no llega a 400 vertices; 4096 deja aire de sobra.
+            size: 4096 * 28,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -1622,6 +1842,10 @@ impl Renderer {
             hud_lineas: Vec::new(),
             coords: None,
             pedir_captura: false,
+            toast_inicio: None,
+            toast_vbuf,
+            toast_verts: 0,
+            toast_pipeline,
             hud_bloque: None,
             hud_uniform,
             hud_bg,
@@ -1900,6 +2124,26 @@ impl Renderer {
                 ui_count = n;
             }
         }
+        // Aviso de captura: la geometria se escribe aqui y se dibuja en el pase
+        // del HUD, encima del cubo y del texto.
+        self.toast_verts = 0;
+        if let Some(inicio) = self.toast_inicio {
+            let edad = inicio.elapsed().as_secs_f32();
+            if edad >= TOAST_DURACION {
+                self.toast_inicio = None;
+            } else {
+                // Classic dibuja el cubo del bloque en la esquina: ahi la
+                // tarjeta baja para no taparlo. En el resto va pegada arriba.
+                let y_base = if self.hud_bloque.is_some() { 88.0 } else { 14.0 };
+                let verts = toast_quads(edad, self.config.width, self.config.height, y_base);
+                if !verts.is_empty() && verts.len() / 7 <= 4096 {
+                    self.queue.write_buffer(&self.toast_vbuf, 0, unsafe {
+                        std::slice::from_raw_parts(verts.as_ptr() as *const u8, verts.len() * 4)
+                    });
+                    self.toast_verts = verts.len() / 7;
+                }
+            }
+        }
         // HUD: cubo del bloque elegido (el drawGui del original)
         let hud_count = match self.hud_bloque {
             Some(id) => {
@@ -2110,7 +2354,7 @@ impl Renderer {
         }
         // El original limpia el z-buffer antes de la GUI (drawGui), asi que el
         // cubo va en su propio pase con la profundidad limpia y el color encima.
-        if hud_count > 0 || self.text_verts > 0 {
+        if hud_count > 0 || self.text_verts > 0 || self.toast_verts > 0 {
             let ident = [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -2166,6 +2410,11 @@ impl Renderer {
                     pass.draw(0..self.text_verts as u32, 0..1);
                 }
             }
+            if self.toast_verts > 0 {
+                pass.set_pipeline(&self.toast_pipeline);
+                pass.set_vertex_buffer(0, self.toast_vbuf.slice(..));
+                pass.draw(0..self.toast_verts as u32, 0..1);
+            }
         }
         // F2: copiar el frame a un buffer antes de presentarlo. La lectura se
         // hace en el mismo thread porque el juego no vuelve a dibujar hasta
@@ -2214,11 +2463,14 @@ impl Renderer {
             });
             let _ = self.device.poll(wgpu::PollType::Wait);
             let _ = rx.recv();
-            {
+            let guardada = {
                 let data = slice.get_mapped_range();
-                guardar_captura(w, h, padded, &data, self.config.format);
-            }
+                guardar_captura(w, h, padded, &data, self.config.format)
+            };
             buffer.unmap();
+            if guardada {
+                self.toast_inicio = Some(std::time::Instant::now());
+            }
         }
         frame.present();
     }
@@ -2226,7 +2478,7 @@ impl Renderer {
 
 /// Strip the row padding the GPU needs, turn BGRA into RGBA when needed and
 /// write a PNG under `screenshots/` in the world folder.
-fn guardar_captura(w: u32, h: u32, padded: u32, data: &[u8], format: wgpu::TextureFormat) {
+fn guardar_captura(w: u32, h: u32, padded: u32, data: &[u8], format: wgpu::TextureFormat) -> bool {
     let bgra = matches!(format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
     let mut rgba = Vec::with_capacity((w * h * 4) as usize);
     for row in data.chunks(padded as usize) {
@@ -2238,21 +2490,47 @@ fn guardar_captura(w: u32, h: u32, padded: u32, data: &[u8], format: wgpu::Textu
             }
         }
     }
-    let Ok(dir) = std::env::current_dir().map(|d| d.join("screenshots")) else { return };
+    let Ok(dir) = std::env::current_dir().map(|d| d.join("screenshots")) else { return false };
     if std::fs::create_dir_all(&dir).is_err() {
-        return;
+        return false;
     }
     let ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
     let path = dir.join(format!("shot-{ms}.png"));
-    let Ok(f) = std::fs::File::create(&path) else { return };
+    let Ok(f) = std::fs::File::create(&path) else { return false };
     let mut enc = png::Encoder::new(std::io::BufWriter::new(f), w, h);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
-    if let Ok(mut writer) = enc.write_header() {
-        let _ = writer.write_image_data(&rgba);
+    match enc.write_header() {
+        Ok(mut writer) => writer.write_image_data(&rgba).is_ok(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod toast_tests {
+    use super::*;
+
+    #[test]
+    fn la_tarjeta_de_captura_entra_y_se_va() {
+        let dentro = toast_quads(0.6, 1024, 768, 14.0);
+        assert!(!dentro.is_empty());
+        // Cada vertice son 7 floats (posicion y color).
+        assert_eq!(dentro.len() % 7, 0);
+        assert!(toast_quads(TOAST_DURACION + 0.1, 1024, 768, 14.0).is_empty());
+        // En una ventana diminuta no cabe: no se dibuja.
+        assert!(toast_quads(0.6, 320, 240, 14.0).is_empty());
+    }
+
+    #[test]
+    fn la_tarjeta_entra_desde_la_derecha() {
+        let al_empezar = toast_quads(0.02, 1024, 768, 14.0);
+        let al_final = toast_quads(0.30, 1024, 768, 14.0);
+        assert!(!al_empezar.is_empty() && !al_final.is_empty());
+        // El primer vertice es la esquina superior izquierda del panel.
+        assert!(al_empezar[0] > al_final[0]);
     }
 }
 

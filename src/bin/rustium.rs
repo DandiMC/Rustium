@@ -893,10 +893,10 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "The counter is now next to the Rustium title, so you see it as soon as the launcher opens. The social icons at the foot are bigger, YouTube's play is cut out, and the instance options moved to the rail so the Play row fits.",
             ),
             (
-                "Your screenshots, ready to open",
-                "23 Nov 2026",
-                "Press F2 while playing and your photos are saved.",
-                "Every capture goes into its instance's folder and appears in the Screenshots tab with its date and size, ready to open with one click. Each instance keeps its own, and the tab gathers them all.",
+                "Your captures now get their moment",
+                "24 Nov 2026",
+                "Press F2: the shot is saved and a card celebrates it right away.",
+                "Every F2 saves a clean PNG in its instance's folder, and then a card slides in with a camera badge, CAPTURA REALIZADA, +1 capture and a bar that fills up, like a Fortnite XP notice. It lasts two and a half seconds and works in all 14 versions. The shot then waits in the Screenshots tab with its date and size.",
             ),
             (
                 "The first five versions, one click away",
@@ -973,10 +973,10 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "El contador ya está junto al título de Rustium, así se ve nada más abrir. Los iconos de redes del pie son más grandes, el play de YouTube está recortado y Opciones pasó al rail para que la fila de Jugar quepa.",
             ),
             (
-                "Tus capturas, listas para abrir",
-                "23 nov 2026",
-                "Pulsa F2 mientras juegas y tus fotos quedan guardadas.",
-                "Cada captura va a la carpeta de su instancia y aparece en la pestaña Capturas con su fecha y su tamaño, lista para abrir con un clic. Cada instancia guarda las suyas y la pestaña las reúne todas.",
+                "Tus capturas ahora se celebran",
+                "24 nov 2026",
+                "Pulsa F2: la captura se guarda y una tarjeta te lo celebra al instante.",
+                "Cada F2 guarda un PNG limpio en la carpeta de su instancia y, al terminar, entra una tarjeta con insignia de cámara, «CAPTURA REALIZADA», +1 captura y una barra que se llena, como el aviso de XP de Fortnite. Dura dos segundos y medio y funciona en las 14 versiones. Luego la tienes en la pestaña Capturas, con su fecha y su tamaño.",
             ),
             (
                 "Las cinco primeras versiones, a un clic",
@@ -1053,10 +1053,10 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "O contador está agora junto ao título do Rustium, por isso vê-se assim que abres. Os ícones das redes no rodapé são maiores, o play do YouTube está recortado e as Opções passaram para o rail para a fila de Jogar caber.",
             ),
             (
-                "As tuas capturas, prontas a abrir",
-                "23 nov 2026",
-                "Carrega em F2 enquanto jogas e as fotos ficam guardadas.",
-                "Cada captura vai para a pasta da sua instância e aparece no separador Capturas com a data e o tamanho, pronta a abrir com um clique. Cada instância guarda as suas e o separador reúne todas.",
+                "As tuas capturas agora celebram-se",
+                "24 nov 2026",
+                "Carrega em F2: a captura guarda-se e um cartão celebra-a logo.",
+                "Cada F2 guarda um PNG limpo na pasta da sua instância e, no fim, entra um cartão com insígnia de câmara, «CAPTURA REALIZADA», +1 captura e uma barra que enche, como o aviso de XP do Fortnite. Dura dois segundos e meio e funciona nas 14 versões. Depois fica no separador Capturas, com a data e o tamanho.",
             ),
             (
                 "As cinco primeiras versões, a um clique",
@@ -1133,10 +1133,10 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Le compteur est maintenant à côté du titre de Rustium : tu le vois dès l'ouverture. Les icônes des réseaux en bas sont plus grandes, le play de YouTube est découpé et les Options ont déménagé dans le rail pour que la ligne Jouer tienne.",
             ),
             (
-                "Tes captures, prêtes à ouvrir",
-                "23 nov. 2026",
-                "Appuie sur F2 en jouant et tes photos sont enregistrées.",
-                "Chaque capture va dans le dossier de son instance et apparaît dans l'onglet Captures avec sa date et sa taille, prête à ouvrir en un clic. Chaque instance garde les siennes et l'onglet les rassemble toutes.",
+                "Tes captures ont leur moment",
+                "24 nov. 2026",
+                "Appuie sur F2 : la capture est enregistrée et une carte la célèbre aussitôt.",
+                "Chaque F2 enregistre un PNG propre dans le dossier de son instance, puis une carte glisse avec un badge appareil photo, « CAPTURA REALIZADA », +1 capture et une barre qui se remplit, comme l'avis d'XP de Fortnite. Elle dure deux secondes et demie et marche dans les 14 versions. La capture t'attend ensuite dans l'onglet Captures.",
             ),
             (
                 "Les cinq premières versions, à un clic",
@@ -1213,10 +1213,10 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Der Zähler steht jetzt neben dem Rustium-Titel und ist beim Öffnen sofort zu sehen. Die Social-Icons unten sind größer, das YouTube-Play ist ausgespart, und die Optionen sind in die Leiste gewandert, damit die Spielen-Zeile passt.",
             ),
             (
-                "Deine Screenshots, sofort griffbereit",
-                "23. Nov. 2026",
-                "Drücke beim Spielen F2 und deine Fotos werden gespeichert.",
-                "Jede Aufnahme landet im Ordner ihrer Instanz und erscheint mit Datum und Größe im Screenshots-Tab, bereit zum Öffnen mit einem Klick. Jede Instanz behält ihre eigenen, der Tab sammelt alle.",
+                "Deine Aufnahmen werden gefeiert",
+                "24. Nov. 2026",
+                "Drücke F2: Die Aufnahme wird gespeichert und eine Karte feiert sie sofort.",
+                "Jedes F2 speichert ein sauberes PNG im Ordner seiner Instanz, danach gleitet eine Karte herein: Kamera-Abzeichen, „CAPTURA REALIZADA“, +1 Aufnahme und ein Balken, der sich füllt, wie eine XP-Meldung in Fortnite. Sie dauert zweieinhalb Sekunden und läuft in allen 14 Versionen. Danach liegt die Aufnahme im Screenshots-Tab.",
             ),
             (
                 "Die ersten fünf Versionen, ein Klick entfernt",
@@ -6090,8 +6090,8 @@ mod ui {
                                         }
                                         // The build and type each version card talks about.
                                         let tags = [
-                                            "Rustium 0.2.1",
-                                            "Rustium 0.2.1",
+                                            "Rustium 0.2.2",
+                                            "Rustium 0.2.2",
                                             "rd-132211 … rd-161348",
                                             "rd-20090515 · rd-161348",
                                             "rd-132328",
@@ -6145,8 +6145,9 @@ mod ui {
                                                 tags.get(i).copied().unwrap_or("").to_string(),
                                                 actions.get(i).copied().flatten(),
                                                 match i {
-                                                    0 => Some(Art::LauncherShot),
-                                                    1 => Some(Art::Shots),
+                                                    0 => Some(Art::Counter),
+                                                    1 => Some(Art::Toast),
+                                                    2 => Some(Art::First),
                                                     3 => Some(Art::Bush),
                                                     4 => Some(Art::Zombies),
                                                     5 => Some(Art::Zombies),
@@ -6155,8 +6156,8 @@ mod ui {
                                                     8 => Some(Art::ClassicBuild),
                                                     9 => Some(Art::LauncherShot),
                                                     10 => Some(Art::Walk),
-                                                    11 => Some(Art::Cave),
-                                                    12 => Some(Art::Cave),
+                                                    11 => Some(Art::ClassicBuild),
+                                                    12 => Some(Art::Alpha),
                                                     _ => Some(Art::World),
                                                 },
                                             ));
@@ -6227,25 +6228,6 @@ mod ui {
                                 });
                             }
 
-                            if !self.log.is_empty() {
-                                ui.add_space(12.0);
-                                egui::Frame::NONE
-                                    .fill(Color32::from_rgba_premultiplied(12, 12, 12, 12))
-                                    .corner_radius(10)
-                                    .inner_margin(egui::Margin::symmetric(12, 9))
-                                    .show(ui, |ui| {
-                                        ui.set_width(ui.available_width());
-                                        egui::ScrollArea::vertical()
-                                            .max_height(96.0)
-                                            .stick_to_bottom(true)
-                                            .auto_shrink([false, false])
-                                            .show(ui, |ui| {
-                                                for l in &self.log {
-                                                    ui.monospace(RichText::new(l).size(11.5).color(SOFT));
-                                                }
-                                            });
-                                    });
-                            }
 
                         });
                 });
@@ -6387,8 +6369,12 @@ mod ui {
         Walk,
         /// The 0.2 launcher itself, captured from the running window.
         LauncherShot,
-        /// The Screenshots tab with a couple of captures in it.
-        Shots,
+        /// The launcher header, cropped so the live counter reads.
+        Counter,
+        /// The new F2 capture celebration.
+        Toast,
+        /// The private alpha build, captured from mc-161648.
+        Alpha,
     }
 
     /// Redes del pie del launcher. Se dibujan como iconos para que la linea de
@@ -6638,9 +6624,17 @@ mod ui {
                     "news-020",
                     include_bytes!("../../assets/news_020.rgb"),
                 ),
-                Art::Shots => (
-                    "news-shots",
-                    include_bytes!("../../assets/news_shots.rgb"),
+                Art::Counter => (
+                    "news-counter",
+                    include_bytes!("../../assets/news_counter.rgb"),
+                ),
+                Art::Toast => (
+                    "news-toast",
+                    include_bytes!("../../assets/news_toast.rgb"),
+                ),
+                Art::Alpha => (
+                    "news-alpha",
+                    include_bytes!("../../assets/news_alpha.rgb"),
                 ),
                 Art::Launcher => unreachable!(),
             };
