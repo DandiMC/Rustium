@@ -6041,17 +6041,6 @@ mod ui {
                                         // (sort date, kind, title, date, summary, body, version tag, art)
                                         let mut cards: Vec<(u32, NewsKind, String, String, String, String, String, Option<Tab>, Option<Art>)> = vec![
                                             (
-                                                date_key(u.n1_date),
-                                                NewsKind::Story,
-                                                u.n1_title.to_string(),
-                                                u.n1_date.to_string(),
-                                                u.n1_short.to_string(),
-                                                u.n1_body.to_string(),
-                                                format!("v{VERSION}"),
-                                                None,
-                                                Some(Art::Launcher),
-                                            ),
-                                            (
                                                 date_key(u.n2_date),
                                                 NewsKind::Story,
                                                 u.n2_title.to_string(),
@@ -6061,6 +6050,17 @@ mod ui {
                                                 "rd-132211".to_string(),
                                                 None,
                                                 Some(Art::First),
+                                            ),
+                                            (
+                                                date_key(u.n1_date),
+                                                NewsKind::Story,
+                                                u.n1_title.to_string(),
+                                                u.n1_date.to_string(),
+                                                u.n1_short.to_string(),
+                                                u.n1_body.to_string(),
+                                                format!("v{VERSION}"),
+                                                None,
+                                                Some(Art::Launcher),
                                             ),
                                         ];
                                         for (lang, title, date, short, body, version, art) in &self.local_news {
@@ -6090,8 +6090,8 @@ mod ui {
                                         }
                                         // The build and type each version card talks about.
                                         let tags = [
-                                            "Rustium 0.2.2",
-                                            "Rustium 0.2.2",
+                                            "Rustium 0.2.3",
+                                            "Rustium 0.2.3",
                                             "rd-132211 … rd-161348",
                                             "rd-20090515 · rd-161348",
                                             "rd-132328",
@@ -6156,7 +6156,7 @@ mod ui {
                                                     8 => Some(Art::ClassicBuild),
                                                     9 => Some(Art::LauncherShot),
                                                     10 => Some(Art::Walk),
-                                                    11 => Some(Art::ClassicBuild),
+                                                    11 => Some(Art::Classic003a),
                                                     12 => Some(Art::Alpha),
                                                     _ => Some(Art::World),
                                                 },
@@ -6375,6 +6375,8 @@ mod ui {
         Toast,
         /// The private alpha build, captured from mc-161648.
         Alpha,
+        /// c0.0.3a itself, captured in game.
+        Classic003a,
     }
 
     /// Redes del pie del launcher. Se dibujan como iconos para que la linea de
@@ -6635,6 +6637,10 @@ mod ui {
                 Art::Alpha => (
                     "news-alpha",
                     include_bytes!("../../assets/news_alpha.rgb"),
+                ),
+                Art::Classic003a => (
+                    "news-classic003a",
+                    include_bytes!("../../assets/news_classic003a.rgb"),
                 ),
                 Art::Launcher => unreachable!(),
             };

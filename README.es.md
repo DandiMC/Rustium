@@ -21,7 +21,7 @@ y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.2.2-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.2.3-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -125,7 +125,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.2.2-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.2.3-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 
