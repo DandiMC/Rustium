@@ -559,6 +559,21 @@ const TOAST_DURACION: f32 = 2.6;
 const TOAST_ANCHO: f32 = 292.0;
 const TOAST_ALTO: f32 = 58.0;
 
+/// El launcher pasa su idioma al juego; el aviso de captura se escribe en ese
+/// idioma. Si el juego se abre solo, se queda en inglés, que es el idioma que
+/// entiende cualquiera que no haya elegido otro.
+fn toast_textos() -> (&'static str, &'static str) {
+    let code = std::env::var("RUSTIUM_LANG").unwrap_or_default();
+    let code = code.to_ascii_lowercase();
+    match code.split(|c| c == '-' || c == '_').next().unwrap_or("") {
+        "es" => ("CAPTURA REALIZADA", "+1 CAPTURA"),
+        "pt" => ("CAPTURA GUARDADA", "+1 CAPTURA"),
+        "fr" => ("CAPTURE ENREGISTREE", "+1 CAPTURE"),
+        "de" => ("FOTO GESPEICHERT", "+1 FOTO"),
+        _ => ("SCREENSHOT SAVED", "+1 SCREENSHOT"),
+    }
+}
+
 fn toast_quads(edad: f32, width: u32, height: u32, y_base: f32) -> Vec<f32> {
     let mut out: Vec<f32> = Vec::new();
     if !(0.0..TOAST_DURACION).contains(&edad) || width < 360 {
@@ -614,9 +629,10 @@ fn toast_quads(edad: f32, width: u32, height: u32, y_base: f32) -> Vec<f32> {
     ui_rect(&mut out, ix + 18.0, iy + 21.0, 5.0, 5.0, [1.0, 0.92, 0.55, a], width, height);
     ui_rect(&mut out, ix + 27.0, iy + 13.0, 4.0, 3.0, [0.13, 0.08, 0.24, a], width, height);
 
-    // Textos: titulo blanco y recompensa en dorado.
-    ui_texto_color(&mut out, "CAPTURA REALIZADA", width, height, x + 60.0, y + 9.0, 2.0, [1.0, 1.0, 1.0, a]);
-    ui_texto_color(&mut out, "+1 CAPTURA", width, height, x + 60.0, y + 28.0, 2.0, oro);
+    // Textos: titulo blanco y recompensa en dorado, en el idioma del launcher.
+    let (titulo, premio) = toast_textos();
+    ui_texto_color(&mut out, titulo, width, height, x + 60.0, y + 9.0, 2.0, [1.0, 1.0, 1.0, a]);
+    ui_texto_color(&mut out, premio, width, height, x + 60.0, y + 28.0, 2.0, oro);
 
     // Barra de XP: fondo, relleno que sube y punta que brilla al completarse.
     let bx = x + 60.0;
@@ -632,6 +648,177 @@ fn toast_quads(edad: f32, width: u32, height: u32, y_base: f32) -> Vec<f32> {
         ui_rect(&mut out, bx + (bw * lleno - 5.0).max(0.0), by - 1.0, 5.0, 7.0, [1.0, 1.0, 0.85, a], width, height);
     }
     out
+}
+
+// ---------------------------------------------------------------- Discord RPC
+// Rich Presence through Discord's local IPC pipe. It needs no HTTP, no bot
+// token and no proxy: the game talks to the Discord client running on the same
+// machine, which forwards the activity. The Application ID is public; it can be
+// compiled in or supplied with RUSTIUM_DISCORD_CLIENT_ID / discord_id.txt while
+// testing. Without an id Discord rejects the handshake, so presence stays off.
+const DISCORD_CLIENT_ID: &str = "";
+
+trait DiscordPipe: std::io::Read + std::io::Write {}
+impl<T: std::io::Read + std::io::Write> DiscordPipe for T {}
+
+fn discord_client_id() -> Option<String> {
+    let mut id = DISCORD_CLIENT_ID.trim().to_string();
+    if id.is_empty() {
+        if let Ok(v) = std::env::var("RUSTIUM_DISCORD_CLIENT_ID") {
+            id = v.trim().to_string();
+        }
+    }
+    if id.is_empty() {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let path = std::path::Path::new(&appdata)
+                .join("Rustium")
+                .join("discord_id.txt");
+            if let Ok(txt) = std::fs::read_to_string(path) {
+                id = txt.lines().next().unwrap_or("").trim().to_string();
+            }
+        }
+    }
+    let ok = (17..=20).contains(&id.len()) && id.chars().all(|c| c.is_ascii_digit());
+    ok.then_some(id)
+}
+
+#[cfg(windows)]
+fn discord_pipe() -> Option<Box<dyn DiscordPipe>> {
+    for i in 0..10 {
+        let path = format!(r"\\.\pipe\discord-ipc-{i}");
+        if let Ok(f) = std::fs::OpenOptions::new().read(true).write(true).open(path) {
+            return Some(Box::new(f));
+        }
+    }
+    None
+}
+
+#[cfg(unix)]
+fn discord_pipe() -> Option<Box<dyn DiscordPipe>> {
+    use std::os::unix::net::UnixStream;
+    let mut dirs = Vec::new();
+    if let Ok(d) = std::env::var("XDG_RUNTIME_DIR") {
+        dirs.push(d);
+    }
+    dirs.push("/tmp".to_string());
+    for dir in dirs {
+        for i in 0..10 {
+            let path = format!("{dir}/discord-ipc-{i}");
+            if let Ok(s) = UnixStream::connect(path) {
+                return Some(Box::new(s));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(any(windows, unix)))]
+fn discord_pipe() -> Option<Box<dyn DiscordPipe>> {
+    None
+}
+
+fn discord_send(pipe: &mut dyn DiscordPipe, op: u32, payload: &str) -> std::io::Result<()> {
+    pipe.write_all(&op.to_le_bytes())?;
+    pipe.write_all(&(payload.len() as u32).to_le_bytes())?;
+    pipe.write_all(payload.as_bytes())?;
+    pipe.flush()
+}
+
+fn discord_recv(pipe: &mut dyn DiscordPipe) -> std::io::Result<()> {
+    let mut header = [0u8; 8];
+    pipe.read_exact(&mut header)?;
+    let len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+    if len == 0 || len > 1_048_576 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "discord frame",
+        ));
+    }
+    let mut body = vec![0u8; len];
+    pipe.read_exact(&mut body)?;
+    Ok(())
+}
+
+fn discord_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => {}
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn discord_textos(version: &str) -> (String, String) {
+    let lang = std::env::var("RUSTIUM_LANG")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let playing = match lang.split(|c| c == '-' || c == '_').next().unwrap_or("") {
+        "es" => "Jugando",
+        "pt" => "A jogar",
+        "fr" => "En train de jouer",
+        "de" => "Spielt",
+        _ => "Playing",
+    };
+    let version = version.trim();
+    let details = if version.is_empty() {
+        "Rustium".to_string()
+    } else {
+        format!("{playing} {version}")
+    };
+    (details, format!("Rustium {}", env!("CARGO_PKG_VERSION")))
+}
+
+/// Keeps the activity alive while the game runs. A disconnected Discord client
+/// just means this thread retries quietly; it never blocks or stops the game.
+fn iniciar_presencia_discord() {
+    if std::env::var_os("RD_BENCH").is_some() {
+        return;
+    }
+    let Some(client_id) = discord_client_id() else { return };
+    let version = std::env::var("RUSTIUM_GAME_VERSION").unwrap_or_default();
+    let (details, state) = discord_textos(&version);
+    let _ = std::thread::Builder::new()
+        .name("discord-rpc".into())
+        .spawn(move || {
+            let start = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            loop {
+                if let Some(mut pipe) = discord_pipe() {
+                    let handshake = format!(r#"{{"v":1,"client_id":"{client_id}"}}"#);
+                    if discord_send(pipe.as_mut(), 0, &handshake).is_ok()
+                        && discord_recv(pipe.as_mut()).is_ok()
+                    {
+                        let mut nonce = 0u64;
+                        loop {
+                            let activity = format!(
+                                r#"{{"cmd":"SET_ACTIVITY","args":{{"pid":{},"activity":{{"details":"{}","state":"{}","timestamps":{{"start":{}}},"instance":false}}}},"nonce":"rustium-{}-{}"}}"#,
+                                std::process::id(),
+                                discord_escape(&details),
+                                discord_escape(&state),
+                                start,
+                                std::process::id(),
+                                nonce
+                            );
+                            if discord_send(pipe.as_mut(), 1, &activity).is_err()
+                                || discord_recv(pipe.as_mut()).is_err()
+                            {
+                                break;
+                            }
+                            nonce = nonce.wrapping_add(1);
+                            std::thread::sleep(std::time::Duration::from_secs(20));
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_secs(15));
+            }
+        });
 }
 
 fn ui_text_gui(text: &str, width: u32, height: u32, x_gui: f32, y_gui: f32) -> Vec<f32> {
@@ -912,6 +1099,7 @@ struct Uniforms {
 
 impl Renderer {
     pub async fn new(window: Arc<Window>) -> Self {
+        iniciar_presencia_discord();
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
         let surface = instance.create_surface(window.clone()).unwrap();

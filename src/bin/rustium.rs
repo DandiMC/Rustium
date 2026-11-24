@@ -2616,8 +2616,8 @@ fn run_with(opts: &Options, inst: Option<&Instance>) -> R<()> {
         return Ok(());
     }
     match inst {
-        Some(i) => launch_instance(det.path.as_deref(), &t, i),
-        None => launch_game(det.path.as_deref(), &t, opts.game),
+        Some(i) => launch_instance(det.path.as_deref(), &t, i, opts.lang),
+        None => launch_game(det.path.as_deref(), &t, opts.game, opts.lang),
     }
 }
 
@@ -2925,12 +2925,12 @@ fn world_looks_legacy(path: &Path) -> Option<bool> {
 
 // ---------------------------------------------------------------------- game
 
-fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion) -> R<()> {
+fn launch_game(atlas: Option<&Path>, t: &Texts, game: GameVersion, lang: Lang) -> R<()> {
     let exe = find_game(t, game)?;
-    start_game(&exe, t, game, &world_dir(game), true, Extras::default(), atlas)
+    start_game(&exe, t, game, &world_dir(game), true, Extras::default(), atlas, lang)
 }
 
-fn launch_instance(atlas: Option<&Path>, t: &Texts, inst: &Instance) -> R<()> {
+fn launch_instance(atlas: Option<&Path>, t: &Texts, inst: &Instance, lang: Lang) -> R<()> {
     let exe = find_game(t, inst.game)?;
     start_game(
         &exe,
@@ -2947,6 +2947,7 @@ fn launch_instance(atlas: Option<&Path>, t: &Texts, inst: &Instance) -> R<()> {
             height: inst.height,
         },
         atlas,
+        lang,
     )
 }
 
@@ -2958,6 +2959,7 @@ fn start_game(
     migrate: bool,
     extras: Extras,
     atlas: Option<&Path>,
+    lang: Lang,
 ) -> R<()> {
     say!();
     say!("{}", fill(&t.starting, "{path}", &exe.display().to_string()));
@@ -2970,6 +2972,10 @@ fn start_game(
         migrate_old_world(game, exe.parent(), game_dir);
     }
     cmd.current_dir(game_dir);
+    // The game writes the F2 card in the launcher's language and can show the
+    // build it is running in Discord without knowing the launcher's types.
+    cmd.env("RUSTIUM_LANG", lang.code());
+    cmd.env("RUSTIUM_GAME_VERSION", game.id());
     // Each build reads its own terrain.png from its own jar; only the original
     // rd-132211 port takes the atlas the picker detected by hand.
     if let (Some(r), GameVersion::Rd132211) = (atlas, game) {
