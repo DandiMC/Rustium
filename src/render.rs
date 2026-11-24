@@ -552,9 +552,9 @@ fn ui_texto_color(out: &mut Vec<f32>, text: &str, width: u32, height: u32, x: f3
     }
 }
 
-// Tarjeta de captura, al estilo del aviso de XP de Fortnite: entra deslizandose
-// desde la derecha, la insignia late, la barra se llena y se va sola. Se dibuja
-// en el renderer compartido, asi que sale en las 14 versiones.
+// Tarjeta de captura: entra deslizandose desde la derecha, la insignia late,
+// la barra se llena y se va sola. Se dibuja en el renderer compartido, asi que
+// sale en las 14 versiones.
 const TOAST_DURACION: f32 = 2.6;
 const TOAST_ANCHO: f32 = 292.0;
 const TOAST_ALTO: f32 = 58.0;

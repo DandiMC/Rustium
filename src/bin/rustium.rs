@@ -896,7 +896,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Your captures now get their moment",
                 "24 Nov 2026",
                 "Press F2: the shot is saved and a card celebrates it right away.",
-                "Every F2 saves a clean PNG in its instance's folder, and then a card slides in with a camera badge, CAPTURA REALIZADA, +1 capture and a bar that fills up, like a Fortnite XP notice. It lasts two and a half seconds and works in all 14 versions. The shot then waits in the Screenshots tab with its date and size.",
+                "Every F2 saves a clean PNG in its instance's folder, and then a card slides in with a camera badge, CAPTURA REALIZADA, +1 capture and a bar that fills up, like a reward popup. It lasts two and a half seconds and works in all 14 versions. The shot then waits in the Screenshots tab with its date and size.",
             ),
             (
                 "The first five versions, one click away",
@@ -976,7 +976,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Tus capturas ahora se celebran",
                 "24 nov 2026",
                 "Pulsa F2: la captura se guarda y una tarjeta te lo celebra al instante.",
-                "Cada F2 guarda un PNG limpio en la carpeta de su instancia y, al terminar, entra una tarjeta con insignia de cámara, «CAPTURA REALIZADA», +1 captura y una barra que se llena, como el aviso de XP de Fortnite. Dura dos segundos y medio y funciona en las 14 versiones. Luego la tienes en la pestaña Capturas, con su fecha y su tamaño.",
+                "Cada F2 guarda un PNG limpio en la carpeta de su instancia y, al terminar, entra una tarjeta con insignia de cámara, «CAPTURA REALIZADA», +1 captura y una barra que se llena, como un aviso de recompensa. Dura dos segundos y medio y funciona en las 14 versiones. Luego la tienes en la pestaña Capturas, con su fecha y su tamaño.",
             ),
             (
                 "Las cinco primeras versiones, a un clic",
@@ -1056,7 +1056,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "As tuas capturas agora celebram-se",
                 "24 nov 2026",
                 "Carrega em F2: a captura guarda-se e um cartão celebra-a logo.",
-                "Cada F2 guarda um PNG limpo na pasta da sua instância e, no fim, entra um cartão com insígnia de câmara, «CAPTURA REALIZADA», +1 captura e uma barra que enche, como o aviso de XP do Fortnite. Dura dois segundos e meio e funciona nas 14 versões. Depois fica no separador Capturas, com a data e o tamanho.",
+                "Cada F2 guarda um PNG limpo na pasta da sua instância e, no fim, entra um cartão com insígnia de câmara, «CAPTURA REALIZADA», +1 captura e uma barra que enche, como um aviso de recompensa. Dura dois segundos e meio e funciona nas 14 versões. Depois fica no separador Capturas, com a data e o tamanho.",
             ),
             (
                 "As cinco primeiras versões, a um clique",
@@ -1136,7 +1136,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Tes captures ont leur moment",
                 "24 nov. 2026",
                 "Appuie sur F2 : la capture est enregistrée et une carte la célèbre aussitôt.",
-                "Chaque F2 enregistre un PNG propre dans le dossier de son instance, puis une carte glisse avec un badge appareil photo, « CAPTURA REALIZADA », +1 capture et une barre qui se remplit, comme l'avis d'XP de Fortnite. Elle dure deux secondes et demie et marche dans les 14 versions. La capture t'attend ensuite dans l'onglet Captures.",
+                "Chaque F2 enregistre un PNG propre dans le dossier de son instance, puis une carte glisse avec un badge appareil photo, « CAPTURA REALIZADA », +1 capture et une barre qui se remplit, comme un avis de récompense. Elle dure deux secondes et demie et marche dans les 14 versions. La capture t'attend ensuite dans l'onglet Captures.",
             ),
             (
                 "Les cinq premières versions, à un clic",
@@ -1216,7 +1216,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Deine Aufnahmen werden gefeiert",
                 "24. Nov. 2026",
                 "Drücke F2: Die Aufnahme wird gespeichert und eine Karte feiert sie sofort.",
-                "Jedes F2 speichert ein sauberes PNG im Ordner seiner Instanz, danach gleitet eine Karte herein: Kamera-Abzeichen, „CAPTURA REALIZADA“, +1 Aufnahme und ein Balken, der sich füllt, wie eine XP-Meldung in Fortnite. Sie dauert zweieinhalb Sekunden und läuft in allen 14 Versionen. Danach liegt die Aufnahme im Screenshots-Tab.",
+                "Jedes F2 speichert ein sauberes PNG im Ordner seiner Instanz, danach gleitet eine Karte herein: Kamera-Abzeichen, „CAPTURA REALIZADA“, +1 Aufnahme und ein Balken, der sich füllt, wie eine Belohnungsmeldung. Sie dauert zweieinhalb Sekunden und läuft in allen 14 Versionen. Danach liegt die Aufnahme im Screenshots-Tab.",
             ),
             (
                 "Die ersten fünf Versionen, ein Klick entfernt",
@@ -6058,7 +6058,7 @@ mod ui {
                                                 u.n1_date.to_string(),
                                                 u.n1_short.to_string(),
                                                 u.n1_body.to_string(),
-                                                format!("v{VERSION}"),
+                                                "v0.1.0".to_string(),
                                                 None,
                                                 Some(Art::Launcher),
                                             ),
@@ -6090,8 +6090,8 @@ mod ui {
                                         }
                                         // The build and type each version card talks about.
                                         let tags = [
-                                            "Rustium 0.2.3",
-                                            "Rustium 0.2.3",
+                                            "Rustium 0.2.1",
+                                            "Rustium 0.2.2",
                                             "rd-132211 … rd-161348",
                                             "rd-20090515 · rd-161348",
                                             "rd-132328",
