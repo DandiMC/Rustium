@@ -87,8 +87,8 @@ const BENCH_SPAWN: f32 = 0.5;
 
 type R<T> = Result<T, String>;
 
-/// Las versiones que trae el launcher, en orden de fecha: las pre-clasicas y
-/// la primera Classic conservada.
+/// Las versiones que trae el launcher, en orden de fecha: las pre-clasicas, la
+/// Classic private alpha y las primeras Classics, conservadas o reconstruidas.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum GameVersion {
     Rd131655,
@@ -97,19 +97,29 @@ enum GameVersion {
     Rd20090515,
     Rd160052,
     Rd161348,
+    Mc161607,
+    Mc161616,
+    Mc161625,
+    Mc161648,
+    C003a,
     C009a,
     C010a,
     C0011a,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 9] = [
+    const ALL: [GameVersion; 14] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
         GameVersion::Rd20090515,
         GameVersion::Rd160052,
         GameVersion::Rd161348,
+        GameVersion::Mc161607,
+        GameVersion::Mc161616,
+        GameVersion::Mc161625,
+        GameVersion::Mc161648,
+        GameVersion::C003a,
         GameVersion::C009a,
         GameVersion::C010a,
         GameVersion::C0011a,
@@ -124,6 +134,11 @@ impl GameVersion {
             GameVersion::Rd20090515 => "rd-20090515",
             GameVersion::Rd160052 => "rd-160052",
             GameVersion::Rd161348 => "rd-161348",
+            GameVersion::Mc161607 => "mc-161607",
+            GameVersion::Mc161616 => "mc-161616",
+            GameVersion::Mc161625 => "mc-161625",
+            GameVersion::Mc161648 => "mc-161648",
+            GameVersion::C003a => "c0.0.3a",
             GameVersion::C009a => "c0.0.9a",
             GameVersion::C010a => "c0.0.10a",
             GameVersion::C0011a => "c0.0.11a",
@@ -151,6 +166,21 @@ impl GameVersion {
             }
             GameVersion::Rd161348 => {
                 if win { "rd161348.exe" } else { "rd161348" }
+            }
+            GameVersion::Mc161607 => {
+                if win { "mc161607.exe" } else { "mc161607" }
+            }
+            GameVersion::Mc161616 => {
+                if win { "mc161616.exe" } else { "mc161616" }
+            }
+            GameVersion::Mc161625 => {
+                if win { "mc161625.exe" } else { "mc161625" }
+            }
+            GameVersion::Mc161648 => {
+                if win { "mc161648.exe" } else { "mc161648" }
+            }
+            GameVersion::C003a => {
+                if win { "classic003a.exe" } else { "classic003a" }
             }
             GameVersion::C009a => {
                 if win { "classic009a.exe" } else { "classic009a" }
@@ -789,408 +819,470 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 }
 
 
+/// Sort key for a date written like "24 nov 2026". Unknown formats go after
+/// every dated card instead of disappearing from the list.
+fn date_key(s: &str) -> u32 {
+    let mut day = 0u32;
+    let mut month = 0u32;
+    let mut year = 0u32;
+    for part in s.split(|c: char| !c.is_alphanumeric()) {
+        if part.is_empty() {
+            continue;
+        }
+        if part.chars().all(|c| c.is_ascii_digit()) {
+            let n: u32 = part.parse().unwrap_or(0);
+            if part.len() == 4 && year == 0 {
+                year = n;
+            } else if day == 0 {
+                day = n;
+            }
+            continue;
+        }
+        let p = part.to_lowercase();
+        let m = if p.starts_with("jan") || p.starts_with("ene") {
+            1
+        } else if p.starts_with("feb") || p.starts_with("fév") || p.starts_with("fev") {
+            2
+        } else if p.starts_with("mar") || p.starts_with("mär") {
+            3
+        } else if p.starts_with("apr") || p.starts_with("abr") || p.starts_with("avr") {
+            4
+        } else if p.starts_with("may") || p.starts_with("mai") {
+            5
+        } else if p.starts_with("jun") || p.starts_with("juin") {
+            6
+        } else if p.starts_with("jul") || p.starts_with("juil") {
+            7
+        } else if p.starts_with("aug") || p.starts_with("ago") || p.starts_with("aoû") {
+            8
+        } else if p.starts_with("sep") || p.starts_with("set") {
+            9
+        } else if p.starts_with("oct") || p.starts_with("okt") {
+            10
+        } else if p.starts_with("nov") {
+            11
+        } else if p.starts_with("dec")
+            || p.starts_with("dic")
+            || p.starts_with("déc")
+            || p.starts_with("dez")
+        {
+            12
+        } else {
+            0
+        };
+        if m > 0 {
+            month = m;
+        }
+    }
+    if year > 0 && month > 0 && day > 0 {
+        year * 10_000 + month * 100 + day
+    } else {
+        0
+    }
+}
+
 /// Novedades de las versiones del launcher (0.1.4 a 0.2.1).
 /// (titulo, fecha, resumen, cuerpo)
 fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 13] {
     match l {
         Lang::En => [
             (
-                "The counter moves up top",
+                "See how many people are playing",
                 "24 Nov 2026",
-                "The people playing right now sits next to the title and the launcher footer is tidier.",
-                "The people playing counter now lives next to the Rustium title, so you see it the moment the launcher opens. The social icons at the foot are bigger, YouTube's play is cut out so it reads at a glance, and the Mojang notice stays down there. Instances now show a clear name and their build: the default one is 'Default Instance', and Options moved to the rail so the Play row no longer overflows.",
+                "The counter now sits beside the title, with the social links and the Mojang notice at the foot.",
+                "The counter is now next to the Rustium title, so you see it as soon as the launcher opens. The social icons at the foot are bigger, YouTube's play is cut out, and the instance options moved to the rail so the Play row fits.",
             ),
             (
                 "Your screenshots, ready to open",
                 "23 Nov 2026",
-                "Press F2 while playing and your photos are saved for good.",
-                "Every capture goes into its instance's folder and shows up in the new Screenshots tab, with its date and size, ready to open with one click. Each instance keeps its own, and the tab gathers all of them.",
+                "Press F2 while playing and your photos are saved.",
+                "Every capture goes into its instance's folder and appears in the Screenshots tab with its date and size, ready to open with one click. Each instance keeps its own, and the tab gathers them all.",
             ),
             (
-                "The first five versions",
+                "The first five versions, one click away",
                 "18 Nov 2026",
-                "All five early Minecraft versions are now one click away.",
-                "Pick any of them from the list and press Play. Each one opens in its own window, and the launcher remembers the last version you used. rd-131655 is not included because Mojang never published its file.",
+                "Pick any version in the rail and press Play.",
+                "Pick any of the first five versions in the rail and press Play. Each one opens in its own window, and the launcher remembers the last one you used. rd-131655 is missing because Mojang never published its file.",
             ),
             (
-                "The bushes look right again?",
-                "18 Nov 2026",
-                "The bushes of 15 May 2009 have their leaves and crossed shape back.",
-                "They used to look like a square green block. Now they are drawn with two crossed planes and their leaves, just like the original game, and you can place one with the 6 key.",
-            ),
-            (
-                "The characters dance again",
-                "19 Nov 2026",
-                "Zombies move their arms, legs and head like in the original Minecraft.",
-                "They used to look stiff because their movement was almost invisible. Now they walk and dance as smoothly as the original, without jerking.",
-            ),
-            (
-                "The bushes stand up again",
+                "The bushes look like 2009 again",
                 "20 Nov 2026",
-                "In rd-20090515 and rd-161348 the bushes are upright again.",
-                "Their crossed planes were built with the depth axis as height, so they lay on their side. They now grow from the ground to the top of the block, exactly like the original.",
+                "They get their leaves, crossed shape and upright growth back in the right versions.",
+                "In the 15 May 2009 version the bushes have their leaves and crossed shape back. In rd-20090515 and rd-161348 they now grow upright, from the ground to the top, like the original. Place one with the 6 key.",
             ),
             (
-                "Zombies can't crash the game anymore!",
+                "The characters move like the original",
+                "19 Nov 2026",
+                "Zombies and players move their arms, legs and head smoothly.",
+                "Zombies and players now move their arms, legs and head like the original. Walking and dancing are smooth again instead of stiff.",
+            ),
+            (
+                "Zombies no longer close the game",
                 "21 Nov 2026",
-                "All five versions open even with a zombie right in front.",
-                "In the versions with zombies, the game closed as soon as one appeared on screen. It's fixed: press Play, find a zombie and watch it stay by your side. All five versions now run from start to finish.",
+                "All five versions run with a zombie right in front.",
+                "In the versions with zombies, the game used to close as soon as one appeared. Now all five versions run with a zombie right in front. Press Play and see for yourself.",
             ),
             (
                 "The lost Minecraft of 2009",
                 "21 Nov 2026",
-                "The first version ever recorded, which was never released, is now in the launcher.",
-                "Before the name Minecraft existed, Notch recorded a tech test called Cave game. It is the origin of everything: a world of grass and rock, huge caves, no inventory and no way to break blocks. Only you, the landscape and R to fall from the sky again. We rebuilt it from the Minecraft Wiki so you can walk through the very first piece of Minecraft history.",
+                "The first version Notch recorded, never released, is now playable.",
+                "Before the name Minecraft existed, Notch recorded a tech test called Cave game. You can walk through that first world of grass, rock and huge caves, with no inventory and R to fall from the sky again. We rebuilt it from the Minecraft Wiki.",
             ),
             (
                 "Your worlds, in your hands",
                 "22 Nov 2026",
-                "Every world now has its place in the launcher: play it, open its folder or delete it.",
-                "Each build keeps its own world from now on, so a save never gets mixed with another version's. The new Worlds tab shows what each world takes up and when you last played it, opens its folder, and deletes it in one click (it asks 'Sure?' first). Below it you have the six installs with their folder. We also gave the earliest versions their original blocks back, and you no longer sink through the floor in the later pre-classics. Enjoy!",
+                "Play, open the folder or delete every world from the launcher.",
+                "Each build keeps its own world, so saves never mix. The Worlds tab shows its size and last play time, opens its folder and deletes it in one click. Below it you have every install with its folder.",
             ),
             (
-                "The block you look at lights up again",
+                "Selection and block preview, like in 2009",
                 "22 Nov 2026",
-                "In the Classic versions the selection is a single white face again, like in 2009.",
-                "Aiming at a block used to light up all of its faces and flicker against the world texture. Now only the face you are looking at gets a soft white layer, and that layer sits just in front of the block, so the flicker is gone for good.",
-            ),
-            (
-                "Building in Classic shows the whole block again",
-                "22 Nov 2026",
-                "The block you are about to place is drawn complete and solid, as in the original.",
-                "The preview cube had its faces in the wrong order, so you saw its sides or its inside instead of a normal block. It is fixed: the block you are about to place now appears complete, with its texture, just like in 2009.",
+                "Only the face you look at lights up, and the block you are about to place is drawn whole.",
+                "Aiming at a block now lights only the face in front of you, without flicker. And the block you are about to place is drawn whole and with its texture, just like in 2009.",
             ),
             (
                 "Rustium 0.2: a new face for the launcher",
                 "22 Nov 2026",
-                "A cleaner launcher, social icons and a proper 0.2 release.",
-                "This update reworks the launcher header and the news cards. You can now follow me through YouTube, Discord and Patreon icons instead of text links, and the cards give the text room to breathe. I also removed the repeated pictures from the new news: every story keeps its own, and the first one, the original, is still there. The whole launcher is now version 0.2.",
+                "A cleaner launcher, with the social links and more room for the news.",
+                "This update reworks the launcher header and the news cards. The social links are now icons, the cards have more room to breathe, and the whole launcher is version 0.2.",
             ),
             (
-                "Walking no longer cuts out",
+                "Walk without stopping",
                 "22 Nov 2026",
-                "Hold W and keep going for as long as you like in the pre-classics and Classic.",
-                "When you hold a key, Windows repeats it many times per second. Those repeats were treated as if you had let go, so the player walked for half a second and stopped on their own. Presses and repeats are now told apart: you can walk without releasing W for as long as you want, including with capitals and the arrow keys.",
+                "Hold W for as long as you like: the player no longer stops on its own.",
+                "Holding a key made Windows repeat it, and those repeats stopped the player after half a second. Now presses and repeats are told apart: hold W and keep walking for as long as you like.",
+            ),
+            (
+                "Classic 0.0.3a, the first Classic that had caves",
+                "24 Nov 2026",
+                "The build from 16 May 2009 is now in the launcher, before the change to 640×480.",
+                "0.0.3a is the one Notch uploaded an hour before 0.0.9a to bring the caves back. We rebuilt it from c0.0.11a's engine with what the Minecraft Wiki documents: 1024×768, no fps counter and no build mode, because both arrived in 0.0.9a; left click places and right click breaks. Versions 0.0.4a to 0.0.8a were never released, if they existed at all.",
+            ),
+            (
+                "The four private alphas, now playable",
+                "24 Nov 2026",
+                "mc-161607 to mc-161648: the first Minecraft anyone outside Mojang played.",
+                "These four builds from 16 May 2009 are “Minecraft alpha”, the private test Notch passed to three players over IRC. There were no version numbers in the game yet, so the wiki names them by their build time. All four are here: Escape releases the mouse, Y inverts the mouse axis from mc-161616, and 161625 and 161648 fix the textures and the mouse. Their jars were never archived, so they are reconstructions.",
             ),
         ],
         Lang::Es => [
             (
-                "El contador sube a la cabecera",
+                "Mira cuánta gente está jugando",
                 "24 nov 2026",
-                "La gente jugando ahora queda junto al título y el pie del launcher queda más limpio.",
-                "El contador de gente jugando ahora está junto al título de Rustium, así se ve nada más abrir. Los iconos de redes del pie son más grandes, el play de YouTube está recortado para reconocerlo de un vistazo y el aviso de Mojang sigue abajo. Las instancias muestran un nombre claro y su versión: la de serie es «Instancia predeterminada», y Opciones pasó al rail para que la fila de Jugar no se desborde.",
+                "El contador está ahora junto al título, con las redes y el aviso de Mojang en el pie.",
+                "El contador ya está junto al título de Rustium, así se ve nada más abrir. Los iconos de redes del pie son más grandes, el play de YouTube está recortado y Opciones pasó al rail para que la fila de Jugar quepa.",
             ),
             (
                 "Tus capturas, listas para abrir",
                 "23 nov 2026",
                 "Pulsa F2 mientras juegas y tus fotos quedan guardadas.",
-                "Cada captura va a la carpeta de su instancia y aparece en la nueva pestaña Capturas, con su fecha y su tamaño, lista para abrir con un clic. Cada instancia guarda las suyas y la pestaña las reúne todas.",
+                "Cada captura va a la carpeta de su instancia y aparece en la pestaña Capturas con su fecha y su tamaño, lista para abrir con un clic. Cada instancia guarda las suyas y la pestaña las reúne todas.",
             ),
             (
-                "Las cinco primeras versiones",
+                "Las cinco primeras versiones, a un clic",
                 "18 nov 2026",
-                "Ya puedes jugar las cinco primeras versiones de Minecraft desde el mismo launcher.",
-                "Elige cualquiera en la lista y pulsa Jugar. Cada una se abre en su propia ventana y el launcher recuerda la última que usaste. La rd-131655 no está porque Mojang nunca publicó su archivo.",
+                "Elige la versión que quieras en el rail y pulsa Jugar.",
+                "Elige cualquiera de las cinco primeras versiones en el rail y pulsa Jugar. Cada una se abre en su propia ventana y el launcher recuerda la última que usaste. La rd-131655 falta porque Mojang nunca publicó su archivo.",
             ),
             (
-                "¿Los arbustos vuelven a verse bien?",
-                "18 nov 2026",
-                "En la versión del 15 de mayo de 2009, los arbustos recuperan sus hojas y su forma cruzada.",
-                "Antes parecían un bloque verde cuadrado. Ahora se dibujan con dos planos cruzados y sus hojas, igual que en el juego original, y puedes colocar uno con la tecla 6.",
-            ),
-            (
-                "Los personajes ya bailan",
-                "19 nov 2026",
-                "Los zombis mueven los brazos, las piernas y la cabeza como en el Minecraft original.",
-                "Antes parecían rígidos porque su movimiento casi no se notaba. Ahora caminan y bailan con la misma soltura que el original, sin dar tirones.",
-            ),
-            (
-                "Los arbustos vuelven a crecer de pie",
+                "Los arbustos se ven como en 2009",
                 "20 nov 2026",
-                "En rd-20090515 y rd-161348 los arbustos ya se ven verticales.",
-                "Sus dos planos cruzados usaban la profundidad como altura y quedaban tumbados. Ahora van del suelo al techo del bloque, igual que en el original.",
+                "Recuperan sus hojas, su forma cruzada y crecen de pie en las versiones que tocaba.",
+                "En la versión del 15 de mayo de 2009 los arbustos recuperan sus hojas y su forma cruzada. En rd-20090515 y rd-161348 ya crecen de pie, de suelo a techo, como en el original. Puedes plantar uno con la tecla 6.",
             ),
             (
-                "¡Los zombis ya no se comen el juego!",
+                "Los personajes se mueven como en el original",
+                "19 nov 2026",
+                "Zombis y jugador mueven brazos, piernas y cabeza con suavidad.",
+                "Los zombis y el jugador ya mueven brazos, piernas y cabeza como en el original. Caminar y bailar vuelven a verse suaves, sin rigidez.",
+            ),
+            (
+                "Los zombis ya no cierran el juego",
                 "21 nov 2026",
-                "Las cinco versiones se abren aunque tengas un zombi delante.",
-                "En las versiones con zombis, el juego se cerraba en cuanto uno aparecía en pantalla. Ya está arreglado: dale a Jugar, busca un zombi y comprueba que ahora se queda a tu lado. Las cinco versiones funcionan de principio a fin.",
+                "Puedes jugar las cinco versiones con un zombi delante.",
+                "En las versiones con zombis, el juego se cerraba en cuanto aparecía uno. Ahora las cinco versiones funcionan con un zombi delante. Pulsa Jugar y compruébalo.",
             ),
             (
                 "El Minecraft perdido de 2009",
                 "21 nov 2026",
-                "La primera versión que se grabó, y que nunca se publicó, ya está en el launcher.",
-                "Antes de que existiera el nombre Minecraft, Notch grabó una prueba llamada Cave game. Es el origen de todo: un mundo de hierba y roca, cuevas enormes, sin inventario y sin poder romper bloques. Solo tú, el paisaje y la R para volver a caer desde el cielo. La hemos reconstruido con la información de Minecraft Wiki para que puedas pisar el primer trocito de la historia de Minecraft.",
+                "La primera versión que grabó Notch, nunca publicada, ya se puede jugar.",
+                "Antes de que existiera el nombre Minecraft, Notch grabó una prueba llamada Cave game. Puedes recorrer ese primer mundo de hierba, roca y cuevas enormes, sin inventario y con R para volver a caer del cielo. Lo reconstruimos desde la Minecraft Wiki.",
             ),
             (
                 "Tus mundos, en tus manos",
                 "22 nov 2026",
-                "Cada mundo ya tiene su sitio en el launcher: juégalo, abre su carpeta o bórralo.",
-                "A partir de ahora cada versión guarda su propio mundo, así que una partida nunca se mezcla con la de otra versión. La nueva pestaña Mundos te dice cuánto ocupa y cuándo lo jugaste, abre su carpeta y lo borra con un clic (antes te pregunta «¿Seguro?»). Justo debajo tienes las seis instalaciones con su carpeta. Además, las primeras versiones vuelven a tener sus bloques originales y en las preclásicas posteriores ya no te hundes en el suelo. ¡A jugar!",
+                "Juega, abre la carpeta o borra cada mundo desde el launcher.",
+                "Cada versión guarda su propio mundo, así las partidas nunca se mezclan. La pestaña Mundos muestra su tamaño y cuándo jugaste, abre su carpeta y lo borra con un clic. Debajo tienes cada instalación con su carpeta.",
             ),
             (
-                "El bloque que miras vuelve a iluminarse",
+                "La selección y el bloque a colocar, como en 2009",
                 "22 nov 2026",
-                "En las versiones Classic la selección vuelve a ser una sola cara blanca, como en 2009.",
-                "Apuntar a un bloque encendía todas sus caras y parpadeaba contra la textura del mundo. Ahora solo la cara que miras recibe una capa blanca suave, y esa capa va un milímetro por delante del bloque, así que el parpadeo desaparece para siempre.",
-            ),
-            (
-                "Construir en Classic vuelve a enseñar el bloque entero",
-                "22 nov 2026",
-                "El bloque que vas a colocar se dibuja completo y macizo, como en el original.",
-                "El cubo de vista previa tenía las caras en el orden equivocado, así que veías sus lados o su interior en vez de un bloque normal. Ya está arreglado: el bloque que vas a colocar aparece completo, con su textura, igual que en 2009.",
+                "Solo se marca la cara que miras y el bloque que vas a poner se ve entero.",
+                "Al mirar un bloque solo se marca la cara que tienes delante, sin parpadeos. Y el bloque que vas a colocar se dibuja entero y con su textura, como en 2009.",
             ),
             (
                 "Rustium 0.2: el launcher cambia de cara",
                 "22 nov 2026",
-                "Un launcher más limpio, iconos de redes y una versión 0.2 a la altura.",
-                "Esta actualización rehace la cabecera del launcher y las novedades. Ahora puedes seguirme con iconos de YouTube, Discord y Patreon en lugar de enlaces de texto, y las tarjetas dejan respirar al contenido. También he quitado las imágenes repetidas de las novedades nuevas: cada noticia se queda con la suya, y la primera, la de siempre, sigue ahí. Todo el launcher pasa a la versión 0.2.",
+                "Un launcher más limpio, con las redes y más sitio para las novedades.",
+                "Esta actualización rehace la cabecera del launcher y las tarjetas de novedades. Las redes son ahora iconos, las tarjetas tienen más aire y todo el launcher pasa a la versión 0.2.",
             ),
             (
-                "Caminar ya no se corta",
+                "Camina sin que se corte",
                 "22 nov 2026",
-                "Mantener W vuelve a llevarte tan lejos como quieras en las preclásicas y en Classic.",
-                "Al mantener una tecla, Windows la repite muchas veces por segundo. Esas repeticiones se colaban como si hubieras soltado la tecla, así que el jugador andaba medio segundo y se paraba solo. Ahora se distinguen de verdad las pulsaciones de las repeticiones: puedes caminar sin soltar W todo el rato que quieras, también con mayúsculas y con las flechas.",
+                "Mantén W todo lo que quieras: el jugador ya no se para solo.",
+                "Al mantener una tecla, Windows la repetía muchas veces y esos repetidos paraban al jugador a los medio segundo. Ahora se distinguen las pulsaciones de los repetidos: mantén W y camina todo lo que quieras.",
+            ),
+            (
+                "Classic 0.0.3a, la primera con cuevas",
+                "24 nov 2026",
+                "La versión del 16 de mayo de 2009 ya está en el launcher, antes del cambio a 640×480.",
+                "0.0.3a es la que Notch subió una hora antes de 0.0.9a para devolver las cuevas. La reconstruimos sobre el motor de c0.0.11a con lo que documenta la Minecraft Wiki: a 1024×768, sin contador de fps ni modo de construcción, porque ambos llegaron con 0.0.9a; el izquierdo coloca y el derecho rompe. Las versiones 0.0.4a a 0.0.8a nunca se publicaron, si es que llegaron a existir.",
+            ),
+            (
+                "Las cuatro alpha privadas, ya jugables",
+                "24 nov 2026",
+                "mc-161607 a mc-161648: las primeras Minecraft que jugó alguien fuera de Mojang.",
+                "Estos cuatro builds del 16 de mayo de 2009 son «Minecraft alpha», la prueba privada que Notch pasó por IRC a tres jugadores. Todavía no había número de versión en el juego, así que la wiki las nombra por la hora del build. Están las cuatro: Escape libera el ratón, la Y invierte el eje desde mc-161616, y 161625 y 161648 arreglan las texturas y el ratón. Sus jars nunca se archivaron, así que son reconstrucciones.",
             ),
         ],
         Lang::Pt => [
             (
-                "O contador sobe para o topo",
+                "Vê quantas pessoas estão a jogar",
                 "24 nov 2026",
-                "Quem está a jogar agora fica junto ao título e o rodapé fica mais limpo.",
-                "O contador de quem está a jogar agora está junto ao título do Rustium, por isso vê-se assim que abres. Os ícones das redes no rodapé são maiores, o play do YouTube está recortado para ser reconhecido à primeira vista e o aviso da Mojang continua em baixo. As instâncias mostram um nome claro e a versão: a de origem é «Instância predefinida», e as Opções passaram para o rail para a fila de Jogar não transbordar.",
+                "O contador está agora junto ao título, com as redes e o aviso da Mojang no rodapé.",
+                "O contador está agora junto ao título do Rustium, por isso vê-se assim que abres. Os ícones das redes no rodapé são maiores, o play do YouTube está recortado e as Opções passaram para o rail para a fila de Jogar caber.",
             ),
             (
                 "As tuas capturas, prontas a abrir",
                 "23 nov 2026",
-                "Carrega em F2 enquanto jogas e as tuas fotos ficam guardadas.",
-                "Cada captura vai para a pasta da sua instância e aparece no novo separador Capturas, com a data e o tamanho, pronta a abrir com um clique. Cada instância guarda as suas e o separador reúne-as todas.",
+                "Carrega em F2 enquanto jogas e as fotos ficam guardadas.",
+                "Cada captura vai para a pasta da sua instância e aparece no separador Capturas com a data e o tamanho, pronta a abrir com um clique. Cada instância guarda as suas e o separador reúne todas.",
             ),
             (
-                "As cinco primeiras versões",
+                "As cinco primeiras versões, a um clique",
                 "18 nov 2026",
-                "Já podes jogar as cinco primeiras versões de Minecraft a partir do mesmo launcher.",
-                "Escolhe qualquer uma na lista e carrega em Jogar. Cada uma abre na sua própria janela e o launcher lembra a última que usaste. A rd-131655 não está porque a Mojang nunca publicou o ficheiro.",
+                "Escolhe a versão que quiseres no rail e carrega em Jogar.",
+                "Escolhe qualquer uma das cinco primeiras versões no rail e carrega em Jogar. Cada uma abre na sua própria janela e o launcher lembra a última que usaste. A rd-131655 falta porque a Mojang nunca publicou o ficheiro.",
             ),
             (
-                "Os arbustos voltam a parecer certos?",
-                "18 nov 2026",
-                "Na versão de 15 de maio de 2009, os arbustos voltam a ter as folhas e a forma cruzada.",
-                "Antes pareciam um bloco verde quadrado. Agora são desenhados com dois planos cruzados e as suas folhas, tal como no jogo original, e podes colocar um com a tecla 6.",
-            ),
-            (
-                "Os personagens voltaram a dançar",
-                "19 nov 2026",
-                "Os zombis mexem os braços, as pernas e a cabeça como no Minecraft original.",
-                "Antes pareciam rígidos porque o movimento quase não se notava. Agora andam e dançam com a mesma naturalidade do original, sem solavancos.",
-            ),
-            (
-                "Os arbustos voltam a crescer de pé",
+                "Os arbustos voltam a parecer 2009",
                 "20 nov 2026",
-                "Em rd-20090515 e rd-161348 os arbustos já aparecem verticais.",
-                "Os dois planos cruzados usavam a profundidade como altura e ficavam deitados. Agora vão do chão ao topo do bloco, tal como no original.",
+                "Recuperam as folhas, a forma cruzada e crescem de pé nas versões certas.",
+                "Na versão de 15 de maio de 2009 os arbustos recuperam as folhas e a forma cruzada. Em rd-20090515 e rd-161348 já crescem de pé, do chão ao topo, como no original. Podes plantar um com a tecla 6.",
             ),
             (
-                "Os zombis já não fecham o jogo!",
+                "Os personagens movem-se como no original",
+                "19 nov 2026",
+                "Zombis e jogador mexem braços, pernas e cabeça com suavidade.",
+                "Os zombis e o jogador já mexem braços, pernas e cabeça como no original. Andar e dançar voltam a ver-se suaves, sem rigidez.",
+            ),
+            (
+                "Os zombis já não fecham o jogo",
                 "21 nov 2026",
-                "As cinco versões abrem mesmo com um zombi à frente.",
-                "Nas versões com zombis, o jogo fechava assim que um aparecia no ecrã. Já está corrigido: carrega em Jogar, encontra um zombi e vê-o ficar ao teu lado. As cinco versões funcionam do início ao fim.",
+                "Podes jogar as cinco versões com um zombi à frente.",
+                "Nas versões com zombis, o jogo fechava assim que um aparecia. Agora as cinco versões funcionam com um zombi à frente. Carrega em Jogar e confirma.",
             ),
             (
                 "O Minecraft perdido de 2009",
                 "21 nov 2026",
-                "A primeira versão alguma vez gravada, que nunca foi publicada, já está no launcher.",
-                "Antes de o nome Minecraft existir, a Notch gravou um teste chamado Cave game. É a origem de tudo: um mundo de relva e rocha, cavernas enormes, sem inventário e sem poder quebrar blocos. Só tu, a paisagem e a tecla R para voltares a cair do céu. Reconstruímo-lo com a informação da Minecraft Wiki para que possas pisar o primeiro pedaço da história do Minecraft.",
+                "A primeira versão que o Notch gravou, nunca publicada, já se pode jogar.",
+                "Antes de existir o nome Minecraft, o Notch gravou um teste chamado Cave game. Podes percorrer esse primeiro mundo de erva, rocha e cavernas enormes, sem inventário e com R para voltares a cair do céu. Reconstruímo-lo a partir da Minecraft Wiki.",
             ),
             (
                 "Os teus mundos, nas tuas mãos",
                 "22 nov 2026",
-                "Cada mundo já tem o seu lugar no launcher: joga-o, abre a pasta ou apaga-o.",
-                "A partir de agora cada versão guarda o seu próprio mundo, por isso uma partida nunca se mistura com a de outra versão. O novo separador Mundos diz-te quanto ocupa e quando o jogaste, abre a pasta e apaga-o com um clique (pergunta «De certeza?» primeiro). Logo abaixo tens as seis instalações com a pasta. Além disso, as primeiras versões voltaram a ter os blocos originais e nas pré-clássicas seguintes já não te afundas no chão. Boa jogatina!",
+                "Joga, abre a pasta ou apaga cada mundo a partir do launcher.",
+                "Cada versão guarda o seu próprio mundo, por isso as partidas nunca se misturam. O separador Mundos mostra o tamanho e quando jogaste, abre a pasta e apaga-o com um clique. Abaixo tens cada instalação com a sua pasta.",
             ),
             (
-                "O bloco que miras volta a iluminar-se",
+                "A seleção e o bloco a colocar, como em 2009",
                 "22 nov 2026",
-                "Nas versões Classic a seleção volta a ser uma única face branca, como em 2009.",
-                "Apontar para um bloco acendia todas as faces e piscava contra a textura do mundo. Agora só a face que estás a ver recebe uma camada branca suave, e essa camada fica um milímetro à frente do bloco, por isso o piscar desaparece de vez.",
-            ),
-            (
-                "Construir em Classic volta a mostrar o bloco inteiro",
-                "22 nov 2026",
-                "O bloco que vais colocar é desenhado completo e maciço, como no original.",
-                "O cubo de pré-visualização tinha as faces na ordem errada, por isso vias os lados ou o interior em vez de um bloco normal. Já está corrigido: o bloco que vais colocar aparece completo, com a sua textura, tal como em 2009.",
+                "Só se marca a face que olhas e o bloco a colocar aparece inteiro.",
+                "Ao olhar para um bloco só se marca a face que tens à frente, sem cintilação. E o bloco que vais colocar aparece inteiro e com a textura, como em 2009.",
             ),
             (
                 "Rustium 0.2: o launcher muda de cara",
                 "22 nov 2026",
-                "Um launcher mais limpo, ícones das redes e a versão 0.2.",
-                "Esta atualização refaz o cabeçalho do launcher e as novidades. Agora podes seguir-me com ícones do YouTube, Discord e Patreon em vez de links de texto, e os cartões dão espaço ao conteúdo. Também removi as imagens repetidas das novidades novas: cada notícia fica com a sua, e a primeira, a de sempre, continua lá. Todo o launcher passa à versão 0.2.",
+                "Um launcher mais limpo, com as redes e mais espaço para as novidades.",
+                "Esta atualização refaz o cabeçalho do launcher e as cartas de novidades. As redes são agora ícones, as cartas têm mais espaço e todo o launcher passa à versão 0.2.",
             ),
             (
-                "Andar já não se corta",
+                "Anda sem parar",
                 "22 nov 2026",
-                "Mantém o W e continua a andar o tempo que quiseres nas pré-clássicas e na Classic.",
-                "Quando manténs uma tecla, o Windows repete-a muitas vezes por segundo. Essas repetições eram tratadas como se tivesses largado a tecla, por isso o jogador andava meio segundo e parava sozinho. Agora as pressões e as repetições são distinguidas: podes andar sem largar o W o tempo que quiseres, também com maiúsculas e com as setas.",
+                "Mantém W o tempo que quiseres: o jogador já não para sozinho.",
+                "Ao manter uma tecla, o Windows repetia-a muitas vezes e esses repetidos paravam o jogador ao meio segundo. Agora distinguem-se as pressões dos repetidos: mantém W e anda o tempo que quiseres.",
+            ),
+            (
+                "Classic 0.0.3a, a primeira com cavernas",
+                "24 nov 2026",
+                "A versão de 16 de maio de 2009 já está no launcher, antes da mudança para 640×480.",
+                "A 0.0.3a é a que o Notch carregou uma hora antes da 0.0.9a para devolver as cavernas. Reconstruímo-la sobre o motor da c0.0.11a com o que documenta a Minecraft Wiki: a 1024×768, sem contador de fps nem modo de construção, porque ambos chegaram com a 0.0.9a; o esquerdo coloca e o direito rompe. As versões 0.0.4a a 0.0.8a nunca foram publicadas, se é que existiram.",
+            ),
+            (
+                "As quatro alphas privadas, já jogáveis",
+                "24 nov 2026",
+                "mc-161607 a mc-161648: as primeiras Minecraft que alguém fora da Mojang jogou.",
+                "Estes quatro builds de 16 de maio de 2009 são a «Minecraft alpha», o teste privado que o Notch passou por IRC a três jogadores. Ainda não havia número de versão no jogo, por isso a wiki nomeia-as pela hora do build. Estão as quatro: Escape liberta o rato, o Y inverte o eixo desde a mc-161616, e a 161625 e a 161648 corrigem as texturas e o rato. Os jars nunca foram arquivados, por isso são reconstruções.",
             ),
         ],
         Lang::Fr => [
             (
-                "Le compteur passe en haut",
-                "24 nov 2026",
-                "Les joueurs en ligne s'affichent à côté du titre et le pied de page est plus propre.",
-                "Le compteur de joueurs en ligne est maintenant à côté du titre de Rustium : tu le vois dès l'ouverture. Les icônes des réseaux en bas sont plus grandes, le play de YouTube est découpé pour être reconnu au premier coup d'œil et l'avis Mojang reste en bas. Les instances affichent un nom clair et leur version : celle d'origine est « Instance par défaut », et Options a déménagé dans le rail pour que la ligne de Jeu ne déborde plus.",
+                "Vois combien de personnes jouent",
+                "24 nov. 2026",
+                "Le compteur est à côté du titre, avec les réseaux et l'avis Mojang en bas.",
+                "Le compteur est maintenant à côté du titre de Rustium : tu le vois dès l'ouverture. Les icônes des réseaux en bas sont plus grandes, le play de YouTube est découpé et les Options ont déménagé dans le rail pour que la ligne Jouer tienne.",
             ),
             (
                 "Tes captures, prêtes à ouvrir",
                 "23 nov. 2026",
                 "Appuie sur F2 en jouant et tes photos sont enregistrées.",
-                "Chaque capture va dans le dossier de son instance et apparaît dans le nouvel onglet Captures, avec sa date et sa taille, prête à ouvrir en un clic. Chaque instance garde les siennes et l'onglet les rassemble toutes.",
+                "Chaque capture va dans le dossier de son instance et apparaît dans l'onglet Captures avec sa date et sa taille, prête à ouvrir en un clic. Chaque instance garde les siennes et l'onglet les rassemble toutes.",
             ),
             (
-                "Les cinq premières versions",
+                "Les cinq premières versions, à un clic",
                 "18 nov. 2026",
-                "Tu peux maintenant jouer aux cinq premières versions de Minecraft depuis le même launcher.",
-                "Choisis-en une dans la liste et appuie sur Jouer. Chacune s'ouvre dans sa propre fenêtre et le launcher retient la dernière utilisée. rd-131655 n'est pas incluse car Mojang n'a jamais publié son fichier.",
+                "Choisis la version que tu veux dans le rail et appuie sur Jouer.",
+                "Choisis l'une des cinq premières versions dans le rail et appuie sur Jouer. Chacune s'ouvre dans sa propre fenêtre et le launcher retient la dernière utilisée. rd-131655 manque car Mojang n'a jamais publié son fichier.",
             ),
             (
-                "Les buissons ont retrouvé leur aspect ?",
-                "18 nov. 2026",
-                "Dans la version du 15 mai 2009, les buissons ont retrouvé leurs feuilles et leur forme croisée.",
-                "Avant, ils ressemblaient à un bloc vert carré. Maintenant, ils sont dessinés avec deux plans croisés et leurs feuilles, comme dans le jeu original, et tu peux en poser un avec la touche 6.",
-            ),
-            (
-                "Les personnages dansent à nouveau",
-                "19 nov. 2026",
-                "Les zombies bougent les bras, les jambes et la tête comme dans le Minecraft original.",
-                "Avant, ils semblaient raides car leur mouvement était presque invisible. Maintenant, ils marchent et dansent aussi naturellement que dans l'original, sans à-coups.",
-            ),
-            (
-                "Les buissons se tiennent à nouveau debout",
+                "Les buissons comme en 2009",
                 "20 nov. 2026",
-                "Dans rd-20090515 et rd-161348, les buissons sont de nouveau verticaux.",
-                "Leurs deux plans croisés utilisaient la profondeur comme hauteur et restaient couchés. Ils vont maintenant du sol au haut du bloc, comme dans l'original.",
+                "Ils retrouvent leurs feuilles, leur forme croisée et poussent debout dans les bonnes versions.",
+                "Dans la version du 15 mai 2009, les buissons retrouvent leurs feuilles et leur forme croisée. Dans rd-20090515 et rd-161348, ils poussent debout, du sol au sommet, comme à l'origine. Tu peux en poser un avec la touche 6.",
             ),
             (
-                "Les zombies ne font plus planter le jeu !",
+                "Les personnages bougent comme à l'origine",
+                "19 nov. 2026",
+                "Zombis et joueur bougent les bras, les jambes et la tête en douceur.",
+                "Les zombis et le joueur bougent maintenant les bras, les jambes et la tête comme à l'origine. Marcher et danser redeviennent fluides, sans rigidité.",
+            ),
+            (
+                "Les zombis ne ferment plus le jeu",
                 "21 nov. 2026",
-                "Les cinq versions s'ouvrent même avec un zombie devant vous.",
-                "Dans les versions avec des zombies, le jeu se fermait dès qu'un zombie apparaissait à l'écran. C'est corrigé : appuyez sur Jouer, trouvez un zombie et voyez-le rester à vos côtés. Les cinq versions fonctionnent du début à la fin.",
+                "Les cinq versions tournent avec un zombi juste devant.",
+                "Dans les versions avec des zombis, le jeu se fermait dès qu'un apparaissait. Maintenant les cinq versions tournent avec un zombi juste devant. Appuie sur Jouer pour vérifier.",
             ),
             (
                 "Le Minecraft perdu de 2009",
                 "21 nov. 2026",
-                "La toute première version enregistrée, jamais publiée, est enfin dans le launcher.",
-                "Avant même que le nom Minecraft existe, Notch a filmé un test nommé Cave game. C'est l'origine de tout : un monde d'herbe et de roche, d'immenses cavernes, sans inventaire et sans pouvoir casser de blocs. Juste vous, le paysage et la touche R pour retomber du ciel. Nous l'avons reconstruit grâce aux informations du Minecraft Wiki pour que vous puissiez fouler le tout premier morceau de l'histoire de Minecraft.",
+                "La première version enregistrée par Notch, jamais publiée, se joue maintenant.",
+                "Avant que le nom Minecraft existe, Notch a enregistré un test appelé Cave game. Tu peux parcourir ce premier monde d'herbe, de roche et d'immenses grottes, sans inventaire et avec R pour retomber du ciel. Nous l'avons reconstruit depuis le wiki de Minecraft.",
             ),
             (
                 "Tes mondes, entre tes mains",
                 "22 nov. 2026",
-                "Chaque monde a désormais sa place dans le launcher : joue, ouvre son dossier ou supprime-le.",
-                "Désormais, chaque version garde son propre monde : une partie ne se mélange plus jamais avec celle d'une autre version. Le nouvel onglet Mondes te dit combien il occupe et quand tu y as joué, ouvre son dossier et le supprime en un clic (il demande d'abord « Sûr ? »). Juste en dessous, tu as les six installations avec leur dossier. Les premières versions ont aussi retrouvé leurs blocs d'origine, et dans les pré-classiques suivantes tu ne traverses plus le sol. Amuse-toi bien !",
+                "Joue, ouvre le dossier ou supprime chaque monde depuis le launcher.",
+                "Chaque version garde son propre monde, donc les parties ne se mélangent jamais. L'onglet Mondes montre sa taille et ta dernière partie, ouvre son dossier et le supprime en un clic. En dessous, chaque installation avec son dossier.",
             ),
             (
-                "Le bloc que tu vises s'éclaire à nouveau",
+                "Sélection et bloc à poser, comme en 2009",
                 "22 nov. 2026",
-                "Dans les versions Classic, la sélection redevient une seule face blanche, comme en 2009.",
-                "Viser un bloc allumait toutes ses faces et scintillait contre la texture du monde. Maintenant, seule la face que tu regardes reçoit un voile blanc doux, et ce voile se place un millimètre devant le bloc : le scintillement disparaît pour de bon.",
-            ),
-            (
-                "Construire en Classic montre à nouveau le bloc entier",
-                "22 nov. 2026",
-                "Le bloc que tu vas poser est dessiné complet et plein, comme dans l'original.",
-                "Le cube d'aperçu avait ses faces dans le mauvais ordre : on voyait ses côtés ou son intérieur au lieu d'un bloc normal. C'est réglé : le bloc que tu vas poser apparaît complet, avec sa texture, comme en 2009.",
+                "Seule la face regardée s'illumine et le bloc à poser s'affiche entier.",
+                "En visant un bloc, seule la face devant toi s'illumine, sans scintillement. Et le bloc que tu vas poser s'affiche entier et avec sa texture, comme en 2009.",
             ),
             (
                 "Rustium 0.2 : un nouveau visage pour le launcher",
                 "22 nov. 2026",
-                "Un launcher plus propre, des icônes de réseaux et une vraie version 0.2.",
-                "Cette mise à jour refait l'en-tête du launcher et les cartes de nouveautés. Tu peux maintenant me suivre avec des icônes YouTube, Discord et Patreon au lieu de liens texte, et les cartes laissent respirer le contenu. J'ai aussi retiré les images répétées des nouvelles nouveautés : chaque actualité garde la sienne, et la première, l'originale, est toujours là. Tout le launcher passe en version 0.2.",
+                "Un launcher plus propre, avec les réseaux et plus de place pour les nouveautés.",
+                "Cette mise à jour refait l'en-tête du launcher et les cartes des nouveautés. Les réseaux sont maintenant des icônes, les cartes respirent mieux et tout le launcher passe en version 0.2.",
             ),
             (
-                "La marche ne s'arrête plus",
+                "Marche sans t'arrêter",
                 "22 nov. 2026",
-                "Maintiens W et avance aussi longtemps que tu veux dans les pré-classiques et Classic.",
-                "Quand tu maintiens une touche, Windows la répète plusieurs fois par seconde. Ces répétitions étaient prises pour un relâchement, donc le joueur marchait une demi-seconde puis s'arrêtait tout seul. Les appuis et les répétitions sont maintenant distingués : tu peux marcher sans lâcher W aussi longtemps que tu veux, y compris en majuscules et avec les flèches.",
+                "Maintiens W aussi longtemps que tu veux : le joueur ne s'arrête plus tout seul.",
+                "En gardant une touche enfoncée, Windows la répétait et ces répétitions arrêtaient le joueur au bout d'une demi-seconde. Maintenant les appuis et les répétitions sont distingués : maintiens W et marche aussi longtemps que tu veux.",
+            ),
+            (
+                "Classic 0.0.3a, la première avec des grottes",
+                "24 nov. 2026",
+                "La version du 16 mai 2009 est maintenant dans le launcher, avant le passage en 640×480.",
+                "0.0.3a est celle que Notch a mise en ligne une heure avant 0.0.9a pour ramener les grottes. Nous l'avons reconstruite sur le moteur de c0.0.11a avec ce que documente le wiki de Minecraft : en 1024×768, sans compteur de fps ni mode construction, car les deux sont arrivés avec 0.0.9a ; le clic gauche pose et le droit casse. Les versions 0.0.4a à 0.0.8a n'ont jamais été publiées, si tant est qu'elles aient existé.",
+            ),
+            (
+                "Les quatre alphas privées, enfin jouables",
+                "24 nov. 2026",
+                "mc-161607 à mc-161648 : les premières Minecraft jouées par quelqu'un hors de Mojang.",
+                "Ces quatre builds du 16 mai 2009 sont « Minecraft alpha », le test privé que Notch a passé par IRC à trois joueurs. Il n'y avait pas encore de numéro de version dans le jeu, donc le wiki les nomme par l'heure du build. Les quatre sont là : Échap libère la souris, Y inverse l'axe depuis mc-161616, et 161625 et 161648 corrigent les textures et la souris. Leurs jars n'ont jamais été archivés, ce sont donc des reconstructions.",
             ),
         ],
         Lang::De => [
             (
-                "Der Zähler zieht nach oben",
-                "24 nov 2026",
-                "Wer gerade spielt, steht neben dem Titel, und die Fußzeile ist aufgeräumt.",
-                "Der Zähler, wie viele gerade spielen, steht jetzt neben dem Rustium-Titel und ist beim Öffnen sofort zu sehen. Die Social-Icons unten sind größer, das YouTube-Play ist ausgespart, damit man es sofort erkennt, und der Mojang-Hinweis bleibt unten. Die Instanzen zeigen einen klaren Namen und ihre Version: die Standardinstanz heißt „Standardinstanz“, und die Optionen sind in die Leiste gewandert, damit die Spielen-Zeile nicht mehr überläuft.",
+                "Sieh, wie viele gerade spielen",
+                "24. Nov. 2026",
+                "Der Zähler steht neben dem Titel, mit den Netzwerken und dem Mojang-Hinweis unten.",
+                "Der Zähler steht jetzt neben dem Rustium-Titel und ist beim Öffnen sofort zu sehen. Die Social-Icons unten sind größer, das YouTube-Play ist ausgespart, und die Optionen sind in die Leiste gewandert, damit die Spielen-Zeile passt.",
             ),
             (
                 "Deine Screenshots, sofort griffbereit",
                 "23. Nov. 2026",
                 "Drücke beim Spielen F2 und deine Fotos werden gespeichert.",
-                "Jede Aufnahme landet im Ordner ihrer Instanz und erscheint im neuen Screenshots-Tab mit Datum und Größe, bereit zum Öffnen mit einem Klick. Jede Instanz behält ihre eigenen, der Tab sammelt alle.",
+                "Jede Aufnahme landet im Ordner ihrer Instanz und erscheint mit Datum und Größe im Screenshots-Tab, bereit zum Öffnen mit einem Klick. Jede Instanz behält ihre eigenen, der Tab sammelt alle.",
             ),
             (
-                "Die ersten fünf Versionen",
+                "Die ersten fünf Versionen, ein Klick entfernt",
                 "18. Nov. 2026",
-                "Du kannst jetzt alle fünf frühen Minecraft-Versionen aus einem Launcher spielen.",
-                "Wähle eine aus der Liste und drücke Spielen. Jede öffnet sich in einem eigenen Fenster und der Launcher merkt sich die letzte. rd-131655 fehlt, weil Mojang ihre Datei nie veröffentlicht hat.",
+                "Wähle die Version in der Leiste und drücke auf Spielen.",
+                "Wähle eine der ersten fünf Versionen in der Leiste und drücke auf Spielen. Jede öffnet sich in ihrem eigenen Fenster, und der Launcher merkt sich die letzte. rd-131655 fehlt, weil Mojang die Datei nie veröffentlicht hat.",
             ),
             (
-                "Die Büsche sehen wieder richtig aus?",
-                "18. Nov. 2026",
-                "In der Version vom 15. Mai 2009 haben die Büsche wieder ihre Blätter und ihre gekreuzte Form.",
-                "Früher sahen sie wie ein grüner quadratischer Block aus. Jetzt werden sie mit zwei gekreuzten Flächen und ihren Blättern gezeichnet, wie im Original, und du kannst mit der Taste 6 einen setzen.",
-            ),
-            (
-                "Die Figuren tanzen wieder",
-                "19. Nov. 2026",
-                "Zombies bewegen Arme, Beine und Kopf wie im originalen Minecraft.",
-                "Früher wirkten sie steif, weil ihre Bewegung fast unsichtbar war. Jetzt laufen und tanzen sie so locker wie im Original, ohne Ruckeln.",
-            ),
-            (
-                "Die Büsche stehen wieder aufrecht",
+                "Die Büsche sehen wieder aus wie 2009",
                 "20. Nov. 2026",
-                "In rd-20090515 und rd-161348 stehen die Büsche wieder aufrecht.",
-                "Ihre zwei gekreuzten Flächen nutzten die Tiefe als Höhe und lagen deshalb flach. Jetzt reichen sie vom Boden bis zur Blockoberseite, genau wie im Original.",
+                "Sie bekommen Blätter, Kreuzform und aufrechten Wuchs in den richtigen Versionen zurück.",
+                "In der Version vom 15. Mai 2009 haben die Büsche wieder ihre Blätter und ihre Kreuzform. In rd-20090515 und rd-161348 wachsen sie jetzt aufrecht, vom Boden bis zur Blockoberseite, wie im Original. Mit der Taste 6 kannst du einen setzen.",
             ),
             (
-                "Zombies bringen das Spiel nicht mehr zum Absturz!",
+                "Die Figuren bewegen sich wie im Original",
+                "19. Nov. 2026",
+                "Zombies und Spieler bewegen Arme, Beine und Kopf flüssig.",
+                "Zombies und Spieler bewegen jetzt Arme, Beine und Kopf wie im Original. Gehen und Tanzen wirken wieder flüssig statt steif.",
+            ),
+            (
+                "Zombies schließen das Spiel nicht mehr",
                 "21. Nov. 2026",
-                "Alle fünf Versionen starten, auch mit einem Zombie direkt vor dir.",
-                "In den Versionen mit Zombies schloss sich das Spiel, sobald einer auf dem Bildschirm erschien. Jetzt behoben: Drücke Spielen, suche einen Zombie und sieh zu, wie er an deiner Seite bleibt. Alle fünf Versionen laufen von Anfang bis Ende.",
+                "Alle fünf Versionen laufen mit einem Zombie direkt davor.",
+                "In den Versionen mit Zombies schloss sich das Spiel, sobald einer auftauchte. Jetzt laufen alle fünf Versionen mit einem Zombie direkt davor. Drücke auf Spielen und probier es aus.",
             ),
             (
                 "Das verlorene Minecraft von 2009",
                 "21. Nov. 2026",
-                "Die erste je aufgezeichnete Version, die nie erschien, ist jetzt im Launcher.",
-                "Bevor der Name Minecraft überhaupt existierte, filmte Notch einen Test namens Cave game. Er ist der Ursprung von allem: eine Welt aus Gras und Stein, riesige Höhlen, kein Inventar und keine Möglichkeit, Blöcke abzubauen. Nur du, die Landschaft und die R-Taste, um wieder vom Himmel zu fallen. Wir haben ihn mit den Informationen aus dem Minecraft Wiki nachgebaut, damit du das allererste Stück Minecraft-Geschichte betreten kannst.",
+                "Die erste von Notch aufgenommene, nie veröffentlichte Version ist jetzt spielbar.",
+                "Bevor der Name Minecraft existierte, nahm Notch einen Test namens Cave game auf. Du kannst diese erste Welt aus Gras, Stein und riesigen Höhlen durchlaufen, ohne Inventar und mit R, um wieder vom Himmel zu fallen. Wir haben sie aus dem Minecraft-Wiki nachgebaut.",
             ),
             (
-                "Deine Welten, in deinen Händen",
+                "Deine Welten in deinen Händen",
                 "22. Nov. 2026",
-                "Jede Welt hat jetzt ihren Platz im Launcher: spielen, Ordner öffnen oder löschen.",
-                "Ab jetzt speichert jede Version ihre eigene Welt, eine Partie vermischt sich also nie mit der einer anderen Version. Der neue Welten-Tab zeigt dir, wie viel Platz sie braucht und wann du zuletzt gespielt hast, öffnet ihren Ordner und löscht sie mit einem Klick (vorher fragt er „Sicher?“). Direkt darunter findest du die sechs Installationen mit ihrem Ordner. Außerdem haben die ersten Versionen ihre Originalblöcke zurück, und in den späteren pre-classics fällst du nicht mehr durch den Boden. Viel Spaß!",
+                "Spiele, öffne den Ordner oder lösche jede Welt aus dem Launcher.",
+                "Jede Version behält ihre eigene Welt, so vermischen sich Spielstände nie. Der Welten-Tab zeigt Größe und letzte Spielzeit, öffnet den Ordner und löscht die Welt mit einem Klick. Darunter steht jede Installation mit ihrem Ordner.",
             ),
             (
-                "Der Block, den du ansiehst, leuchtet wieder",
+                "Auswahl und Blockvorschau wie 2009",
                 "22. Nov. 2026",
-                "In den Classic-Versionen ist die Auswahl wieder eine einzelne weiße Fläche, wie 2009.",
-                "Beim Anvisieren eines Blocks leuchteten alle seine Flächen auf und flackerten gegen die Welttextur. Jetzt bekommt nur die Fläche, die du ansiehst, eine sanfte weiße Schicht, und diese liegt einen Millimeter vor dem Block – das Flackern ist endgültig weg.",
-            ),
-            (
-                "Bauen in Classic zeigt wieder den ganzen Block",
-                "22. Nov. 2026",
-                "Der Block, den du setzen willst, wird wieder vollständig und massiv gezeichnet.",
-                "Beim Vorschau-Würfel waren die Flächen in der falschen Reihenfolge, deshalb sah man seine Seiten oder sein Inneres statt eines normalen Blocks. Behoben: Der Block, den du setzen willst, erscheint jetzt vollständig mit seiner Textur, genau wie 2009.",
+                "Nur die angesehene Seite leuchtet, und der Block zum Setzen erscheint vollständig.",
+                "Beim Anvisieren eines Blocks leuchtet nur die Seite vor dir, ohne Flackern. Und der Block, den du setzen willst, erscheint vollständig und mit seiner Textur, wie 2009.",
             ),
             (
                 "Rustium 0.2: ein neues Gesicht für den Launcher",
                 "22. Nov. 2026",
-                "Ein sauberer Launcher, Social-Icons und eine echte Version 0.2.",
-                "Dieses Update überarbeitet den Kopfbereich des Launchers und die News-Karten. Du kannst mir jetzt über YouTube-, Discord- und Patreon-Symbole statt Textlinks folgen, und die Karten lassen dem Inhalt mehr Luft. Außerdem habe ich die doppelten Bilder aus den neuen News entfernt: Jede Meldung behält ihr eigenes, und die erste, das Original, bleibt. Der ganze Launcher ist jetzt Version 0.2.",
+                "Ein aufgeräumterer Launcher mit den Netzwerken und mehr Platz für die Neuigkeiten.",
+                "Dieses Update überarbeitet den Launcher-Kopf und die News-Karten. Die Netzwerke sind jetzt Icons, die Karten haben mehr Luft, und der ganze Launcher ist Version 0.2.",
             ),
             (
-                "Das Laufen bricht nicht mehr ab",
+                "Laufe, ohne anzuhalten",
                 "22. Nov. 2026",
-                "Halte W gedrückt und laufe in den Pre-Classics und Classic so lange du willst.",
-                "Wenn du eine Taste hältst, wiederholt Windows sie viele Male pro Sekunde. Diese Wiederholungen wurden wie ein Loslassen behandelt, deshalb lief der Spieler eine halbe Sekunde und blieb dann von selbst stehen. Tastendruck und Wiederholung werden jetzt unterschieden: Du kannst ohne Loslassen von W so lange laufen, wie du willst, auch mit Großbuchstaben und den Pfeiltasten.",
+                "Halte W so lange du willst: Die Spielfigur bleibt nicht mehr von selbst stehen.",
+                "Beim Halten einer Taste wiederholte Windows sie viele Male, und diese Wiederholungen stoppten die Spielfigur nach einer halben Sekunde. Jetzt werden Druck und Wiederholung unterschieden: Halte W und laufe, so lange du willst.",
+            ),
+            (
+                "Classic 0.0.3a, die erste mit Höhlen",
+                "24. Nov. 2026",
+                "Die Version vom 16. Mai 2009 ist jetzt im Launcher, vor dem Wechsel auf 640×480.",
+                "0.0.3a ist die Version, die Notch eine Stunde vor 0.0.9a hochlud, um die Höhlen zurückzubringen. Wir haben sie auf der Engine von c0.0.11a mit dem nachgebaut, was das Minecraft-Wiki dokumentiert: in 1024×768, ohne fps-Zähler und ohne Baumodus, denn beides kam mit 0.0.9a; links setzt, rechts bricht. Die Versionen 0.0.4a bis 0.0.8a wurden nie veröffentlicht, falls es sie überhaupt gab.",
+            ),
+            (
+                "Die vier privaten Alphas, jetzt spielbar",
+                "24. Nov. 2026",
+                "mc-161607 bis mc-161648: die ersten Minecraft-Versionen, die jemand außerhalb von Mojang spielte.",
+                "Diese vier Builds vom 16. Mai 2009 sind „Minecraft alpha“, der private Test, den Notch über IRC an drei Spieler gab. Eine Versionsnummer gab es im Spiel noch nicht, deshalb nennt das Wiki sie nach ihrer Build-Zeit. Alle vier sind da: Escape gibt die Maus frei, Y dreht ab mc-161616 die Mausachse um, und 161625 sowie 161648 beheben Textur- und Mausfehler. Ihre Jars wurden nie archiviert, es sind also Rekonstruktionen.",
             ),
         ],
     }
@@ -2721,7 +2813,9 @@ fn version_textures(base: &Path, game: GameVersion) -> bool {
     // conservan: sus texturas son las de c0.0.11a.
     let game = match game {
         GameVersion::Rd131655 => GameVersion::Rd132211,
-        GameVersion::C009a | GameVersion::C010a => GameVersion::C0011a,
+        GameVersion::Mc161607 | GameVersion::Mc161616 | GameVersion::Mc161625
+        | GameVersion::Mc161648 | GameVersion::C003a | GameVersion::C009a
+        | GameVersion::C010a => GameVersion::C0011a,
         g => g,
     };
     if !installed_copies(base, game.id()).is_empty() {
@@ -2767,7 +2861,7 @@ fn instance_id_is_free(instances: &[Instance], root: &Path, id: &str) -> bool {
     !instances.iter().any(|i| i.id == id) && !root.join(id).exists()
 }
 
-/// First free id for a new instance of `game`. The nine default instances own
+/// First free id for a new instance of `game`. The ten default instances own
 /// their build id while they exist; afterwards new copies get `<id>-2`, `-3`...
 fn unique_instance_id_in(instances: &[Instance], game: GameVersion, root: &Path) -> String {
     let base = game.id();
@@ -5927,6 +6021,7 @@ mod ui {
                                 // The cards grow when opened, so the list scrolls
                                 // instead of pushing the footer off the window.
                                 let h = (ui.available_height() - 46.0).max(140.0);
+                                let mut go_tab = None;
                                 egui::ScrollArea::vertical()
                                     .max_height(h)
                                     .auto_shrink([false, false])
@@ -5939,26 +6034,32 @@ mod ui {
                                                 .color(SOFT),
                                         );
                                         ui.add_space(10.0);
-                                        // Intro cards, then the local extras from
-                                        // news.txt, then the version history. The
-                                        // list can grow at runtime, so the open
-                                        // flags are resized after it is built.
-                                        // (title, date, summary, body, version tag, art)
-                                        let mut cards: Vec<(String, String, String, String, String, Option<Art>)> = vec![
+                                        // Intro cards, the local extras from
+                                        // news.txt and the version history all go
+                                        // through the same date sort, so the
+                                        // newest news opens the tab.
+                                        // (sort date, kind, title, date, summary, body, version tag, art)
+                                        let mut cards: Vec<(u32, NewsKind, String, String, String, String, String, Option<Tab>, Option<Art>)> = vec![
                                             (
+                                                date_key(u.n1_date),
+                                                NewsKind::Story,
                                                 u.n1_title.to_string(),
                                                 u.n1_date.to_string(),
                                                 u.n1_short.to_string(),
                                                 u.n1_body.to_string(),
                                                 format!("v{VERSION}"),
+                                                None,
                                                 Some(Art::Launcher),
                                             ),
                                             (
+                                                date_key(u.n2_date),
+                                                NewsKind::Story,
                                                 u.n2_title.to_string(),
                                                 u.n2_date.to_string(),
                                                 u.n2_short.to_string(),
                                                 u.n2_body.to_string(),
                                                 "rd-132211".to_string(),
+                                                None,
                                                 Some(Art::First),
                                             ),
                                         ];
@@ -5967,11 +6068,14 @@ mod ui {
                                                 continue;
                                             }
                                             cards.push((
+                                                date_key(date),
+                                                NewsKind::Story,
                                                 title.clone(),
                                                 date.clone(),
                                                 short.clone(),
                                                 body.clone(),
                                                 version.clone(),
+                                                None,
                                                 Some(match *art {
                                                     1 => Art::Bush,
                                                     2 => Art::Zombies,
@@ -5984,50 +6088,85 @@ mod ui {
                                                 }),
                                             ));
                                         }
-                                        // The build each version card talks about.
+                                        // The build and type each version card talks about.
                                         let tags = [
                                             "Rustium 0.2.1",
                                             "Rustium 0.2.1",
                                             "rd-132211 … rd-161348",
-                                            "rd-20090515",
-                                            "rd-132328",
                                             "rd-20090515 · rd-161348",
+                                            "rd-132328",
                                             "rd-132328 · rd-20090515 · rd-160052 · rd-161348",
                                             "rd-131655 · Cave game tech test",
                                             "Rustium 0.1.15",
                                             "Rustium 0.1.16",
-                                            "Rustium 0.1.16",
                                             "Rustium 0.2",
                                             "Rustium 0.2",
+                                            "c0.0.3a",
+                                            "mc-161607 … mc-161648",
+                                        ];
+                                        let kinds = [
+                                            NewsKind::Launcher,
+                                            NewsKind::Play,
+                                            NewsKind::Play,
+                                            NewsKind::Fix,
+                                            NewsKind::Fix,
+                                            NewsKind::Fix,
+                                            NewsKind::Story,
+                                            NewsKind::Play,
+                                            NewsKind::Fix,
+                                            NewsKind::Launcher,
+                                            NewsKind::Fix,
+                                            NewsKind::Play,
+                                            NewsKind::Play,
+                                        ];
+                                        let actions = [
+                                            None,
+                                            Some(Tab::Shots),
+                                            Some(Tab::Home),
+                                            None,
+                                            None,
+                                            None,
+                                            Some(Tab::Home),
+                                            Some(Tab::Worlds),
+                                            None,
+                                            None,
+                                            None,
+                                            Some(Tab::Home),
+                                            Some(Tab::Home),
                                         ];
                                         for (i, item) in version_news(self.lang).iter().enumerate() {
                                             cards.push((
+                                                date_key(item.1),
+                                                kinds.get(i).copied().unwrap_or(NewsKind::Play),
                                                 item.0.to_string(),
                                                 item.1.to_string(),
                                                 item.2.to_string(),
                                                 item.3.to_string(),
                                                 tags.get(i).copied().unwrap_or("").to_string(),
+                                                actions.get(i).copied().flatten(),
                                                 match i {
                                                     0 => Some(Art::LauncherShot),
                                                     1 => Some(Art::Shots),
                                                     3 => Some(Art::Bush),
                                                     4 => Some(Art::Zombies),
-                                                    5 => Some(Art::Upright),
-                                                    6 => Some(Art::Zombies),
-                                                    7 => Some(Art::Cave),
-                                                    8 => Some(Art::Worlds),
-                                                    9 => Some(Art::ClassicHit),
-                                                    10 => Some(Art::ClassicBuild),
-                                                    11 => Some(Art::LauncherShot),
-                                                    12 => Some(Art::Walk),
+                                                    5 => Some(Art::Zombies),
+                                                    6 => Some(Art::Cave),
+                                                    7 => Some(Art::Worlds),
+                                                    8 => Some(Art::ClassicBuild),
+                                                    9 => Some(Art::LauncherShot),
+                                                    10 => Some(Art::Walk),
+                                                    11 => Some(Art::Cave),
+                                                    12 => Some(Art::Cave),
                                                     _ => Some(Art::World),
                                                 },
                                             ));
                                         }
+                                        // Newest first, whatever order they were added in.
+                                        cards.sort_by(|a, b| b.0.cmp(&a.0));
                                         if self.news_open.len() != cards.len() {
                                             self.news_open.resize(cards.len(), false);
                                         }
-                                        for (i, (title, date, short, body, version, art)) in cards.iter().enumerate() {
+                                        for (i, (_when, kind, title, date, short, body, version, action, art)) in cards.iter().enumerate() {
                                             if i > 0 {
                                                 ui.add_space(12.0);
                                             }
@@ -6039,6 +6178,10 @@ mod ui {
                                                 short,
                                                 body,
                                                 version,
+                                                action.map(|t| (t, news_action_label(self.lang, t))),
+                                                &mut go_tab,
+                                                news_kind_label(self.lang, *kind),
+                                                news_kind_color(*kind),
                                                 &mut self.news_open[i],
                                                 u.see_more,
                                                 u.see_less,
@@ -6048,6 +6191,9 @@ mod ui {
                                         ui.add_space(12.0);
                                         ui.label(RichText::new(more_news).size(12.0).color(MUTED));
                                     });
+                                if let Some(target) = go_tab {
+                                    self.tab = target;
+                                }
                             } else if tab == Tab::Shots {
                                 self.shots_tab(ui);
                             } else {
@@ -6535,6 +6681,69 @@ mod ui {
         p.galley(c - g.size() * 0.5, g, MAGENTA);
     }
 
+    #[derive(Clone, Copy)]
+    enum NewsKind {
+        Play,
+        Fix,
+        Launcher,
+        Story,
+    }
+
+    fn news_kind_label(l: Lang, k: NewsKind) -> &'static str {
+        match (l, k) {
+            (Lang::En, NewsKind::Play) => "Play",
+            (Lang::En, NewsKind::Fix) => "Fix",
+            (Lang::En, NewsKind::Launcher) => "Launcher",
+            (Lang::En, NewsKind::Story) => "Story",
+            (Lang::Es, NewsKind::Play) => "Jugar",
+            (Lang::Es, NewsKind::Fix) => "Arreglo",
+            (Lang::Es, NewsKind::Launcher) => "Launcher",
+            (Lang::Es, NewsKind::Story) => "Historia",
+            (Lang::Pt, NewsKind::Play) => "Jogar",
+            (Lang::Pt, NewsKind::Fix) => "Correção",
+            (Lang::Pt, NewsKind::Launcher) => "Launcher",
+            (Lang::Pt, NewsKind::Story) => "História",
+            (Lang::Fr, NewsKind::Play) => "Jouer",
+            (Lang::Fr, NewsKind::Fix) => "Correctif",
+            (Lang::Fr, NewsKind::Launcher) => "Launcher",
+            (Lang::Fr, NewsKind::Story) => "Histoire",
+            (Lang::De, NewsKind::Play) => "Spielen",
+            (Lang::De, NewsKind::Fix) => "Korrektur",
+            (Lang::De, NewsKind::Launcher) => "Launcher",
+            (Lang::De, NewsKind::Story) => "Geschichte",
+        }
+    }
+
+    fn news_action_label(l: Lang, t: Tab) -> &'static str {
+        match (l, t) {
+            (Lang::En, Tab::Home) => "Go to play",
+            (Lang::En, Tab::Shots) => "View screenshots",
+            (Lang::En, Tab::Worlds) => "View worlds",
+            (Lang::Es, Tab::Home) => "Ir a jugar",
+            (Lang::Es, Tab::Shots) => "Ver capturas",
+            (Lang::Es, Tab::Worlds) => "Ver mundos",
+            (Lang::Pt, Tab::Home) => "Ir jogar",
+            (Lang::Pt, Tab::Shots) => "Ver capturas",
+            (Lang::Pt, Tab::Worlds) => "Ver mundos",
+            (Lang::Fr, Tab::Home) => "Aller jouer",
+            (Lang::Fr, Tab::Shots) => "Voir les captures",
+            (Lang::Fr, Tab::Worlds) => "Voir les mondes",
+            (Lang::De, Tab::Home) => "Zum Spielen",
+            (Lang::De, Tab::Shots) => "Screenshots ansehen",
+            (Lang::De, Tab::Worlds) => "Welten ansehen",
+            (_, Tab::News) => "",
+        }
+    }
+
+    fn news_kind_color(k: NewsKind) -> Color32 {
+        match k {
+            NewsKind::Play => GREEN,
+            NewsKind::Fix => AMBER,
+            NewsKind::Launcher => BLUE,
+            NewsKind::Story => MAGENTA,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn news_card(
         ui: &mut egui::Ui,
@@ -6544,6 +6753,10 @@ mod ui {
         short: &str,
         full: &str,
         version: &str,
+        action: Option<(Tab, &str)>,
+        go: &mut Option<Tab>,
+        kind: &str,
+        kind_color: Color32,
         open: &mut bool,
         more: &str,
         less: &str,
@@ -6578,6 +6791,25 @@ mod ui {
                         ui.add_space(3.0);
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(date).size(11.5).color(MUTED));
+                            if !kind.is_empty() {
+                                egui::Frame::NONE
+                                    .fill(Color32::from_rgba_unmultiplied(
+                                        kind_color.r(),
+                                        kind_color.g(),
+                                        kind_color.b(),
+                                        30,
+                                    ))
+                                    .corner_radius(6)
+                                    .inner_margin(egui::Margin::symmetric(6, 2))
+                                    .show(ui, |ui| {
+                                        ui.label(
+                                            RichText::new(kind)
+                                                .size(10.5)
+                                                .strong()
+                                                .color(kind_color),
+                                        );
+                                    });
+                            }
                             if !version.is_empty() {
                                 egui::Frame::NONE
                                     .fill(GLASS_HI)
@@ -6640,16 +6872,34 @@ mod ui {
                                 );
                         }
                         ui.add_space(2.0);
-                        let label = if *open { less } else { more };
-                        if ui
-                            .add(
-                                egui::Button::new(disp(label, 14.0).color(MAGENTA))
-                                    .frame(false),
-                            )
-                            .clicked()
-                        {
-                            *open = !*open;
-                        }
+                        ui.horizontal(|ui| {
+                            let label = if *open { less } else { more };
+                            if ui
+                                .add(
+                                    egui::Button::new(disp(label, 14.0).color(MAGENTA))
+                                        .frame(false),
+                                )
+                                .clicked()
+                            {
+                                *open = !*open;
+                            }
+                            if let Some((target, action_label)) = action {
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            disp(action_label, 12.0)
+                                                .color(Color32::from_rgb(24, 10, 18)),
+                                        )
+                                        .fill(MAGENTA)
+                                        .corner_radius(6)
+                                        .min_size(egui::vec2(0.0, 24.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    *go = Some(target);
+                                }
+                            }
+                        });
                     });
                 });
             });

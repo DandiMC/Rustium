@@ -30,7 +30,28 @@ path = "src/bin/rd20090515.rs"
 name = "rd161348"
 path = "src/bin/rd161348.rs"
 
+# Classic private alpha reconstruidas (sus jars no se conservan)
+[[bin]]
+name = "mc161607"
+path = "src/bin/mc161607.rs"
+
+[[bin]]
+name = "mc161616"
+path = "src/bin/mc161616.rs"
+
+[[bin]]
+name = "mc161625"
+path = "src/bin/mc161625.rs"
+
+[[bin]]
+name = "mc161648"
+path = "src/bin/mc161648.rs"
+
 # Classic reconstruidas (sus jars no se conservan)
+[[bin]]
+name = "classic003a"
+path = "src/bin/classic003a.rs"
+
 [[bin]]
 name = "classic009a"
 path = "src/bin/classic009a.rs"

@@ -814,7 +814,7 @@ impl Renderer {
                     .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
                     .map(|(_, _, px)| px)
             })
-            // 0.0.9a y 0.0.10a no tienen jar propio: usan el de c0.0.11a, que es
+            // 0.0.3a, 0.0.9a y 0.0.10a no tienen jar propio: usan el de c0.0.11a, que es
             // la primera Classic conservada y de donde salen estas versiones.
             .or_else(|| {
                 cargar_png_del_jar("c0.0.11a", "terrain.png")

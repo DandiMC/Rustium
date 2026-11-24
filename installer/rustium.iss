@@ -64,7 +64,13 @@ Source: "..\target\x86_64-pc-windows-gnu\release\rd132328.exe"; DestDir: "{app}"
 Source: "..\target\x86_64-pc-windows-gnu\release\rd20090515.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\rd160052.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\rd161348.exe"; DestDir: "{app}"; Flags: ignoreversion
-; Classic: la primera conservada y las dos reconstruidas.
+; Classic private alpha: las cuatro reconstruidas, sin jar propio.
+Source: "..\target\x86_64-pc-windows-gnu\release\mc161607.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\mc161616.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\mc161625.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\mc161648.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Classic: las tres reconstruidas y la primera conservada.
+Source: "..\target\x86_64-pc-windows-gnu\release\classic003a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic009a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic010a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic011a.exe"; DestDir: "{app}"; Flags: ignoreversion

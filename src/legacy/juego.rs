@@ -71,6 +71,44 @@ pub fn correr_clasico(version: &'static str) {
     correr_clasico_con(version, 1024, 768, true);
 }
 
+/// Reconstruidas sin jar propio (mc-161607 a mc-161648 y c0.0.3a): comparten
+/// motor con 0.0.11a, pero son anteriores al modo de construccion, al contador
+/// de fps y al cambio a 640x480 de 0.0.9a. A 1024x768, el izquierdo coloca y
+/// el derecho rompe. `escape_libera` separa las mc- (Escape suelta el raton) de
+/// c0.0.3a (Escape cierra); `mostrar_version` deja el HUD vacio en las mc-, que
+/// no tenian numero de version; `eje_y` es la Y que anadio mc-161616.
+pub fn correr_clasico_reconstruida(
+    version: &'static str,
+    escape_libera: bool,
+    mostrar_version: bool,
+    eje_y: bool,
+) {
+    let event_loop = EventLoop::new().unwrap();
+    let mut app = App::new(version, Modo::Clasico);
+    app.tamano = tamano_inicial((1024, 768));
+    app.escape_libera = escape_libera;
+    app.contador = false;
+    app.modo_edicion = false;
+    app.mostrar_version = mostrar_version;
+    app.eje_y = eje_y;
+    event_loop.run_app(&mut app).unwrap();
+}
+
+/// Reconstruidas sin jar propio: su atlas y su piel salen de c0.0.11a, la
+/// primera Classic que se conserva.
+fn es_reconstruida(version: &str) -> bool {
+    matches!(
+        version,
+        "mc-161607"
+            | "mc-161616"
+            | "mc-161625"
+            | "mc-161648"
+            | "c0.0.3a"
+            | "c0.0.9a"
+            | "c0.0.10a"
+    )
+}
+
 /// Reconstrucciones (sus jars no se conservan): 0.0.9a y 0.0.10a se montan
 /// sobre el codigo de c0.0.11a, que es el primero que queda. La wiki da dos
 /// cambios: 0.0.9a corria a 640x480 y Escape cerraba el juego; 0.0.10a anadio
@@ -317,6 +355,14 @@ struct App {
     // Ventana de cada build y que hace Escape (antes de 0.0.10a cerraba).
     tamano: (u32, u32),
     escape_libera: bool,
+    // 0.0.9a anadio el contador y el modo de construccion; c0.0.3a no los tiene.
+    contador: bool,
+    modo_edicion: bool,
+    // Las mc- son aun mas antiguas: ni contador ni numero de version en pantalla.
+    mostrar_version: bool,
+    // mc-161616 anadio la Y para invertir el eje del raton.
+    eje_y: bool,
+    invertir_y: bool,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     nivel: Nivel,
@@ -400,6 +446,11 @@ impl App {
             chunk_updates: 0,
             tamano: tamano_inicial((1024, 768)),
             escape_libera: true,
+            contador: true,
+            modo_edicion: true,
+            mostrar_version: true,
+            eje_y: false,
+            invertir_y: false,
             window: None,
             renderer: None,
             nivel,
@@ -431,20 +482,22 @@ impl App {
         if self.modo != Modo::Clasico {
             return;
         }
-        let mut lineas = if self.hud_visible {
-            vec![
-                (self.version.to_string(), 2.0, 2.0),
-                (
+        let mut lineas = if self.hud_visible && self.mostrar_version {
+            let mut v = vec![(self.version.to_string(), 2.0, 2.0)];
+            // 0.0.9a anadio el contador de fps y chunk updates; c0.0.3a es anterior.
+            if self.contador {
+                v.push((
                     format!("{} fps, {} chunk updates", self.fps, self.chunk_updates),
                     2.0,
                     12.0,
-                ),
-            ]
+                ));
+            }
+            v
         } else {
             Vec::new()
         };
         // Extra de instancia: coordenadas junto al HUD, actualizadas por frame.
-        if self.hud_visible && self.extra_coords {
+        if self.hud_visible && self.mostrar_version && self.extra_coords {
             lineas.push((
                 format!(
                     "x {:.1} y {:.1} z {:.1}",
@@ -626,7 +679,16 @@ impl ApplicationHandler for App {
         if !smoke {
             window.focus_window();
         }
-        if let Some((w, h, rgba)) = crate::render::cargar_png_del_jar(self.version, "char.png") {
+        // Las reconstruidas no tienen jar propio: su piel es la de c0.0.11a,
+        // igual que el atlas. Sin ella el renderer no dibuja a los humanos.
+        let piel = crate::render::cargar_png_del_jar(self.version, "char.png").or_else(|| {
+            if es_reconstruida(self.version) {
+                crate::render::cargar_png_del_jar("c0.0.11a", "char.png")
+            } else {
+                None
+            }
+        });
+        if let Some((w, h, rgba)) = piel {
             renderer.pon_piel(w, h, &rgba);
         }
         renderer.mostrar_cruz = true;
@@ -736,9 +798,14 @@ impl ApplicationHandler for App {
                         Key::Character(c) => {
                             if let Some(id) = bloque_para_tecla(self.version, c.as_str()) {
                                 self.pintura = id;
-                            } else if c.eq_ignore_ascii_case("g") {
+                            } else if c.eq_ignore_ascii_case("y") && self.eje_y {
+                                // mc-161616: Y invierte el eje del raton.
+                                self.invertir_y = !self.invertir_y;
+                            } else if c.eq_ignore_ascii_case("g") && self.version != "rd-160052" {
                                 // RubyDung: G suelta un zombi en la posicion del jugador
-                                // (sin resetPos, a diferencia de los 10 iniciales)
+                                // (sin resetPos, a diferencia de los 10 iniciales).
+                                // La wiki data la tecla en rd-20090515, asi que
+                                // rd-160052, el build anterior, no la tiene.
                                 let mut z = Zombie::new(&self.nivel, self.jugador.x, self.jugador.y, self.jugador.z);
                                 // El constructor del Java legacy llama a setPos, que
                                 // recoloca tambien la caja (bb). El constructor
@@ -789,7 +856,31 @@ impl ApplicationHandler for App {
                         // clic tambien rompe o coloca.
                     }
                     let a = (self.tick_acc * TPS).clamp(0.0, 1.0);
-                    if self.modo == Modo::Clasico {
+                    if self.modo == Modo::Clasico && !self.modo_edicion {
+                        // c0.0.3a, antes del modo que anadio 0.0.9a: el
+                        // izquierdo coloca (aun dentro del jugador, como el
+                        // fallo que 0.0.9a arreglo) y el derecho rompe.
+                        if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
+                            match button {
+                                MouseButton::Left => {
+                                    let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
+                                    self.nivel.set(nx, ny, nz, self.pintura);
+                                }
+                                MouseButton::Right => {
+                                    let id = self.nivel.get(bx, by, bz);
+                                    if self.nivel.set(bx, by, bz, tiles::AIRE) {
+                                        particula::destruir(
+                                            tiles::textura_particula(id),
+                                            bx, by, bz,
+                                            &mut self.particulas,
+                                        );
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        self.reconstruir_cambios();
+                    } else if self.modo == Modo::Clasico {
                         // Minecraft.handleMouseClick: el izquierdo rompe o
                         // pinta segun editMode y el derecho alterna el modo.
                         match button {
@@ -855,7 +946,8 @@ impl ApplicationHandler for App {
         if let DeviceEvent::MouseMotion { delta } = event {
             if self.grabbed {
                 self.jugador.y_rot += delta.0 as f32 * 0.15;
-                self.jugador.x_rot -= delta.1 as f32 * 0.15;
+                let dy = delta.1 as f32 * 0.15;
+                self.jugador.x_rot -= if self.invertir_y { -dy } else { dy };
                 self.jugador.x_rot = self.jugador.x_rot.clamp(-90.0, 90.0);
             }
         }
@@ -991,7 +1083,7 @@ impl ApplicationHandler for App {
         // el bloque elegido, no el velo blanco del modo romper.
         let mut hit = self.hit;
         let mut preview = None;
-        if self.modo == Modo::Clasico && self.edit_mode == 1 {
+        if self.modo == Modo::Clasico && self.modo_edicion && self.edit_mode == 1 {
             preview = Some(self.pintura);
             if let Some(((x, y, z), n)) = hit {
                 hit = Some(((x + n.0, y + n.1, z + n.2), n));
@@ -1028,7 +1120,7 @@ impl ApplicationHandler for App {
                 r.pedir_captura = true;
             }
             // El original siempre enseña el bloque elegido en la esquina
-            r.hud_bloque = Some(self.pintura);
+            r.hud_bloque = if self.mostrar_version { Some(self.pintura) } else { None };
             r.render(eye, yaw, pitch, hit, fps, &mv, &mv_fondo);
             w.request_redraw();
             if smoke {

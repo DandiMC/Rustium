@@ -1,8 +1,9 @@
 # Rustium
 
 Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-131655,
-rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348) y de las primeras Classic
-(c0.0.9a, c0.0.10a y c0.0.11a), sin cuenta de Microsoft y sin
+rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348), de las Classic private
+alpha (mc-161607, mc-161616, mc-161625 y mc-161648) y de las primeras Classic
+(c0.0.3a, c0.0.9a, c0.0.10a y c0.0.11a), sin cuenta de Microsoft y sin
 descargar nada de Mojang: lee las texturas de la copia que ya tengas en el ordenador
 y, si no hay ninguna, dibuja las suyas.
 
@@ -31,8 +32,8 @@ Solo hace falta **el instalador**: `Rustium-0.2.0-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las nueve versiones (las seis
-pre-clásicas y las tres primeras Classic):
+El selector encima de «Jugar» arranca cualquiera de las catorce versiones (las seis
+pre-clásicas, las cuatro alpha privadas y las cuatro primeras Classic):
 
 | versión | qué trae |
 |---|---|
@@ -42,13 +43,18 @@ pre-clásicas y las tres primeras Classic):
 | rd-20090515 | partículas, más bloques y el cubo del bloque en la esquina |
 | rd-160052 | el mismo motor, un build anterior |
 | rd-161348 | el último build pre-clásico (su jar es el mismo que el de rd-20090515) |
+| mc-161607 | reconstruida: la primera Minecraft que jugó alguien; Escape libera el ratón y no hay número de versión en pantalla |
+| mc-161616 | reconstruida: la Y invierte el eje del ratón |
+| mc-161625 | reconstruida: arregla las texturas y el invertido del ratón |
+| mc-161648 | reconstruida: arregla el ratón; el último build sin número de versión |
+| c0.0.3a | reconstruida: las cuevas vuelven, a 1024×768, antes del modo construir y del contador de fps |
 | c0.0.9a | reconstruida: el modo construir con el velo blanco por las seis caras, contador de fps, a 640×480 y Escape cierra |
 | c0.0.10a | reconstruida: igual que 0.0.9a pero Escape solo suelta el ratón |
 | c0.0.11a | la primera Classic conservada: terreno con cuevas de `NoiseMap`, HUD con fps y chunk updates, y el modo pintar que cambia con el botón derecho |
 
-c0.0.9a y c0.0.10a son **reconstrucciones**: sus jars nunca se archivaron. Salen
-del código de c0.0.11a y de lo que documenta la Minecraft Wiki de cada una, y
-llevan las texturas y la fuente de c0.0.11a.
+Las cuatro mc-, c0.0.3a, c0.0.9a y c0.0.10a son **reconstrucciones**: sus jars nunca
+se archivaron. Salen del código de c0.0.11a y de lo que documenta la Minecraft Wiki
+de cada una, y llevan las texturas y la fuente de c0.0.11a.
 
 rd-131655 (el «Cave game tech test») nunca tuvo jar publicado. Está reconstruido
 a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-132211.
@@ -57,7 +63,7 @@ a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-13221
 
 Cada instancia guarda su mundo en `%APPDATA%\Rustium\worlds\<instancia>\level.dat`
 por defecto, y puede apuntar a cualquier otra carpeta desde sus opciones, así que
-una partida de rd-132211 nunca se abre con los bloques de otra familia. Las nueve
+una partida de rd-132211 nunca se abre con los bloques de otra familia. Las
 instancias por defecto reutilizan el id de la versión, así que los mundos guardados
 antes de que existieran las instancias siguen en su sitio. Cada instancia también
 recuerda el tamaño inicial de su ventana; deja la resolución vacía para usar el
