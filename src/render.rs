@@ -656,7 +656,7 @@ fn toast_quads(edad: f32, width: u32, height: u32, y_base: f32) -> Vec<f32> {
 // machine, which forwards the activity. The Application ID is public; it can be
 // compiled in or supplied with RUSTIUM_DISCORD_CLIENT_ID / discord_id.txt while
 // testing. Without an id Discord rejects the handshake, so presence stays off.
-const DISCORD_CLIENT_ID: &str = "";
+const DISCORD_CLIENT_ID: &str = "1574818792494604319";
 
 trait DiscordPipe: std::io::Read + std::io::Write {}
 impl<T: std::io::Read + std::io::Write> DiscordPipe for T {}
