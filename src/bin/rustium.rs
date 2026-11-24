@@ -5,8 +5,10 @@
 //! Rust game with those textures. If no copy is found the player can paste a path
 //! by hand or play with the replacement texture the game draws itself.
 //!
-//! The only network request this program makes is an optional read of the
-//! project's release list, to tell the user when a newer launcher exists.
+//! It makes two network requests: an optional read of the project's release
+//! list, to tell the user when a newer launcher exists, and an anonymous ping
+//! with a random install id for the player counter. Nothing else leaves the
+//! computer, and the card in the Legal notice says so.
 //!
 //! Usage:
 //!   rustium                     detect the installed version and play
@@ -70,10 +72,13 @@ const GAME_VERSION: &str = "rd-132211";
 /// Where we ask whether a newer launcher exists. Override with RUSTIUM_UPDATE_URL
 /// (useful for testing against a local file server).
 const UPDATE_URL: &str = "https://api.github.com/repos/DandiMC/Rustium/releases/latest";
-/// Where the live player count is published, as `{"online": 3}`. Point it at
-/// your own status endpoint with RUSTIUM_ONLINE_URL; when it cannot be read the
-/// chip simply does not appear.
-const ONLINE_URL: &str = "https://raw.githubusercontent.com/DandiMC/Rustium/main/web/online.json";
+/// The project's own Supabase, which keeps the player counter (see `send_ping`).
+/// The key is the publishable one and travels in the client on purpose: row-level
+/// security leaves it only `execute` on the two functions, never a read of the table.
+/// RUSTIUM_ONLINE_URL still points the count at a static `{"online": 3}` file, and
+/// when neither answers the chip simply does not appear.
+const SUPABASE_URL: &str = "https://qsjakzjbrbkhpgpgjzex.supabase.co";
+const SUPABASE_KEY: &str = "sb_publishable_q4eAwFXmK_VcKyXkSzaIUw_8dphV5p8";
 /// Where the two games are compared: the fraction of the map their spawn is pinned
 /// to (the middle, above the terrain). The original gets it as -Drustium.spawn and
 /// the port as RD_SPAWN, so the spot is stated once here and each side works out
@@ -372,8 +377,10 @@ fn texts(l: Lang) -> Texts {
                     already have on this computer only to read its textures, and if it cannot find one \
                     it draws its own replacement texture.\n\n\
                     Your Minecraft licence applies to your own copy; this launcher does not modify or \
-                    redistribute it. The only network request is an optional version check against the \
-                    project's release list, which sends no information about you.\n\n\
+                    redistribute it. It makes two network requests: an optional version check against the \
+                    project's release list, and an anonymous ping for the player counter. The ping sends \
+                    only a random id created on this computer and the time; no account, name, worlds or IP \
+                    are stored, and that id is forgotten after 30 days.\n\n\
                     Rustium is Copyright (c) 2026 DandiMC and is distributed under the Apache License \
                     2.0; the LICENSE and NOTICE files that come with the program must travel with any \
                     copy of it.",
@@ -430,8 +437,10 @@ fn texts(l: Lang) -> Texts {
                     en este equipo solo para leer sus texturas y, si no encuentra ninguna, dibuja su propia \
                     textura de reemplazo.\n\n\
                     La licencia de Minecraft se aplica a tu copia; este launcher no la modifica ni la \
-                    redistribuye. La única petición de red es una comprobación opcional de versión contra la \
-                    lista de versiones del proyecto, que no envía ninguna información sobre ti.\n\n\
+                    redistribuye. Hace dos peticiones de red: una comprobación opcional de versión contra la \
+                    lista de versiones del proyecto y un aviso anónimo para el contador de jugadores. Ese \
+                    aviso envía solo un identificador aleatorio creado en este equipo y la hora; no se \
+                    guarda ninguna cuenta, nombre, mundo ni IP, y ese identificador se borra a los 30 días.\n\n\
                     Rustium es Copyright (c) 2026 DandiMC y se distribuye bajo la licencia Apache 2.0; \
                     los archivos LICENSE y NOTICE que acompañan al programa deben conservarse en \
                     cualquier copia.",
@@ -488,8 +497,10 @@ fn texts(l: Lang) -> Texts {
                     neste computador apenas para ler as suas texturas e, se não encontrar nenhuma, desenha a \
                     sua própria textura substituta.\n\n\
                     A licença do Minecraft aplica-se à tua cópia; este launcher não a modifica nem a \
-                    redistribui. O único pedido de rede é uma verificação opcional de versão contra a lista \
-                    de versões do projeto, que não envia informação sobre ti.\n\n\
+                    redistribui. Faz dois pedidos de rede: uma verificação opcional de versão contra a lista \
+                    de versões do projeto e um aviso anónimo para o contador de jogadores. Esse aviso envia \
+                    apenas um identificador aleatório criado neste computador e a hora; não é guardada \
+                    nenhuma conta, nome, mundo nem IP, e esse identificador é apagado aos 30 dias.\n\n\
                     O Rustium é Copyright (c) 2026 DandiMC e é distribuído ao abrigo da licença \
                     Apache 2.0; os ficheiros LICENSE e NOTICE que acompanham o programa devem ser \
                     mantidos em qualquer cópia.",
@@ -546,8 +557,11 @@ fn texts(l: Lang) -> Texts {
                     avez déjà sur cet ordinateur uniquement pour lire ses textures et, s'il n'en trouve \
                     aucune, dessine sa propre texture de remplacement.\n\n\
                     Votre licence Minecraft s'applique à votre propre copie ; ce launcher ne la modifie pas \
-                    et ne la redistribue pas. La seule requête réseau est une vérification facultative de \
-                    version auprès de la liste des versions du projet, qui n'envoie rien sur vous.\n\n\
+                    et ne la redistribue pas. Il fait deux requêtes réseau : une vérification facultative de \
+                    version auprès de la liste des versions du projet, et un signal anonyme pour le compteur \
+                    de joueurs. Ce signal n'envoie qu'un identifiant aléatoire créé sur cet ordinateur et \
+                    l'heure ; aucun compte, nom, monde ni IP n'est conservé, et cet identifiant est effacé au \
+                    bout de 30 jours.\n\n\
                     Rustium est Copyright (c) 2026 DandiMC et est distribué sous la licence Apache \
                     2.0 ; les fichiers LICENSE et NOTICE fournis avec le programme doivent être \
                     conservés avec toute copie.",
@@ -604,8 +618,11 @@ fn texts(l: Lang) -> Texts {
                     Kopie, die du bereits auf diesem Computer hast, nur um deren Texturen zu lesen; findet es \
                     keine, zeichnet es eine eigene Ersatztextur.\n\n\
                     Deine Minecraft-Lizenz gilt für deine eigene Kopie; dieser Launcher verändert sie nicht \
-                    und gibt sie nicht weiter. Die einzige Netzwerkanfrage ist eine optionale \
-                    Versionsprüfung gegen die Versionsliste des Projekts, die nichts über dich sendet.\n\n\
+                    und gibt sie nicht weiter. Er stellt zwei Netzwerkanfragen: eine optionale \
+                    Versionsprüfung gegen die Versionsliste des Projekts und ein anonymes Signal für den \
+                    Spielerzähler. Dieses Signal sendet nur eine auf diesem Computer erzeugte \
+                    Zufallskennung und die Uhrzeit; weder Konto, Name, Welt noch IP werden gespeichert, und \
+                    die Kennung wird nach 30 Tagen gelöscht.\n\n\
                     Rustium ist Copyright (c) 2026 DandiMC und wird unter der Apache-Lizenz 2.0 \
                     verbreitet; die Dateien LICENSE und NOTICE neben dem Programm müssen bei jeder \
                     Kopie erhalten bleiben.",
@@ -671,7 +688,8 @@ struct UiTexts {
     shots_none: &'static str,
     shots_open: &'static str,
     // Players online chip; `{n}` is filled in with `fill()`.
-    online_players: &'static str,
+    online_players_one: &'static str,
+    online_players_many: &'static str,
     // Shown under the version picker in the instance options.
     instance_version_hint: &'static str,
     worlds_title: &'static str,
@@ -724,6 +742,28 @@ struct UiTexts {
     bench_java_wait: &'static str,
 }
 
+/// Friendly name for the instance that ships with the launcher, so the rail can
+/// show a name and keep the build id on the line below.
+fn default_instance_name(l: Lang) -> &'static str {
+    match l {
+        Lang::En => "Default Instance",
+        Lang::Es => "Instancia predeterminada",
+        Lang::Pt => "Instância predefinida",
+        Lang::Fr => "Instance par défaut",
+        Lang::De => "Standardinstanz",
+    }
+}
+
+/// Rows that still carry their build id as a name (the default instance and old
+/// ones) are shown under the friendly name; a custom name is kept as typed.
+fn instance_title(l: Lang, name: &str, game: GameVersion) -> String {
+    if name == game.id() {
+        default_instance_name(l).to_string()
+    } else {
+        name.to_string()
+    }
+}
+
 /// Label for the creator credit in the launcher footer.
 fn creator_label(l: Lang) -> &'static str {
     match l {
@@ -751,9 +791,15 @@ fn extra_texts(l: Lang) -> (&'static str, &'static str, &'static str, &'static s
 
 /// Novedades de las versiones del launcher (0.1.4 a 0.2.1).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 12] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 13] {
     match l {
         Lang::En => [
+            (
+                "The counter moves up top",
+                "24 Nov 2026",
+                "The people playing right now sits next to the title and the launcher footer is tidier.",
+                "The people playing counter now lives next to the Rustium title, so you see it the moment the launcher opens. The social icons at the foot are bigger, YouTube's play is cut out so it reads at a glance, and the Mojang notice stays down there. Instances now show a clear name and their build: the default one is 'Default Instance', and Options moved to the rail so the Play row no longer overflows.",
+            ),
             (
                 "Your screenshots, ready to open",
                 "23 Nov 2026",
@@ -829,6 +875,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
         ],
         Lang::Es => [
             (
+                "El contador sube a la cabecera",
+                "24 nov 2026",
+                "La gente jugando ahora queda junto al título y el pie del launcher queda más limpio.",
+                "El contador de gente jugando ahora está junto al título de Rustium, así se ve nada más abrir. Los iconos de redes del pie son más grandes, el play de YouTube está recortado para reconocerlo de un vistazo y el aviso de Mojang sigue abajo. Las instancias muestran un nombre claro y su versión: la de serie es «Instancia predeterminada», y Opciones pasó al rail para que la fila de Jugar no se desborde.",
+            ),
+            (
                 "Tus capturas, listas para abrir",
                 "23 nov 2026",
                 "Pulsa F2 mientras juegas y tus fotos quedan guardadas.",
@@ -902,6 +954,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
             ),
         ],
         Lang::Pt => [
+            (
+                "O contador sobe para o topo",
+                "24 nov 2026",
+                "Quem está a jogar agora fica junto ao título e o rodapé fica mais limpo.",
+                "O contador de quem está a jogar agora está junto ao título do Rustium, por isso vê-se assim que abres. Os ícones das redes no rodapé são maiores, o play do YouTube está recortado para ser reconhecido à primeira vista e o aviso da Mojang continua em baixo. As instâncias mostram um nome claro e a versão: a de origem é «Instância predefinida», e as Opções passaram para o rail para a fila de Jogar não transbordar.",
+            ),
             (
                 "As tuas capturas, prontas a abrir",
                 "23 nov 2026",
@@ -977,6 +1035,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
         ],
         Lang::Fr => [
             (
+                "Le compteur passe en haut",
+                "24 nov 2026",
+                "Les joueurs en ligne s'affichent à côté du titre et le pied de page est plus propre.",
+                "Le compteur de joueurs en ligne est maintenant à côté du titre de Rustium : tu le vois dès l'ouverture. Les icônes des réseaux en bas sont plus grandes, le play de YouTube est découpé pour être reconnu au premier coup d'œil et l'avis Mojang reste en bas. Les instances affichent un nom clair et leur version : celle d'origine est « Instance par défaut », et Options a déménagé dans le rail pour que la ligne de Jeu ne déborde plus.",
+            ),
+            (
                 "Tes captures, prêtes à ouvrir",
                 "23 nov. 2026",
                 "Appuie sur F2 en jouant et tes photos sont enregistrées.",
@@ -1050,6 +1114,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
             ),
         ],
         Lang::De => [
+            (
+                "Der Zähler zieht nach oben",
+                "24 nov 2026",
+                "Wer gerade spielt, steht neben dem Titel, und die Fußzeile ist aufgeräumt.",
+                "Der Zähler, wie viele gerade spielen, steht jetzt neben dem Rustium-Titel und ist beim Öffnen sofort zu sehen. Die Social-Icons unten sind größer, das YouTube-Play ist ausgespart, damit man es sofort erkennt, und der Mojang-Hinweis bleibt unten. Die Instanzen zeigen einen klaren Namen und ihre Version: die Standardinstanz heißt „Standardinstanz“, und die Optionen sind in die Leiste gewandert, damit die Spielen-Zeile nicht mehr überläuft.",
+            ),
             (
                 "Deine Screenshots, sofort griffbereit",
                 "23. Nov. 2026",
@@ -1236,8 +1306,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             shots_intro: "Every capture you take with F2 in Rustium shows up here, from any instance.",
             shots_none: "No screenshots yet. Press F2 while playing.",
             shots_open: "Open",
-            online_players: "{n} playing now",
-            instance_version_hint: "Changing the version keeps this instance's world, so you can update it or go back to an older build.",
+            online_players_one: "{n} is playing Rustium right now",
+            online_players_many: "{n} are playing Rustium right now",
+            instance_version_hint: "Changing the version keeps this instance's world.",
             worlds_title: "Your worlds",
             worlds_intro: "Each instance keeps its own world, so they never mix. Open its folder, play it or delete it from here.",
             world_none: "No world saved yet",
@@ -1316,8 +1387,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             shots_intro: "Aquí aparecen todas las capturas que hagas con F2 en Rustium, de cualquier instancia.",
             shots_none: "Todavía no hay capturas. Pulsa F2 mientras juegas.",
             shots_open: "Abrir",
-            online_players: "{n} jugando ahora",
-            instance_version_hint: "Al cambiar la versión se conserva el mundo de esta instancia, así puedes actualizarlo o volver a una versión anterior.",
+            online_players_one: "{n} está jugando Rustium ahora mismo",
+            online_players_many: "{n} están jugando Rustium ahora mismo",
+            instance_version_hint: "Al cambiar la versión se conserva el mundo de la instancia.",
             worlds_title: "Tus mundos",
             worlds_intro: "Cada instancia guarda su propio mundo, así nunca se mezclan. Desde aquí puedes abrir su carpeta, jugarlo o borrarlo.",
             world_none: "Todavía no hay mundo guardado",
@@ -1396,8 +1468,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             shots_intro: "Aqui aparecem todas as capturas que fizeres com F2 no Rustium, de qualquer instância.",
             shots_none: "Ainda não há capturas. Carrega em F2 enquanto jogas.",
             shots_open: "Abrir",
-            online_players: "{n} a jogar agora",
-            instance_version_hint: "Ao mudar a versão, o mundo desta instância mantém-se, por isso podes atualizá-lo ou voltar a uma versão anterior.",
+            online_players_one: "{n} está a jogar Rustium agora mesmo",
+            online_players_many: "{n} estão a jogar Rustium agora mesmo",
+            instance_version_hint: "Ao mudar a versão, o mundo da instância mantém-se.",
             worlds_title: "Os teus mundos",
             worlds_intro: "Cada instância guarda o seu próprio mundo, por isso nunca se misturam. Aqui podes abrir a pasta, jogar ou apagar.",
             world_none: "Ainda não há mundo guardado",
@@ -1476,8 +1549,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             shots_intro: "Toutes les captures prises avec F2 dans Rustium apparaissent ici, quelle que soit l'instance.",
             shots_none: "Pas encore de capture. Appuie sur F2 en jouant.",
             shots_open: "Ouvrir",
-            online_players: "{n} en ligne",
-            instance_version_hint: "Changer de version garde le monde de cette instance : tu peux le mettre à jour ou revenir à une version antérieure.",
+            online_players_one: "{n} joue à Rustium en ce moment",
+            online_players_many: "{n} jouent à Rustium en ce moment",
+            instance_version_hint: "Changer de version garde le monde de cette instance.",
             worlds_title: "Vos mondes",
             worlds_intro: "Chaque instance garde son propre monde, ils ne se mélangent donc jamais. D'ici, tu peux ouvrir son dossier, jouer ou le supprimer.",
             world_none: "Pas encore de monde enregistré",
@@ -1556,8 +1630,9 @@ fn ui_texts(l: Lang) -> UiTexts {
             shots_intro: "Hier erscheinen alle Aufnahmen, die du in Rustium mit F2 machst, aus jeder Instanz.",
             shots_none: "Noch keine Aufnahmen. Drücke beim Spielen F2.",
             shots_open: "Öffnen",
-            online_players: "{n} spielen gerade",
-            instance_version_hint: "Beim Versionswechsel bleibt die Welt dieser Instanz erhalten, du kannst sie also aktualisieren oder auf eine ältere Version zurückgehen.",
+            online_players_one: "{n} spielt gerade Rustium",
+            online_players_many: "{n} spielen gerade Rustium",
+            instance_version_hint: "Beim Versionswechsel bleibt die Welt der Instanz erhalten.",
             worlds_title: "Deine Welten",
             worlds_intro: "Jede Instanz speichert ihre eigene Welt, so vermischen sie sich nie. Hier kannst du ihren Ordner öffnen, spielen oder sie löschen.",
             world_none: "Noch keine Welt gespeichert",
@@ -2116,25 +2191,83 @@ fn parse_release(body: &str) -> Option<Update> {
     })
 }
 
-/// Asks the project's release list whether there is something newer. Returns None
-/// on any failure: no network, no releases yet, or a malformed answer. The UI never
-/// shows an error for this.
-/// Players in Rustium right now, as published by the project. Only the count is
-/// read; no information about this computer is sent.
-fn check_online() -> Option<u64> {
-    let url = std::env::var("RUSTIUM_ONLINE_URL")
-        .ok()
-        .filter(|u| https_ok(u))
-        .unwrap_or_else(|| ONLINE_URL.to_string());
-    let body = ureq::get(&url)
+/// The random id this installation is counted under, made once and kept next to
+/// the config. It is not derived from the hardware, so it says nothing about the
+/// computer; deleting the file just starts a new one.
+fn install_id() -> Option<String> {
+    let p = config_path()?.parent()?.join("install_id.txt");
+    if let Ok(s) = std::fs::read_to_string(&p) {
+        let s = s.trim().to_ascii_lowercase();
+        if s.len() == 32 && s.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Some(s);
+        }
+    }
+    use std::hash::{BuildHasher, Hasher};
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut a = std::collections::hash_map::RandomState::new().build_hasher();
+    a.write_u128(now);
+    a.write_u32(std::process::id());
+    let mut b = std::collections::hash_map::RandomState::new().build_hasher();
+    b.write_u128(now.rotate_left(64));
+    b.write_u32(std::process::id());
+    let id = format!("{:016x}{:016x}", a.finish(), b.finish());
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&p, &id);
+    Some(id)
+}
+
+/// Tells the project this launcher is open, so the counter means something. Only
+/// the random install id and the time leave this computer: no account, no name,
+/// no world. The server keeps when it last saw that id and forgets it after 30 days.
+fn send_ping() {
+    if std::env::var("RUSTIUM_ONLINE_URL").is_ok() {
+        return; // a static file cannot count, so there is nothing to ping
+    }
+    let Some(id) = install_id() else { return };
+    let body = format!("{{\"p_id\":\"{id}\"}}");
+    let _ = ureq::post(&format!("{SUPABASE_URL}/rest/v1/rpc/ping"))
+        .set("apikey", SUPABASE_KEY)
+        .set("Authorization", &format!("Bearer {SUPABASE_KEY}"))
+        .set("Content-Type", "application/json")
         .timeout(std::time::Duration::from_secs(6))
-        .call()
+        .send_string(&body);
+}
+
+/// Players in Rustium right now. Rows older than three minutes do not count, so a
+/// launcher that was closed stops showing up on its own.
+fn check_online() -> Option<u64> {
+    if let Ok(url) = std::env::var("RUSTIUM_ONLINE_URL") {
+        if !https_ok(&url) {
+            return None;
+        }
+        let body = ureq::get(&url)
+            .timeout(std::time::Duration::from_secs(6))
+            .call()
+            .ok()?
+            .into_string()
+            .ok()?;
+        return json_number(&body, "online").or_else(|| json_number(&body, "players"));
+    }
+    let body = ureq::post(&format!("{SUPABASE_URL}/rest/v1/rpc/players_online"))
+        .set("apikey", SUPABASE_KEY)
+        .set("Authorization", &format!("Bearer {SUPABASE_KEY}"))
+        .set("Content-Type", "application/json")
+        .timeout(std::time::Duration::from_secs(6))
+        .send_string("{}")
         .ok()?
         .into_string()
         .ok()?;
-    json_number(&body, "online").or_else(|| json_number(&body, "players"))
+    body.trim().parse().ok()
 }
 
+/// Asks the project's release list whether there is something newer. Returns None
+/// on any failure: no network, no releases yet, or a malformed answer. The UI never
+/// shows an error for this.
 fn check_update() -> Option<Update> {
     let url = std::env::var("RUSTIUM_UPDATE_URL").unwrap_or_else(|_| UPDATE_URL.to_string());
     let agent = ureq::AgentBuilder::new()
@@ -3990,7 +4123,7 @@ mod ui {
         /// Kept while the panel fades out, so it does not vanish mid-animation.
         panel_text: &'static str,
         shots: Vec<ShotRow>,
-        /// Players online, as published by the project's status file.
+        /// Players online, as counted by the project's own endpoint.
         online: Option<u64>,
         online_rx: Option<Receiver<Option<u64>>>,
         online_t: std::time::Instant,
@@ -4026,6 +4159,7 @@ mod ui {
             });
             let (otx, orx) = channel();
             std::thread::spawn(move || {
+                send_ping();
                 let _ = otx.send(check_online());
             });
 
@@ -4246,7 +4380,7 @@ mod ui {
             let mut d = self.new_inst.clone();
             d.name = clean_name(&d.name);
             if d.name.is_empty() {
-                d.name = d.game.id().to_string();
+                d.name = default_instance_name(self.lang).to_string();
             }
             let id = unique_instance_id(&self.instances, d.game);
             let (width, height) = parse_resolution(&d.width, &d.height);
@@ -4274,9 +4408,10 @@ mod ui {
             let Some(src) = self.instances.get(self.sel).cloned() else { return };
             let u = ui_texts(self.lang);
             let id = unique_instance_id(&self.instances, src.game);
+            let base = instance_title(self.lang, &src.name, src.game);
             let inst = Instance {
                 id,
-                name: format!("{} {}", src.name, u.instance_copy_suffix),
+                name: format!("{base} {}", u.instance_copy_suffix),
                 // A copy gets its own default folder; sharing the source folder
                 // would make both instances save into the same level.dat.
                 dir: None,
@@ -4489,6 +4624,7 @@ mod ui {
             let before = self.instances[self.sel].clone();
             let mut inst = before.clone();
             let default_dir = worlds_root().join(&before.id);
+            let mut name_text = instance_title(self.lang, &before.name, before.game);
             let mut dir_text = before
                 .dir
                 .as_ref()
@@ -4537,7 +4673,7 @@ mod ui {
                     ui.add_space(10.0);
                     ui.label(RichText::new(u.instance_name).size(10.5).color(MUTED).strong());
                     ui.add(
-                        egui::TextEdit::singleline(&mut inst.name)
+                        egui::TextEdit::singleline(&mut name_text)
                             .char_limit(40)
                             .desired_width(f32::INFINITY),
                     );
@@ -4624,9 +4760,16 @@ mod ui {
                 self.duplicate_instance();
                 return;
             }
-            inst.name = clean_name(&inst.name);
-            if inst.name.is_empty() {
-                inst.name = inst.game.id().to_string();
+            if name_text == instance_title(self.lang, &before.name, before.game)
+                && inst.game == before.game
+            {
+                // Opening and closing the window must not rewrite the file.
+                inst.name = before.name.clone();
+            } else {
+                inst.name = clean_name(&name_text);
+                if inst.name.is_empty() {
+                    inst.name = default_instance_name(self.lang).to_string();
+                }
             }
             inst.dir = parse_custom_dir(&dir_text);
             let (width, height) = parse_resolution(&width_text, &height_text);
@@ -4722,6 +4865,7 @@ mod ui {
                 let (tx, rx) = channel();
                 self.online_rx = Some(rx);
                 std::thread::spawn(move || {
+                    send_ping();
                     let _ = tx.send(check_online());
                 });
             }
@@ -4873,7 +5017,7 @@ mod ui {
 
             // Every row is an instance: a version plus its own world and extras.
             let mut pick: Option<usize> = None;
-            let rail_h = (ui.available_height() - 150.0).max(120.0);
+            let rail_h = (ui.available_height() - 196.0).max(120.0);
             egui::ScrollArea::vertical()
                 .max_height(rail_h)
                 .auto_shrink([false, false])
@@ -4889,12 +5033,9 @@ mod ui {
                         } else {
                             (AMBER, u.instance_replacement)
                         };
-                        let sub = if inst.name == inst.game.id() {
-                            ready.to_string()
-                        } else {
-                            format!("{} · {}", inst.game.id(), ready)
-                        };
-                        let row = instance_row(ui, &inst.id, &inst.name, &sub, dot, i == self.sel);
+                        let title = instance_title(self.lang, &inst.name, inst.game);
+                        let sub = format!("{} · {}", inst.game.id(), ready);
+                        let row = instance_row(ui, &inst.id, &title, &sub, dot, i == self.sel);
                         if row.clicked() {
                             pick = Some(i);
                         }
@@ -4916,7 +5057,18 @@ mod ui {
             }
 
             // Footer: reserved at the bottom so it never falls off a short window.
-            ui.add_space((ui.available_height() - 165.0).max(6.0));
+            ui.add_space((ui.available_height() - 211.0).max(6.0));
+            if ui
+                .add(
+                    egui::Button::new(RichText::new(u.instance_options).size(12.5).color(SOFT))
+                        .fill(Color32::TRANSPARENT)
+                        .corner_radius(6),
+                )
+                .clicked()
+            {
+                self.show_new = false;
+                self.show_instance = true;
+            }
             if ui
                 .add(
                     egui::Button::new(RichText::new(u.tab_worlds).size(12.5).color(SOFT))
@@ -5411,6 +5563,10 @@ mod ui {
             {
                 ctx.request_repaint_after(std::time::Duration::from_millis(120));
             }
+            // The count refreshes every minute: wake the window when the next
+            // poll is due, or an idle launcher would wait for the next click.
+            let due = 60u64.saturating_sub(self.online_t.elapsed().as_secs());
+            ctx.request_repaint_after(std::time::Duration::from_secs(due.max(1)));
             let t = texts(self.lang);
             let u = ui_texts(self.lang);
             let (l_ver, l_tex, l_perf, more_news) = extra_texts(self.lang);
@@ -5429,6 +5585,44 @@ mod ui {
             };
             let detected = self.det.origin == "detected";
             let tab = self.tab;
+
+            // Credit, networks and the Mojang notice live at the foot of the
+            // window, out of the way of the title and the play button.
+            egui::TopBottomPanel::bottom("footer")
+                .exact_height(80.0)
+                .resizable(false)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(RAIL)
+                        .inner_margin(egui::Margin { left: 30, right: 30, top: 8, bottom: 8 }),
+                )
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 7.0;
+                        if social_icon(ui, Social::YouTube).clicked() {
+                            open_in_browser("https://www.youtube.com/@eldandimc");
+                        }
+                        if social_icon(ui, Social::Discord).clicked() {
+                            open_in_browser("https://discord.gg/HP2GPrcEXD");
+                        }
+                        if social_icon(ui, Social::Patreon).clicked() {
+                            open_in_browser("https://www.patreon.com/c/dandimc");
+                        }
+                        ui.add_space(10.0);
+                        ui.label(
+                            RichText::new(creator_label(self.lang))
+                                .size(12.5)
+                                .color(SOFT),
+                        );
+                    });
+                    ui.add_space(3.0);
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(t.legal_footer).size(9.5).color(MUTED),
+                        )
+                        .wrap(),
+                    );
+                });
 
             egui::SidePanel::left("rail")
                 .exact_width(250.0)
@@ -5478,30 +5672,13 @@ mod ui {
                             });
                             ui.add_space(16.0);
 
-                            // Titulo en su linea y, debajo, el credito con las
-                            // redes y el aviso legal: asi los iconos tienen sitio y
-                            // nada se apila contra el titulo por la derecha.
-                            ui.label(
-                                disp("Rustium", 54.0).color(Color32::from_rgb(250, 244, 250)),
-                            );
-                            ui.add_space(2.0);
+                            // El contador vive junto al titulo; el credito, las
+                            // redes y el aviso de Mojang viven en la barra inferior.
                             ui.horizontal(|ui| {
                                 ui.label(
-                                    RichText::new(creator_label(self.lang))
-                                        .size(11.5)
-                                        .color(SOFT),
+                                    disp("Rustium", 54.0)
+                                        .color(Color32::from_rgb(250, 244, 250)),
                                 );
-                                ui.add_space(2.0);
-                                ui.spacing_mut().item_spacing.x = 5.0;
-                                if social_icon(ui, Social::YouTube).clicked() {
-                                    open_in_browser("https://www.youtube.com/@eldandimc");
-                                }
-                                if social_icon(ui, Social::Discord).clicked() {
-                                    open_in_browser("https://discord.gg/HP2GPrcEXD");
-                                }
-                                if social_icon(ui, Social::Patreon).clicked() {
-                                    open_in_browser("https://www.patreon.com/c/dandimc");
-                                }
                                 if let Some(n) = self.online.filter(|n| *n > 0) {
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
@@ -5514,24 +5691,22 @@ mod ui {
                                             ui.add_space(2.0);
                                             ui.label(
                                                 RichText::new(fill(
-                                                    u.online_players,
+                                                    if n == 1 {
+                                                        u.online_players_one
+                                                    } else {
+                                                        u.online_players_many
+                                                    },
                                                     "{n}",
                                                     &n.to_string(),
                                                 ))
-                                                .size(11.0)
+                                                .size(12.5)
                                                 .color(GREEN),
                                             );
                                         },
                                     );
                                 }
                             });
-                            ui.add_space(3.0);
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(t.legal_footer).size(9.5).color(MUTED),
-                                )
-                                .wrap(),
-                            );
+                            ui.add_space(10.0);
                             // The long path is only worth showing when something is
                             // missing; otherwise it lives inside the texture card.
                             if !have {
@@ -5546,11 +5721,11 @@ mod ui {
                                 // The version lives in the rail (one list), so the
                                 // home tab goes straight to playing.
                                 if let Some(inst) = self.instances.get(self.sel) {
-                                    let label = if inst.name == inst.game.id() {
-                                        inst.name.clone()
-                                    } else {
-                                        format!("{} · {}", inst.name, inst.game.id())
-                                    };
+                                    let label = format!(
+                                        "{} · {}",
+                                        instance_title(self.lang, &inst.name, inst.game),
+                                        inst.game.id()
+                                    );
                                     ui.label(RichText::new(label).size(12.5).color(SOFT));
                                     ui.add_space(6.0);
                                 }
@@ -5558,17 +5733,13 @@ mod ui {
                                     if hero_button(ui, t.play, 210.0, 54.0, !busy).clicked() {
                                         self.play();
                                     }
-                                    if plain_button(ui, u.instance_options, 150.0, !busy).clicked() {
-                                        self.show_new = false;
-                                        self.show_instance = true;
-                                    }
                                     if plain_button(ui, t.refresh, 120.0, !busy).clicked() {
                                         self.refresh();
                                     }
-                                    if plain_button(ui, u.folder, 150.0, !self.game_dir.as_os_str().is_empty()).clicked() {
+                                    if plain_button(ui, u.folder, 140.0, !self.game_dir.as_os_str().is_empty()).clicked() {
                                         reveal_world_dir(&self.game_dir);
                                     }
-                                    if plain_button(ui, t.how, 160.0, !busy).clicked() {
+                                    if plain_button(ui, t.how, 145.0, !busy).clicked() {
                                         self.show = if self.show == Some(t.how_text) {
                                             None
                                         } else {
@@ -5816,6 +5987,7 @@ mod ui {
                                         // The build each version card talks about.
                                         let tags = [
                                             "Rustium 0.2.1",
+                                            "Rustium 0.2.1",
                                             "rd-132211 … rd-161348",
                                             "rd-20090515",
                                             "rd-132328",
@@ -5836,17 +6008,18 @@ mod ui {
                                                 item.3.to_string(),
                                                 tags.get(i).copied().unwrap_or("").to_string(),
                                                 match i {
-                                                    0 => Some(Art::Shots),
-                                                    2 => Some(Art::Bush),
-                                                    3 => Some(Art::Zombies),
-                                                    4 => Some(Art::Upright),
-                                                    5 => Some(Art::Zombies),
-                                                    6 => Some(Art::Cave),
-                                                    7 => Some(Art::Worlds),
-                                                    8 => Some(Art::ClassicHit),
-                                                    9 => Some(Art::ClassicBuild),
-                                                    10 => Some(Art::LauncherShot),
-                                                    11 => Some(Art::Walk),
+                                                    0 => Some(Art::LauncherShot),
+                                                    1 => Some(Art::Shots),
+                                                    3 => Some(Art::Bush),
+                                                    4 => Some(Art::Zombies),
+                                                    5 => Some(Art::Upright),
+                                                    6 => Some(Art::Zombies),
+                                                    7 => Some(Art::Cave),
+                                                    8 => Some(Art::Worlds),
+                                                    9 => Some(Art::ClassicHit),
+                                                    10 => Some(Art::ClassicBuild),
+                                                    11 => Some(Art::LauncherShot),
+                                                    12 => Some(Art::Walk),
                                                     _ => Some(Art::World),
                                                 },
                                             ));
@@ -6086,7 +6259,7 @@ mod ui {
     /// row belongs to the launcher's palette instead of three brand colours.
     fn social_icon(ui: &mut egui::Ui, social: Social) -> egui::Response {
         let (rect, resp) =
-            ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::click());
+            ui.allocate_exact_size(egui::vec2(46.0, 46.0), egui::Sense::click());
         let hover = resp.hovered();
         let (brand, name, file, bytes): (Color32, &str, &str, &'static [u8]) = match social {
             Social::YouTube => (
@@ -6111,7 +6284,7 @@ mod ui {
         let p = ui.painter();
         p.rect(
             rect,
-            8.0,
+            12.0,
             if hover {
                 Color32::from_rgba_unmultiplied(brand.r(), brand.g(), brand.b(), 46)
             } else {
@@ -6121,7 +6294,7 @@ mod ui {
             egui::StrokeKind::Inside,
         );
         if let Some(tex) = png_texture(ui.ctx(), file, bytes) {
-            let logo = egui::Rect::from_center_size(rect.center(), egui::vec2(21.0, 21.0));
+            let logo = egui::Rect::from_center_size(rect.center(), egui::vec2(36.0, 36.0));
             p.image(
                 tex.id(),
                 logo,
