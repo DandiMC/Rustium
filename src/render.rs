@@ -58,6 +58,53 @@ fn fs_main(v: VOut) -> @location(0) vec4<f32> {
 }
 "#;
 
+// Agua y lava de c0.0.12a: misma geometria que el terreno, pero el color sale
+// con el alfa del atlas y se mezcla con lo que hay detras. La textura importada
+// de c0.0.13a_03 se ajusta a la transparencia de c0.0.12a en parchear el atlas.
+pub const LIQUID_SHADER_WGSL: &str = r#"
+struct Uniforms {
+    view_proj: mat4x4<f32>,
+    fog_color: vec4<f32>,
+    camera_pos: vec4<f32>,
+    fog_density: f32,
+    fog_exp: f32,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var tex: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+
+struct VOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) shade: f32,
+    @location(2) fogz: f32,
+};
+
+@vertex
+fn vs_main(@location(0) pos: vec3<f32>, @location(1) uv: vec2<f32>, @location(2) shade: f32) -> VOut {
+    var o: VOut;
+    let clip = u.view_proj * vec4<f32>(pos, 1.0);
+    o.clip = clip;
+    o.uv = uv;
+    o.shade = shade;
+    o.fogz = clip.w;
+    return o;
+}
+
+@fragment
+fn fs_main(v: VOut) -> @location(0) vec4<f32> {
+    let c = textureSample(tex, samp, v.uv);
+    if (c.a < 0.01) { discard; }
+    let dist = max(v.fogz, 0.0);
+    var fog = 1.0 - exp(-dist * dist * u.fog_density * u.fog_density);
+    if (u.fog_exp > 0.5) {
+        fog = 1.0 - exp(-dist * u.fog_density);
+    }
+    let rgb = mix(c.rgb * v.shade, u.fog_color.rgb, clamp(fog, 0.0, 1.0));
+    return vec4<f32>(rgb, c.a);
+}
+"#;
+
 // Resaltado del bloque apuntado. Modo romper: una sola cara, la que se esta
 // mirando, con una capa blanca translucida (no se enciende el bloque entero).
 // Modo construir: el bloque elegido dibujado con terrain.png en la casilla donde
@@ -1012,11 +1059,14 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub pipeline: wgpu::RenderPipeline,
+    pub liquid_pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
     pub uniform_buf: wgpu::Buffer,
     pub depth_tex: wgpu::Texture,
     pub depth_view: wgpu::TextureView,
     pub chunks: Vec<Option<Chunk>>,
+    pub chunks_liquidos: Vec<Option<Chunk>>,
+    pub chunks_liquidos_fog: Vec<Option<Chunk>>,
     pub hit_pipeline: wgpu::RenderPipeline,
     pub hit_preview_pipeline: wgpu::RenderPipeline,
     pub hit_uniform: wgpu::Buffer,
@@ -1177,10 +1227,22 @@ impl Renderer {
             .or_else(load_original_atlas)
             .unwrap_or_else(generate_atlas);
         // c0.0.12a anadio agua, lava y bedrock. El jar de 0.0.11a no trae esas
-        // caras, asi que se pintan aqui encima del atlas elegido. No es arte de
-        // Mojang: son tiles propios del port.
+        // caras. Primero se intentan importar del jar oficial de c0.0.13a_03
+        // (la version con lava mas antigua que sigue en el launcher); si no
+        // esta instalada, se pintan los tiles propios del port.
         if version_atlas == "c0.0.12a" {
-            parchear_atlas_clasico_012(&mut atlas_data);
+            let fuente = std::env::var("RD_ATLAS_012").ok()
+                .and_then(|r| cargar_atlas_de_ruta(&r))
+                .or_else(|| cargar_png_del_jar("c0.0.13a_03", "terrain.png"))
+                .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
+                .map(|(_, _, px)| px);
+            let importado = fuente
+                .as_deref()
+                .map(|src| importar_tiles_desde_013a(&mut atlas_data, src))
+                .unwrap_or(false);
+            if !importado {
+                parchear_atlas_clasico_012(&mut atlas_data);
+            }
         }
         // RD_ATLAS_DUMP=1 escribe el atlas que se esta usando, para comprobarlo
         // contra el terrain.png del jar (careo de texturas).
@@ -1317,6 +1379,49 @@ impl Renderer {
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
                 depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Greater,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        let liquid_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("liquid shader"),
+            source: wgpu::ShaderSource::Wgsl(LIQUID_SHADER_WGSL.into()),
+        });
+        let liquid_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("liquid pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &liquid_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Vertex::layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &liquid_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                // El color se mezcla, pero el liquido no debe tapar el fondo
+                // en el depth buffer: el terreno opaco ya se dibujo antes.
+                depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Greater,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
@@ -2007,11 +2112,14 @@ impl Renderer {
             queue,
             config,
             pipeline,
+            liquid_pipeline,
             bind_group,
             uniform_buf,
             depth_tex,
             depth_view,
             chunks: Vec::new(),
+            chunks_liquidos: Vec::new(),
+            chunks_liquidos_fog: Vec::new(),
             hit_pipeline,
             hit_preview_pipeline,
             hit_uniform,
@@ -2211,6 +2319,37 @@ impl Renderer {
         let c1 = self.chunk_opcional(&capa1.0, &capa1.1);
         self.chunks[k] = c0;
         self.chunks_fog[k] = c1;
+    }
+
+    // Sube las mallas de liquido; van en su propio pase con alpha blending.
+    pub fn subir_liquidos(
+        &mut self,
+        capa0: Vec<(Vec<Vertex>, Vec<u32>)>,
+        capa1: Vec<(Vec<Vertex>, Vec<u32>)>,
+    ) {
+        let a: Vec<Option<Chunk>> = capa0
+            .iter()
+            .map(|(v, i)| self.chunk_opcional(v, i))
+            .collect();
+        let b: Vec<Option<Chunk>> = capa1
+            .iter()
+            .map(|(v, i)| self.chunk_opcional(v, i))
+            .collect();
+        self.chunks_liquidos = a;
+        self.chunks_liquidos_fog = b;
+    }
+
+    pub fn actualizar_liquidos(
+        &mut self,
+        k: usize,
+        capa0: (Vec<Vertex>, Vec<u32>),
+        capa1: (Vec<Vertex>, Vec<u32>),
+    ) {
+        if k >= self.chunks_liquidos.len() || k >= self.chunks_liquidos_fog.len() {
+            return;
+        }
+        self.chunks_liquidos[k] = self.chunk_opcional(&capa0.0, &capa0.1);
+        self.chunks_liquidos_fog[k] = self.chunk_opcional(&capa1.0, &capa1.1);
     }
 
     // Particulas: reescribe el buffer persistente. Los indices ya estan
@@ -2480,6 +2619,26 @@ impl Renderer {
                     pass.set_vertex_buffer(0, self.part_fondo_vbuf.slice(..));
                     pass.set_index_buffer(self.part_ibuf.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..self.part_fondo_count, 0, 0..1);
+                }
+                pass.set_bind_group(0, &self.bind_group, &[]);
+            }
+            // Agua y lava al final del terreno: el pipeline mezcla el alfa del
+            // atlas con el terreno opaco que ya esta en el color buffer.
+            if !self.chunks_liquidos.is_empty() || !self.chunks_liquidos_fog.is_empty() {
+                pass.set_pipeline(&self.liquid_pipeline);
+                pass.set_bind_group(0, &self.bind_group, &[]);
+                for c in self.chunks_liquidos.iter().flatten() {
+                    if c.icount == 0 { continue; }
+                    pass.set_vertex_buffer(0, c.vbuf.slice(..));
+                    pass.set_index_buffer(c.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..c.icount, 0, 0..1);
+                }
+                pass.set_bind_group(0, &self.fog_bg, &[]);
+                for c in self.chunks_liquidos_fog.iter().flatten() {
+                    if c.icount == 0 { continue; }
+                    pass.set_vertex_buffer(0, c.vbuf.slice(..));
+                    pass.set_index_buffer(c.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..c.icount, 0, 0..1);
                 }
                 pass.set_bind_group(0, &self.bind_group, &[]);
             }
@@ -3140,6 +3299,71 @@ pub fn cargar_png_del_jar(version: &str, nombre: &str) -> Option<(u32, u32, Vec<
     Some((w as u32, h as u32, rgba))
 }
 
+/// Copia agua, lava y bedrock del atlas oficial de c0.0.13a_03 al atlas del
+/// port. En ese jar los tiles son 14 (agua), 17 (bedrock) y 30 (lava); el port
+/// usa 8, 7 y 9. La lava de c0.0.13a es opaca, pero la de c0.0.12a era
+/// transparente: se le pone el mismo alfa que tenia la 0.0.12a (148, y 201 en
+/// los pixeles rojo oscuro). No se copia ningun asset al proyecto: se lee del
+/// jar que el usuario ya tiene instalado.
+pub fn importar_tiles_desde_013a(dst: &mut [u8], src: &[u8]) -> bool {
+    let len = ATLAS_SIZE * ATLAS_SIZE * 4;
+    if dst.len() < len || src.len() < len {
+        return false;
+    }
+
+    let tile = |data: &[u8], t: usize, px: usize, py: usize| -> [u8; 4] {
+        let x = (t % TILES_PER_ROW) * TILE + px;
+        let y = (t / TILES_PER_ROW) * TILE + py;
+        let i = (y * ATLAS_SIZE + x) * 4;
+        [data[i], data[i + 1], data[i + 2], data[i + 3]]
+    };
+    let media = |t: usize| -> (i32, i32, i32, i32) {
+        let mut s = (0i32, 0i32, 0i32, 0i32);
+        for py in 0..TILE {
+            for px in 0..TILE {
+                let p = tile(src, t, px, py);
+                s.0 += p[0] as i32;
+                s.1 += p[1] as i32;
+                s.2 += p[2] as i32;
+                s.3 += p[3] as i32;
+            }
+        }
+        (s.0 / 256, s.1 / 256, s.2 / 256, s.3 / 256)
+    };
+
+    // Comprobar que los tiles son los esperados antes de tocar el atlas: si el
+    // jar no es el de c0.0.13a_03, no se importa nada y queda el fallback.
+    let bedrock = media(17);
+    let agua = media(14);
+    let lava = media(30);
+    let bedrock_ok = (bedrock.0 - bedrock.1).abs() < 12
+        && (bedrock.1 - bedrock.2).abs() < 12
+        && bedrock.3 > 245;
+    let agua_ok = agua.2 > agua.0 + 40 && agua.2 > agua.1 + 40 && agua.3 < 240;
+    let lava_ok = lava.0 > 180 && lava.1 < 190 && lava.3 > 245;
+    if !(bedrock_ok && agua_ok && lava_ok) {
+        return false;
+    }
+
+    for (origen, destino) in [(17usize, 7usize), (14, 8), (30, 9)] {
+        for py in 0..TILE {
+            for px in 0..TILE {
+                let mut p = tile(src, origen, px, py);
+                if destino == 9 {
+                    // La lava de 0.0.12a tambien era transparente; el rojo
+                    // oscuro tenia un poco mas de opacidad que el resto.
+                    p[3] = if p[0] < 230 { 201 } else { 148 };
+                }
+                let x = (destino % TILES_PER_ROW) * TILE + px;
+                let y = (destino / TILES_PER_ROW) * TILE + py;
+                let i = (y * ATLAS_SIZE + x) * 4;
+                dst[i..i + 4].copy_from_slice(&p);
+            }
+        }
+    }
+    true
+}
+
 /// Tiles propios de c0.0.12a. El atlas de c0.0.11a no tiene agua, lava ni
 /// bedrock, asi que se pintan encima: bedrock oscuro, agua azul y lava naranja.
 /// El resto del atlas (hierba, piedra, tierra, madera...) se conserva tal cual.
@@ -3320,6 +3544,40 @@ pub fn build_chunk_mesh(level: &Level, cx: usize, cy: usize, capa: u8) -> (Vec<V
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn importa_agua_lava_y_bedrock_del_atlas_de_013a() {
+        let mut src = vec![0u8; ATLAS_SIZE * ATLAS_SIZE * 4];
+        let mut put = |tile: usize, px: usize, py: usize, p: [u8; 4]| {
+            let x = (tile % TILES_PER_ROW) * TILE + px;
+            let y = (tile / TILES_PER_ROW) * TILE + py;
+            let i = (y * ATLAS_SIZE + x) * 4;
+            src[i..i + 4].copy_from_slice(&p);
+        };
+        for py in 0..TILE {
+            for px in 0..TILE {
+                put(17, px, py, [87, 87, 87, 255]);
+                put(14, px, py, [38, 92, 255, 135]);
+                put(30, px, py, [252, 87, 0, 255]);
+            }
+        }
+        put(30, 0, 0, [205, 0, 0, 255]);
+
+        let mut dst = vec![0u8; ATLAS_SIZE * ATLAS_SIZE * 4];
+        assert!(importar_tiles_desde_013a(&mut dst, &src));
+
+        let get = |tile: usize, px: usize, py: usize| -> [u8; 4] {
+            let x = (tile % TILES_PER_ROW) * TILE + px;
+            let y = (tile / TILES_PER_ROW) * TILE + py;
+            let i = (y * ATLAS_SIZE + x) * 4;
+            [dst[i], dst[i + 1], dst[i + 2], dst[i + 3]]
+        };
+        assert_eq!(get(7, 3, 4), [87, 87, 87, 255]);
+        assert_eq!(get(8, 3, 4), [38, 92, 255, 135]);
+        // La lava normal de 0.0.12a era 148/255; el rojo oscuro, 201/255.
+        assert_eq!(get(9, 3, 4)[3], 148);
+        assert_eq!(get(9, 0, 0)[3], 201);
+    }
 
     #[test]
     fn mirar_en_vertical_conserva_el_rumbo() {

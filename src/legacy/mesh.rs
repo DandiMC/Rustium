@@ -97,6 +97,22 @@ pub fn arbusto(x: f32, y: f32, z: f32) -> [([f32; 3], [f32; 2]); 8] {
 }
 
 pub fn construir(nivel: &Nivel, cx: usize, cy: usize, capa: u8) -> (Vec<Vertex>, Vec<u32>) {
+    construir_filtrado(nivel, cx, cy, capa, false)
+}
+
+/// Malla solo con las caras de agua/lava. Va en un pase aparte con blending,
+/// porque en c0.0.12a los dos liquidos son transparentes.
+pub fn construir_liquidos(nivel: &Nivel, cx: usize, cy: usize, capa: u8) -> (Vec<Vertex>, Vec<u32>) {
+    construir_filtrado(nivel, cx, cy, capa, true)
+}
+
+fn construir_filtrado(
+    nivel: &Nivel,
+    cx: usize,
+    cy: usize,
+    capa: u8,
+    solo_liquidos: bool,
+) -> (Vec<Vertex>, Vec<u32>) {
     let iluminada = capa == 0;
     let mut verts = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
@@ -107,6 +123,11 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize, capa: u8) -> (Vec<Vertex>,
             for z in 0..DEPTH {
                 let id = nivel.get(x as i32, y as i32, z as i32);
                 if id == tiles::AIRE {
+                    continue;
+                }
+                // El pase opaco y el de liquidos se reparten las caras: si no,
+                // el agua/lava se dibujaria dos veces (una sin transparencia).
+                if tiles::es_liquido(id) != solo_liquidos {
                     continue;
                 }
                 if id == tiles::ARBUSTO {
@@ -167,6 +188,24 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize, capa: u8) -> (Vec<Vertex>,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn los_liquidos_van_en_la_malla_de_liquidos() {
+        let mut n = Nivel {
+            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
+            light: vec![0; WIDTH * HEIGHT],
+            random: crate::legacy::perlin::JavaRandom::new(0),
+            unprocessed: 0,
+            dirty: Vec::new(),
+            liquidos: Vec::new(),
+        };
+        n.blocks[0] = tiles::AGUA;
+        n.light[0] = 2;
+        let (_, opacos) = construir(&n, 0, 0, 0);
+        let (_, liquidos) = construir_liquidos(&n, 0, 0, 0);
+        assert!(opacos.is_empty());
+        assert!(!liquidos.is_empty());
+    }
 
     #[test]
     fn la_capa_1_dibuja_las_caras_que_dan_a_aire_a_oscuras() {

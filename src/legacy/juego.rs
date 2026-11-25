@@ -538,10 +538,14 @@ impl App {
         let ny = HEIGHT / mesh::CHUNK;
         let mut capa0 = Vec::with_capacity(nx * ny);
         let mut capa1 = Vec::with_capacity(nx * ny);
+        let mut liquidos0 = Vec::with_capacity(nx * ny);
+        let mut liquidos1 = Vec::with_capacity(nx * ny);
         for cy in 0..ny {
             for cx in 0..nx {
                 capa0.push(mesh::construir(&self.nivel, cx, cy, 0));
                 capa1.push(mesh::construir(&self.nivel, cx, cy, 1));
+                liquidos0.push(mesh::construir_liquidos(&self.nivel, cx, cy, 0));
+                liquidos1.push(mesh::construir_liquidos(&self.nivel, cx, cy, 1));
             }
         }
         if self.modo == Modo::Clasico {
@@ -550,6 +554,7 @@ impl App {
         }
         if let Some(r) = &mut self.renderer {
             r.subir_chunks(capa0, capa1);
+            r.subir_liquidos(liquidos0, liquidos1);
         }
     }
 
@@ -582,6 +587,11 @@ impl App {
                     k,
                     mesh::construir(nivel, cx, cy, 0),
                     mesh::construir(nivel, cx, cy, 1),
+                );
+                r.actualizar_liquidos(
+                    k,
+                    mesh::construir_liquidos(nivel, cx, cy, 0),
+                    mesh::construir_liquidos(nivel, cx, cy, 1),
                 );
                 n += 2;
             }
