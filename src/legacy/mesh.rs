@@ -134,6 +134,11 @@ pub fn construir(nivel: &Nivel, cx: usize, cy: usize, capa: u8) -> (Vec<Vertex>,
                     if nivel.is_solid(nx, ny, nz) {
                         continue;
                     }
+                    // Dos bloques del mismo liquido no dibujan la cara que los
+                    // separa; si no, el oceano seria una pila de paredes azules.
+                    if tiles::es_liquido(id) && nivel.get(nx, ny, nz) == id {
+                        continue;
+                    }
                     // shouldRenderFace del original: `!isSolid && isLit ^ layer == 1`.
                     if nivel.is_lit(nx, ny, nz) != iluminada {
                         continue;
@@ -171,6 +176,7 @@ mod tests {
             random: crate::legacy::perlin::JavaRandom::new(0),
             unprocessed: 0,
             dirty: Vec::new(),
+            liquidos: Vec::new(),
         };
         // Piedra en (0,0,0) con la columna a oscuras desde z=1: la cara de
         // arriba da a aire sin luz (solo capa 1); las otras cinco dan a aire

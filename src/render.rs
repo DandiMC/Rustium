@@ -554,7 +554,7 @@ fn ui_texto_color(out: &mut Vec<f32>, text: &str, width: u32, height: u32, x: f3
 
 // Tarjeta de captura: entra deslizandose desde la derecha, la insignia late,
 // la barra se llena y se va sola. Se dibuja en el renderer compartido, asi que
-// sale en las 14 versiones.
+// sale en las 15 versiones.
 const TOAST_DURACION: f32 = 2.6;
 const TOAST_ANCHO: f32 = 292.0;
 const TOAST_ALTO: f32 = 58.0;
@@ -922,6 +922,9 @@ fn hud_textura(id: u8, cara: usize) -> u32 {
         4 => 16,             // ladrillo
         5 => 4,              // madera
         6 => 15,             // arbusto
+        7 => 7,              // bedrock de c0.0.12a
+        8 => 8,              // agua
+        9 => 9,              // lava
         _ => 0,
     }
 }
@@ -1155,7 +1158,7 @@ impl Renderer {
         // Prioridad: RD_ATLAS (ruta elegida a mano o detectada por el launcher) ->
         // jar de la version en %APPDATA% -> terrain.png del jar de rd-132211 ->
         // textura de reemplazo propia.
-        let atlas_data = std::env::var("RD_ATLAS").ok()
+        let mut atlas_data = std::env::var("RD_ATLAS").ok()
             .and_then(|r| cargar_atlas_de_ruta(&r))
             .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
             .map(|(_, _, px)| px)
@@ -1173,6 +1176,12 @@ impl Renderer {
             })
             .or_else(load_original_atlas)
             .unwrap_or_else(generate_atlas);
+        // c0.0.12a anadio agua, lava y bedrock. El jar de 0.0.11a no trae esas
+        // caras, asi que se pintan aqui encima del atlas elegido. No es arte de
+        // Mojang: son tiles propios del port.
+        if version_atlas == "c0.0.12a" {
+            parchear_atlas_clasico_012(&mut atlas_data);
+        }
         // RD_ATLAS_DUMP=1 escribe el atlas que se esta usando, para comprobarlo
         // contra el terrain.png del jar (careo de texturas).
         if std::env::var_os("RD_ATLAS_DUMP").is_some() {
@@ -3129,6 +3138,42 @@ pub fn cargar_png_del_jar(version: &str, nombre: &str) -> Option<(u32, u32, Vec<
         rgba[i * 4 + 3] = a;
     }
     Some((w as u32, h as u32, rgba))
+}
+
+/// Tiles propios de c0.0.12a. El atlas de c0.0.11a no tiene agua, lava ni
+/// bedrock, asi que se pintan encima: bedrock oscuro, agua azul y lava naranja.
+/// El resto del atlas (hierba, piedra, tierra, madera...) se conserva tal cual.
+pub fn parchear_atlas_clasico_012(data: &mut [u8]) {
+    if data.len() < ATLAS_SIZE * ATLAS_SIZE * 4 {
+        return;
+    }
+    let tiles = [
+        (7usize, 62i32, 62i32, 68i32),
+        (8usize, 42i32, 92i32, 186i32),
+        (9usize, 214i32, 88i32, 22i32),
+    ];
+    for (tile, br, bg, bb) in tiles {
+        let tx = tile % TILES_PER_ROW;
+        let ty = tile / TILES_PER_ROW;
+        for py in 0..TILE {
+            for px in 0..TILE {
+                let x = tx * TILE + px;
+                let y = ty * TILE + py;
+                let i = (y * ATLAS_SIZE + x) * 4;
+                let mut h = (hash2(x, y, 0x012A_5EED ^ tile as u32) % 35) as i32 - 17;
+                if tile == 8 && py % 5 == 0 {
+                    h += 22;
+                }
+                if tile == 9 && hash2(x, y, 0xBEEF_012A) % 17 < 3 {
+                    h += 38;
+                }
+                data[i] = (br + h).clamp(0, 255) as u8;
+                data[i + 1] = (bg + h).clamp(0, 255) as u8;
+                data[i + 2] = (bb + h).clamp(0, 255) as u8;
+                data[i + 3] = 255;
+            }
+        }
+    }
 }
 
 // Textura de REEMPLAZO: la usa el juego cuando el equipo no tiene ninguna copia

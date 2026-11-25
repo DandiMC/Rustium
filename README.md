@@ -3,7 +3,7 @@
 Launcher and Rust port of the pre-classic Minecraft builds (rd-131655, rd-132211,
 rd-132328, rd-20090515, rd-160052 and rd-161348), the Classic private alphas
 (mc-161607, mc-161616, mc-161625 and mc-161648) and the first Classics
-(c0.0.3a, c0.0.9a, c0.0.10a and c0.0.11a), with no Microsoft account and nothing
+(c0.0.3a, c0.0.9a, c0.0.10a, c0.0.11a and c0.0.12a), with no Microsoft account and nothing
 downloaded from Mojang: it reads the textures of the copy already on your computer
 and, if there is none, draws its own.
 
@@ -13,6 +13,8 @@ and, if there is none, draws its own.
 
 ![The Rustium launcher](docs/screenshots/launcher.png)
 
+![Classic 0.0.12a, with water and lava](docs/screenshots/classic012a.png)
+
 ![The Worlds tab](docs/screenshots/launcher-worlds.png)
 
 ![Performance panel comparing Java and Rust](docs/screenshots/launcher-performance.png)
@@ -21,7 +23,7 @@ and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.2.6-setup.exe`.
+You only need **the installer**: `Rustium-0.3.0-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -32,8 +34,8 @@ You only need **the installer**: `Rustium-0.2.6-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the fourteen builds (the six
-pre-classics, the four private alphas and the first four Classics):
+The picker above the Play button starts any of the fifteen builds (the six
+pre-classics, the four private alphas and the first five Classics):
 
 | build | what it brings |
 |---|---|
@@ -51,6 +53,7 @@ pre-classics, the four private alphas and the first four Classics):
 | c0.0.9a | reconstructed: build mode with the white overlay on all sides, fps counter, 640×480 and Escape quits |
 | c0.0.10a | reconstructed: like 0.0.9a, but Escape only releases the mouse |
 | c0.0.11a | the first Classic that survives: `NoiseMap` terrain with caves, an fps/chunk-update HUD and the paint mode the right button toggles |
+| c0.0.12a | water, lava and bedrock: an ocean around the islands, lava lakes, swimming, and 7/8/9 to place water, lava and bedrock |
 
 The four mc- builds, c0.0.3a, c0.0.9a and c0.0.10a are **reconstructions**: their jars
 were never archived. They are built from c0.0.11a's code plus what the Minecraft
@@ -123,7 +126,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.2.6-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.3.0-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 

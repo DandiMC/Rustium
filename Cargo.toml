@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -64,6 +64,11 @@ path = "src/bin/classic010a.rs"
 [[bin]]
 name = "classic011a"
 path = "src/bin/classic011a.rs"
+
+# Primera Classic con liquidos: agua, lava y bedrock
+[[bin]]
+name = "classic012a"
+path = "src/bin/classic012a.rs"
 
 [dependencies]
 winit = "0.30"

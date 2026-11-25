@@ -108,10 +108,11 @@ enum GameVersion {
     C009a,
     C010a,
     C0011a,
+    C0012a,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 14] = [
+    const ALL: [GameVersion; 15] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
@@ -126,6 +127,7 @@ impl GameVersion {
         GameVersion::C009a,
         GameVersion::C010a,
         GameVersion::C0011a,
+        GameVersion::C0012a,
     ];
 
     /// The build name, as the original version is called everywhere else.
@@ -145,6 +147,7 @@ impl GameVersion {
             GameVersion::C009a => "c0.0.9a",
             GameVersion::C010a => "c0.0.10a",
             GameVersion::C0011a => "c0.0.11a",
+            GameVersion::C0012a => "c0.0.12a",
         }
     }
 
@@ -193,6 +196,9 @@ impl GameVersion {
             }
             GameVersion::C0011a => {
                 if win { "classic011a.exe" } else { "classic011a" }
+            }
+            GameVersion::C0012a => {
+                if win { "classic012a.exe" } else { "classic012a" }
             }
         }
     }
@@ -885,7 +891,7 @@ fn date_key(s: &str) -> u32 {
 
 /// Novedades de las versiones del launcher (0.1.4 a 0.2.1).
 /// (titulo, fecha, resumen, cuerpo)
-fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 13] {
+fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 14] {
     match l {
         Lang::En => [
             (
@@ -898,7 +904,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Your captures now get their moment",
                 "24 Nov 2026",
                 "Press F2: the shot is saved and a card celebrates it right away.",
-                "Every F2 saves a clean PNG in its instance's folder, and then a card slides in with a camera badge, CAPTURA REALIZADA, +1 capture and a bar that fills up, like a reward popup. It lasts two and a half seconds and works in all 14 versions. The shot then waits in the Screenshots tab with its date and size.",
+                "Every F2 saves a clean PNG in its instance's folder, and then a card slides in with a camera badge, CAPTURA REALIZADA, +1 capture and a bar that fills up, like a reward popup. It lasts two and a half seconds and works in all 15 versions. The shot then waits in the Screenshots tab with its date and size.",
             ),
             (
                 "The first five versions, one click away",
@@ -966,6 +972,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "mc-161607 to mc-161648: the first Minecraft anyone outside Mojang played.",
                 "These four builds from 16 May 2009 are “Minecraft alpha”, the private test Notch passed to three players over IRC. There were no version numbers in the game yet, so the wiki names them by their build time. All four are here: Escape releases the mouse, Y inverts the mouse axis from mc-161616, and 161625 and 161648 fix the textures and the mouse. Their jars were never archived, so they are reconstructions.",
             ),
+            (
+                "The water and lava are here",
+                "25 Nov 2026",
+                "Classic 0.0.12a adds an ocean, lava lakes and bedrock: you can now swim.",
+                "The world now has water and lava. Dive into the ocean, look for lava lakes on land, and swim with Space. 7, 8 and 9 place water, lava and bedrock so you can try them yourself.",
+            ),
         ],
         Lang::Es => [
             (
@@ -978,7 +990,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Tus capturas ahora se celebran",
                 "24 nov 2026",
                 "Pulsa F2: la captura se guarda y una tarjeta te lo celebra al instante.",
-                "Cada F2 guarda un PNG limpio en la carpeta de su instancia y, al terminar, entra una tarjeta con insignia de cámara, «CAPTURA REALIZADA», +1 captura y una barra que se llena, como un aviso de recompensa. Dura dos segundos y medio y funciona en las 14 versiones. Luego la tienes en la pestaña Capturas, con su fecha y su tamaño.",
+                "Cada F2 guarda un PNG limpio en la carpeta de su instancia y, al terminar, entra una tarjeta con insignia de cámara, «CAPTURA REALIZADA», +1 captura y una barra que se llena, como un aviso de recompensa. Dura dos segundos y medio y funciona en las 15 versiones. Luego la tienes en la pestaña Capturas, con su fecha y su tamaño.",
             ),
             (
                 "Las cinco primeras versiones, a un clic",
@@ -1046,6 +1058,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "mc-161607 a mc-161648: las primeras Minecraft que jugó alguien fuera de Mojang.",
                 "Estos cuatro builds del 16 de mayo de 2009 son «Minecraft alpha», la prueba privada que Notch pasó por IRC a tres jugadores. Todavía no había número de versión en el juego, así que la wiki las nombra por la hora del build. Están las cuatro: Escape libera el ratón, la Y invierte el eje desde mc-161616, y 161625 y 161648 arreglan las texturas y el ratón. Sus jars nunca se archivaron, así que son reconstrucciones.",
             ),
+            (
+                "El agua y la lava ya están aquí",
+                "25 nov 2026",
+                "Classic 0.0.12a añade océano, lagos de lava y bedrock: ya puedes nadar.",
+                "El mundo ya tiene agua y lava. Zambúllete en el océano, busca lagos de lava en tierra y nada con Espacio. Con 7, 8 y 9 puedes poner agua, lava y bedrock para probarlos tú mismo.",
+            ),
         ],
         Lang::Pt => [
             (
@@ -1058,7 +1076,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "As tuas capturas agora celebram-se",
                 "24 nov 2026",
                 "Carrega em F2: a captura guarda-se e um cartão celebra-a logo.",
-                "Cada F2 guarda um PNG limpo na pasta da sua instância e, no fim, entra um cartão com insígnia de câmara, «CAPTURA REALIZADA», +1 captura e uma barra que enche, como um aviso de recompensa. Dura dois segundos e meio e funciona nas 14 versões. Depois fica no separador Capturas, com a data e o tamanho.",
+                "Cada F2 guarda um PNG limpo na pasta da sua instância e, no fim, entra um cartão com insígnia de câmara, «CAPTURA REALIZADA», +1 captura e uma barra que enche, como um aviso de recompensa. Dura dois segundos e meio e funciona nas 15 versões. Depois fica no separador Capturas, com a data e o tamanho.",
             ),
             (
                 "As cinco primeiras versões, a um clique",
@@ -1126,6 +1144,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "mc-161607 a mc-161648: as primeiras Minecraft que alguém fora da Mojang jogou.",
                 "Estes quatro builds de 16 de maio de 2009 são a «Minecraft alpha», o teste privado que o Notch passou por IRC a três jogadores. Ainda não havia número de versão no jogo, por isso a wiki nomeia-as pela hora do build. Estão as quatro: Escape liberta o rato, o Y inverte o eixo desde a mc-161616, e a 161625 e a 161648 corrigem as texturas e o rato. Os jars nunca foram arquivados, por isso são reconstruções.",
             ),
+            (
+                "A água e a lava já estão aqui",
+                "25 nov 2026",
+                "Classic 0.0.12a acrescenta oceano, lagos de lava e bedrock: já podes nadar.",
+                "O mundo já tem água e lava. Mergulha no oceano, procura lagos de lava em terra e nada com Espaço. Com 7, 8 e 9 podes colocar água, lava e bedrock para os experimentares.",
+            ),
         ],
         Lang::Fr => [
             (
@@ -1138,7 +1162,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Tes captures ont leur moment",
                 "24 nov. 2026",
                 "Appuie sur F2 : la capture est enregistrée et une carte la célèbre aussitôt.",
-                "Chaque F2 enregistre un PNG propre dans le dossier de son instance, puis une carte glisse avec un badge appareil photo, « CAPTURA REALIZADA », +1 capture et une barre qui se remplit, comme un avis de récompense. Elle dure deux secondes et demie et marche dans les 14 versions. La capture t'attend ensuite dans l'onglet Captures.",
+                "Chaque F2 enregistre un PNG propre dans le dossier de son instance, puis une carte glisse avec un badge appareil photo, « CAPTURA REALIZADA », +1 capture et une barre qui se remplit, comme un avis de récompense. Elle dure deux secondes et demie et marche dans les 15 versions. La capture t'attend ensuite dans l'onglet Captures.",
             ),
             (
                 "Les cinq premières versions, à un clic",
@@ -1206,6 +1230,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "mc-161607 à mc-161648 : les premières Minecraft jouées par quelqu'un hors de Mojang.",
                 "Ces quatre builds du 16 mai 2009 sont « Minecraft alpha », le test privé que Notch a passé par IRC à trois joueurs. Il n'y avait pas encore de numéro de version dans le jeu, donc le wiki les nomme par l'heure du build. Les quatre sont là : Échap libère la souris, Y inverse l'axe depuis mc-161616, et 161625 et 161648 corrigent les textures et la souris. Leurs jars n'ont jamais été archivés, ce sont donc des reconstructions.",
             ),
+            (
+                "L'eau et la lave sont là",
+                "25 nov. 2026",
+                "Classic 0.0.12a ajoute un océan, des lacs de lave et du bedrock : tu peux nager.",
+                "Le monde a maintenant de l'eau et de la lave. Plonge dans l'océan, cherche les lacs de lave sur terre et nage avec Espace. Les touches 7, 8 et 9 posent de l'eau, de la lave et du bedrock pour que tu puisses les essayer.",
+            ),
         ],
         Lang::De => [
             (
@@ -1218,7 +1248,7 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "Deine Aufnahmen werden gefeiert",
                 "24. Nov. 2026",
                 "Drücke F2: Die Aufnahme wird gespeichert und eine Karte feiert sie sofort.",
-                "Jedes F2 speichert ein sauberes PNG im Ordner seiner Instanz, danach gleitet eine Karte herein: Kamera-Abzeichen, „CAPTURA REALIZADA“, +1 Aufnahme und ein Balken, der sich füllt, wie eine Belohnungsmeldung. Sie dauert zweieinhalb Sekunden und läuft in allen 14 Versionen. Danach liegt die Aufnahme im Screenshots-Tab.",
+                "Jedes F2 speichert ein sauberes PNG im Ordner seiner Instanz, danach gleitet eine Karte herein: Kamera-Abzeichen, „CAPTURA REALIZADA“, +1 Aufnahme und ein Balken, der sich füllt, wie eine Belohnungsmeldung. Sie dauert zweieinhalb Sekunden und läuft in allen 15 Versionen. Danach liegt die Aufnahme im Screenshots-Tab.",
             ),
             (
                 "Die ersten fünf Versionen, ein Klick entfernt",
@@ -1285,6 +1315,12 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "24. Nov. 2026",
                 "mc-161607 bis mc-161648: die ersten Minecraft-Versionen, die jemand außerhalb von Mojang spielte.",
                 "Diese vier Builds vom 16. Mai 2009 sind „Minecraft alpha“, der private Test, den Notch über IRC an drei Spieler gab. Eine Versionsnummer gab es im Spiel noch nicht, deshalb nennt das Wiki sie nach ihrer Build-Zeit. Alle vier sind da: Escape gibt die Maus frei, Y dreht ab mc-161616 die Mausachse um, und 161625 sowie 161648 beheben Textur- und Mausfehler. Ihre Jars wurden nie archiviert, es sind also Rekonstruktionen.",
+            ),
+            (
+                "Wasser und Lava sind da",
+                "25. Nov. 2026",
+                "Classic 0.0.12a bringt einen Ozean, Lavaseen und Bedrock: Du kannst jetzt schwimmen.",
+                "Die Welt hat jetzt Wasser und Lava. Tauche in den Ozean, suche Lavaseen an Land und schwimme mit der Leertaste. Mit 7, 8 und 9 setzt du Wasser, Lava und Bedrock, damit du sie selbst ausprobieren kannst.",
             ),
         ],
     }
@@ -2813,7 +2849,7 @@ fn version_textures(base: &Path, game: GameVersion) -> bool {
         GameVersion::Rd131655 => GameVersion::Rd132211,
         GameVersion::Mc161607 | GameVersion::Mc161616 | GameVersion::Mc161625
         | GameVersion::Mc161648 | GameVersion::C003a | GameVersion::C009a
-        | GameVersion::C010a => GameVersion::C0011a,
+        | GameVersion::C010a | GameVersion::C0012a => GameVersion::C0011a,
         g => g,
     };
     if !installed_copies(base, game.id()).is_empty() {
@@ -6128,6 +6164,7 @@ mod ui {
                                             "Rustium 0.2",
                                             "c0.0.3a",
                                             "mc-161607 … mc-161648",
+                                            "c0.0.12a",
                                         ];
                                         let kinds = [
                                             NewsKind::Launcher,
@@ -6143,6 +6180,7 @@ mod ui {
                                             NewsKind::Fix,
                                             NewsKind::Play,
                                             NewsKind::Play,
+                                            NewsKind::Play,
                                         ];
                                         let actions = [
                                             None,
@@ -6156,6 +6194,7 @@ mod ui {
                                             None,
                                             None,
                                             None,
+                                            Some(Tab::Home),
                                             Some(Tab::Home),
                                             Some(Tab::Home),
                                         ];

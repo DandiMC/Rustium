@@ -3,7 +3,7 @@
 Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-131655,
 rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348), de las Classic private
 alpha (mc-161607, mc-161616, mc-161625 y mc-161648) y de las primeras Classic
-(c0.0.3a, c0.0.9a, c0.0.10a y c0.0.11a), sin cuenta de Microsoft y sin
+(c0.0.3a, c0.0.9a, c0.0.10a, c0.0.11a y c0.0.12a), sin cuenta de Microsoft y sin
 descargar nada de Mojang: lee las texturas de la copia que ya tengas en el ordenador
 y, si no hay ninguna, dibuja las suyas.
 
@@ -13,6 +13,8 @@ y, si no hay ninguna, dibuja las suyas.
 
 ![El launcher de Rustium](docs/screenshots/launcher.png)
 
+![Classic 0.0.12a, con agua y lava](docs/screenshots/classic012a.png)
+
 ![La pestaña Mundos](docs/screenshots/launcher-worlds.png)
 
 ![Panel de rendimiento comparando Java y Rust](docs/screenshots/launcher-performance.png)
@@ -21,7 +23,7 @@ y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.2.6-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.3.0-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -32,8 +34,8 @@ Solo hace falta **el instalador**: `Rustium-0.2.6-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las catorce versiones (las seis
-pre-clásicas, las cuatro alpha privadas y las cuatro primeras Classic):
+El selector encima de «Jugar» arranca cualquiera de las quince versiones (las seis
+pre-clásicas, las cuatro alpha privadas y las cinco primeras Classic):
 
 | versión | qué trae |
 |---|---|
@@ -51,6 +53,7 @@ pre-clásicas, las cuatro alpha privadas y las cuatro primeras Classic):
 | c0.0.9a | reconstruida: el modo construir con el velo blanco por las seis caras, contador de fps, a 640×480 y Escape cierra |
 | c0.0.10a | reconstruida: igual que 0.0.9a pero Escape solo suelta el ratón |
 | c0.0.11a | la primera Classic conservada: terreno con cuevas de `NoiseMap`, HUD con fps y chunk updates, y el modo pintar que cambia con el botón derecho |
+| c0.0.12a | agua, lava y bedrock: océano alrededor de las islas, lagos de lava, natación y 7/8/9 para poner agua, lava y bedrock |
 
 Las cuatro mc-, c0.0.3a, c0.0.9a y c0.0.10a son **reconstrucciones**: sus jars nunca
 se archivaron. Salen del código de c0.0.11a y de lo que documenta la Minecraft Wiki
@@ -125,7 +128,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.2.6-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.3.0-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 

@@ -12,6 +12,15 @@ pub const TIERRA: u8 = 3;
 pub const LADRILLO: u8 = 4;
 pub const MADERA: u8 = 5;
 pub const ARBUSTO: u8 = 6;
+// c0.0.12a: la capa que cierra el mundo, el agua y la lava. Los ids 1-6 ya
+// existian en c0.0.11a, asi que un mundo viejo se sigue leyendo igual.
+pub const BEDROCK: u8 = 7;
+pub const AGUA: u8 = 8;
+pub const LAVA: u8 = 9;
+
+pub fn es_liquido(id: u8) -> bool {
+    id == AGUA || id == LAVA
+}
 
 /// Textura (indice de tile del atlas) de una cara concreta del bloque.
 /// Caras como en el original: 0 = abajo, 1 = arriba, 2 = -y, 3 = +y, 4 = -x, 5 = +x.
@@ -29,6 +38,9 @@ pub fn textura(id: u8, cara: usize) -> u32 {
         LADRILLO => 16,
         MADERA => 4,
         ARBUSTO => 15,
+        BEDROCK => 7,
+        AGUA => 8,
+        LAVA => 9,
         _ => 0,
     }
 }
@@ -45,12 +57,12 @@ pub fn textura_particula(id: u8) -> u32 {
 pub fn solido(id: u8) -> bool {
     // Tile.isSolid() es true por defecto, pero Bush lo sobrescribe a false y su
     // getAABB() devuelve null: se atraviesa y no frena al jugador.
-    id != AIRE && id != ARBUSTO
+    id != AIRE && id != ARBUSTO && !es_liquido(id)
 }
 
 pub fn bloquea_luz(id: u8) -> bool {
     // Bush.blocksLight() tambien devuelve false: deja pasar la luz.
-    id != AIRE && id != ARBUSTO
+    id != AIRE && id != ARBUSTO && !es_liquido(id)
 }
 
 /// Factor de luz por cara, igual que Tile.render del original:
@@ -111,8 +123,12 @@ mod tests {
         assert!(!bloquea_luz(ARBUSTO));
         assert!(!solido(AIRE));
         assert!(!bloquea_luz(AIRE));
+        // El agua y la lava de 0.0.12a se atraviesan y dejan pasar la luz.
+        assert!(!solido(AGUA));
+        assert!(!bloquea_luz(LAVA));
         // Los bloques normales siguen siendo solidos y opacos.
         assert!(solido(PIEDRA));
         assert!(bloquea_luz(PIEDRA));
+        assert!(solido(BEDROCK));
     }
 }

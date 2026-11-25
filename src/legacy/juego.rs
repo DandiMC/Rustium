@@ -56,6 +56,11 @@ fn bloque_para_tecla(version: &str, tecla: &str) -> Option<u8> {
         "3" => Some(tiles::LADRILLO),
         "4" => Some(tiles::MADERA),
         "6" if version != "rd-160052" => Some(tiles::ARBUSTO),
+        // c0.0.12a: agua, lava y la capa que cierra el mundo. Son las teclas
+        // que el jugador puede usar para probar los liquidos y el bedrock.
+        "7" if version == "c0.0.12a" => Some(tiles::AGUA),
+        "8" if version == "c0.0.12a" => Some(tiles::LAVA),
+        "9" if version == "c0.0.12a" => Some(tiles::BEDROCK),
         _ => None,
     }
 }
@@ -103,9 +108,10 @@ fn es_reconstruida(version: &str) -> bool {
             | "mc-161616"
             | "mc-161625"
             | "mc-161648"
-            | "c0.0.3a"
+            |         "c0.0.3a"
             | "c0.0.9a"
             | "c0.0.10a"
+            | "c0.0.12a"
     )
 }
 
@@ -307,6 +313,16 @@ impl Jugador {
         // velocidad actual. No la pongas a cero aqui.
     }
 
+    // Liquido que ocupa los pies del jugador. En 0.0.12a el agua y la lava se
+    // atraviesan, pero frenan y permiten nadar.
+    fn liquido(&self, nivel: &Nivel) -> Option<u8> {
+        let x = self.x.floor() as i32;
+        let y = self.y.floor() as i32;
+        let z = (self.bb.z0 + 0.1).floor() as i32;
+        let id = nivel.get(x, y, z);
+        if tiles::es_liquido(id) { Some(id) } else { None }
+    }
+
     fn move_relative(&mut self, xa: f32, za: f32, speed: f32) {
         let dist = (xa * xa + za * za).sqrt();
         if dist < 0.01 { return; }
@@ -326,17 +342,21 @@ impl Jugador {
         if reset {
             self.reset_pos();
         }
-        if jump && self.on_ground {
-            self.zd = 0.5;
+        let en_liquido = self.liquido(nivel).is_some();
+        if jump && (self.on_ground || en_liquido) {
+            // Nadar: dentro del agua/lava el salto empuja hacia arriba sin la
+            // velocidad del salto en seco.
+            self.zd = if en_liquido { 0.18 } else { 0.5 };
         }
-        let accel = if self.on_ground { 0.1 } else { 0.02 };
+        let accel = if en_liquido { 0.05 } else if self.on_ground { 0.1 } else { 0.02 };
         self.move_relative(f, s, accel);
-        self.zd -= 0.08;
+        self.zd -= if en_liquido { 0.02 } else { 0.08 };
         let (xd, yd, zd) = (self.xd, self.yd, self.zd);
         self.mover(xd, yd, zd, nivel);
-        self.xd *= 0.91;
-        self.zd *= 0.98;
-        self.yd *= 0.91;
+        let roze = if en_liquido { 0.80 } else { 0.91 };
+        self.xd *= roze;
+        self.zd *= if en_liquido { 0.80 } else { 0.98 };
+        self.yd *= roze;
         if self.on_ground {
             self.xd *= 0.7;
             self.yd *= 0.7;
@@ -408,6 +428,7 @@ impl App {
                 .unwrap_or(SPAWN_SEED)
         };
         let mut nivel = match modo {
+            Modo::Clasico if version == "c0.0.12a" => Nivel::new_clasico_012(seed),
             Modo::Clasico => Nivel::new_clasico(seed),
             Modo::Legacy => Nivel::new(seed),
         };

@@ -14,6 +14,9 @@ use crate::world::BlockBox;
 pub const WIDTH: usize = 256;
 pub const HEIGHT: usize = 256;
 pub const DEPTH: usize = 64;
+/// Nivel del mar de c0.0.12a: el mundo queda rodeado de agua y las islas
+/// sobresalen por encima de esta cota.
+pub const SEA_LEVEL: i32 = (DEPTH as i32 * 5) / 8;
 
 pub struct Nivel {
     pub blocks: Vec<u8>,
@@ -25,6 +28,10 @@ pub struct Nivel {
     // a LevelRenderer por cada setTile; el port necesita lo mismo para los
     // cambios que hace el tick (crecimiento de hierba, arbustos).
     pub dirty: Vec<(i32, i32)>,
+    // Bloques de agua/lava pendientes de extenderse. Solo se llena cuando el
+    // jugador coloca un liquido, no con el oceano generado, para que el mundo
+    // no se inunde entero nada mas empezar.
+    pub liquidos: Vec<(i32, i32, i32)>,
 }
 
 impl Nivel {
@@ -35,6 +42,7 @@ impl Nivel {
             random: perlin::JavaRandom::new(seed),
             unprocessed: 0,
             dirty: Vec::new(),
+            liquidos: Vec::new(),
         };
         if n.load().is_none() {
             n.generar(seed);
@@ -53,6 +61,7 @@ impl Nivel {
             random: perlin::JavaRandom::new(seed),
             unprocessed: 0,
             dirty: Vec::new(),
+            liquidos: Vec::new(),
         };
         if n.load().is_none() {
             n.generar_clasico(seed);
@@ -60,6 +69,137 @@ impl Nivel {
         n.calc_light(0, 0, WIDTH, HEIGHT);
         n.volcar_si_toca();
         n
+    }
+
+    /// c0.0.12a: el mundo tiene una capa de bedrock, un oceano alrededor de las
+    /// islas y lagos de lava. Es el primer Classic con liquidos.
+    pub fn new_clasico_012(seed: i64) -> Self {
+        let mut n = Nivel {
+            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
+            light: vec![0; WIDTH * HEIGHT],
+            random: perlin::JavaRandom::new(seed),
+            unprocessed: 0,
+            dirty: Vec::new(),
+            liquidos: Vec::new(),
+        };
+        if n.load().is_none() {
+            n.generar_clasico_012(seed);
+        }
+        // El oceano y los lagos generados son estaticos; solo los liquidos que
+        // coloca el jugador entran en la cola de flujo.
+        n.liquidos.clear();
+        n.calc_light(0, 0, WIDTH, HEIGHT);
+        n.volcar_si_toca();
+        n
+    }
+
+    // LevelGen.generateMap de 0.0.12a. La altura y las cuevas salen del mismo
+    // NoiseMap que 0.0.11a; encima se anaden el oceano, la capa de bedrock y
+    // algunos lagos de lava. No usa ningun asset de Mojang.
+    fn generar_clasico_012(&mut self, seed: i64) {
+        let sem = semillas(seed);
+        let h1 = noisemap::read(0, WIDTH, HEIGHT, sem[0]);
+        let h2 = noisemap::read(0, WIDTH, HEIGHT, sem[1]);
+        let cf = noisemap::read(1, WIDTH, HEIGHT, sem[2]);
+        let rock = noisemap::read(1, WIDTH, HEIGHT, sem[3]);
+        let lava = noisemap::read(2, WIDTH, HEIGHT, seed ^ 0x012A_5EED);
+        let mut superficie = vec![0i32; WIDTH * HEIGHT];
+        let d = DEPTH as i32;
+        let mar = SEA_LEVEL;
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
+                for z in 0..DEPTH {
+                    let k = x + y * WIDTH;
+                    let dh1 = h1[k];
+                    let mut dh2 = h2[k];
+                    if cf[k] < 128 {
+                        dh2 = dh1;
+                    }
+                    let mut dh = if dh2 > dh1 { dh2 } else { dh1 };
+                    if dh2 <= dh1 {
+                        dh2 = dh1;
+                    }
+                    let _ = dh2;
+                    dh = dh / 8 + d / 3;
+                    let mut rh = rock[k] / 8 + d / 3;
+                    if rh > dh - 2 {
+                        rh = dh - 2;
+                    }
+                    superficie[k] = dh;
+                    let zz = z as i32;
+                    let mut id = if zz == 0 {
+                        tiles::BEDROCK
+                    } else if zz <= rh {
+                        tiles::PIEDRA
+                    } else if zz < dh {
+                        tiles::TIERRA
+                    } else if zz == dh {
+                        if dh >= mar { tiles::CESPED } else { tiles::TIERRA }
+                    } else if zz <= mar {
+                        tiles::AGUA
+                    } else {
+                        tiles::AIRE
+                    };
+                    // Lagos de lava pequenos en la superficie. Es raro a
+                    // proposito: no queremos convertir el mapa en un infierno.
+                    if id == tiles::CESPED && lava[k] > 252 {
+                        id = tiles::LAVA;
+                    }
+                    let i = self.idx(x, y, z);
+                    self.blocks[i] = id;
+                }
+            }
+        }
+        self.cavar_cuevas(seed);
+        self.anadir_lagos_lava(seed, &superficie);
+        self.anadir_lava_en_cuevas(seed);
+    }
+
+    // Lagos de lava de superficie. El primer 0.0.12a tenia lagos, no solo
+    // bloques sueltos; estos son pequenos y se colocan sobre tierra firme.
+    fn anadir_lagos_lava(&mut self, seed: i64, superficie: &[i32]) {
+        let mut rnd = perlin::JavaRandom::new(seed ^ 0x1A2A_910B);
+        let (w, h) = (WIDTH as i32, HEIGHT as i32);
+        for _ in 0..16 {
+            let cx = 4 + rnd.next_int(w - 8);
+            let cy = 4 + rnd.next_int(h - 8);
+            let k = cx as usize + cy as usize * WIDTH;
+            let alto = superficie[k].clamp(SEA_LEVEL + 2, DEPTH as i32 - 3);
+            for dx in -2..=2 {
+                for dy in -2..=2 {
+                    let x = cx + dx;
+                    let y = cy + dy;
+                    if x < 1 || y < 1 || x >= w - 1 || y >= h - 1 {
+                        continue;
+                    }
+                    let k = x as usize + y as usize * WIDTH;
+                    let z = superficie[k].clamp(alto, DEPTH as i32 - 2);
+                    self.set(x, y, z, tiles::LAVA);
+                    if z + 1 < DEPTH as i32 {
+                        self.set(x, y, z + 1, tiles::AIRE);
+                    }
+                }
+            }
+        }
+    }
+
+    // Algunas cuevas por debajo del nivel del mar se llenan de lava. Sirve para
+    // que el jugador encuentre lava tambien al explorar, no solo en la superficie.
+    fn anadir_lava_en_cuevas(&mut self, seed: i64) {
+        let mut rnd = perlin::JavaRandom::new(seed ^ 0x00C0_12A5);
+        let (w, h) = (WIDTH as i32, HEIGHT as i32);
+        for _ in 0..(w * h / 900) {
+            let x = rnd.next_int(w);
+            let y = rnd.next_int(h);
+            let z = 1 + rnd.next_int((SEA_LEVEL - 2).max(1));
+            let i = self.idx(x as usize, y as usize, z as usize);
+            if self.blocks[i] == tiles::AIRE
+                && self.get(x, y, z - 1) != tiles::AGUA
+                && self.get(x, y, z - 1) != tiles::LAVA
+            {
+                self.blocks[i] = tiles::LAVA;
+            }
+        }
     }
 
     // LevelGen.generateMap de c0.0.11a. Identico al de la familia B salvo los
@@ -259,6 +399,9 @@ impl Nivel {
         }
         self.blocks[i] = id;
         self.dirty.push((x, y));
+        if tiles::es_liquido(id) && self.liquidos.len() < 8192 {
+            self.liquidos.push((x, y, z));
+        }
         self.calc_light(x as usize, y as usize, 1, 1);
         true
     }
@@ -345,6 +488,53 @@ impl Nivel {
             tiles::tick(self, id, x, y, z);
             ticks -= 1;
         }
+        self.fluir_liquidos(64);
+    }
+
+    /// Riega/expande hasta 64 bloques pendientes por tick. El agua y la lava
+    /// caen primero y, si no pueden, buscan un hueco al lado. Cuando se
+    /// encuentran, el agua convierte la lava en piedra, como en 0.0.12a.
+    fn fluir_liquidos(&mut self, max: usize) {
+        let mut hechos = 0usize;
+        let mut i = 0usize;
+        while i < self.liquidos.len() && hechos < max {
+            let (x, y, z) = self.liquidos[i];
+            i += 1;
+            let id = self.get(x, y, z);
+            if !tiles::es_liquido(id) {
+                continue;
+            }
+            let mut destino = None;
+            let abajo = self.get(x, y, z - 1);
+            if abajo == tiles::AIRE || (tiles::es_liquido(abajo) && abajo != id) {
+                destino = Some((x, y, z - 1));
+            } else {
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let (nx, ny) = (x + dx, y + dy);
+                    let vecino = self.get(nx, ny, z);
+                    if vecino == tiles::AIRE || (tiles::es_liquido(vecino) && vecino != id) {
+                        destino = Some((nx, ny, z));
+                        break;
+                    }
+                }
+            }
+            if let Some((nx, ny, nz)) = destino {
+                let otro = self.get(nx, ny, nz);
+                if tiles::es_liquido(otro) && otro != id {
+                    self.set(nx, ny, nz, tiles::PIEDRA);
+                } else if otro == tiles::AIRE {
+                    self.set(nx, ny, nz, id);
+                }
+            }
+            hechos += 1;
+        }
+        if i > 0 {
+            self.liquidos.drain(0..i.min(self.liquidos.len()));
+        }
+        // Si el jugador vacia un oceano entero, no dejamos una cola sin fin.
+        if self.liquidos.len() > 8192 {
+            self.liquidos.truncate(8192);
+        }
     }
 }
 
@@ -400,6 +590,104 @@ fn semillas(seed: i64) -> [i64; 4] {
         seed ^ 0x2468_ACE0,
         seed ^ 0x0F0F_0F0F,
     ]
+}
+
+#[cfg(test)]
+mod tests_012 {
+    use super::*;
+
+    fn generar(seed: i64) -> Nivel {
+        let mut n = Nivel {
+            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
+            light: vec![0; WIDTH * HEIGHT],
+            random: perlin::JavaRandom::new(seed),
+            unprocessed: 0,
+            dirty: Vec::new(),
+            liquidos: Vec::new(),
+        };
+        n.generar_clasico_012(seed);
+        n
+    }
+
+    #[test]
+    fn el_agua_colocada_se_extiende() {
+        let mut n = Nivel {
+            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
+            light: vec![0; WIDTH * HEIGHT],
+            random: perlin::JavaRandom::new(1),
+            unprocessed: 0,
+            dirty: Vec::new(),
+            liquidos: Vec::new(),
+        };
+        for x in 8..13 {
+            for y in 8..13 {
+                n.set(x, y, 10, tiles::PIEDRA);
+            }
+        }
+        n.set(10, 10, 11, tiles::AGUA);
+        assert!(!n.liquidos.is_empty());
+        n.fluir_liquidos(8);
+        let agua = (8..13)
+            .flat_map(|x| (8..13).map(move |y| (x, y)))
+            .filter(|(x, y)| n.get(*x, *y, 11) == tiles::AGUA)
+            .count();
+        assert!(agua >= 2, "el agua no se extendio: {agua}");
+    }
+
+    #[test]
+    fn el_012_tiene_bedrock_agua_y_lava() {
+        let n = generar(12345);
+        let mut agua = 0usize;
+        let mut lava = 0usize;
+        let mut agua_pos = None;
+        let mut lava_pos = None;
+        let mut agua_playa = Vec::new();
+        let mut lava_aire = Vec::new();
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
+                assert_eq!(n.get(x as i32, y as i32, 0), tiles::BEDROCK);
+                for z in 0..DEPTH {
+                    match n.get(x as i32, y as i32, z as i32) {
+                        tiles::AGUA => {
+                            agua += 1;
+                            if agua_pos.is_none()
+                                && z + 1 < DEPTH
+                                && n.get(x as i32, y as i32, z as i32 + 1) == tiles::AIRE
+                            {
+                                agua_pos = Some((x, y, z));
+                            }
+                            if agua_playa.len() < 8
+                                && z + 1 < DEPTH
+                                && n.get(x as i32, y as i32, z as i32 + 1) == tiles::AIRE
+                                && (x > 20 && x < 236 && y > 20 && y < 236)
+                            {
+                                agua_playa.push((x, y, z));
+                            }
+                        }
+                        tiles::LAVA => {
+                            lava += 1;
+                            if lava_pos.is_none() {
+                                lava_pos = Some((x, y, z));
+                            }
+                            if lava_aire.len() < 8
+                                && z + 1 < DEPTH
+                                && n.get(x as i32, y as i32, z as i32 + 1) == tiles::AIRE
+                            {
+                                lava_aire.push((x, y, z));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        println!("012 agua_playa={agua_playa:?} lava_aire={lava_aire:?}");
+        println!("012 agua={agua} lava={lava} agua_pos={agua_pos:?} lava_pos={lava_pos:?}");
+        assert!(agua > 10_000, "muy poca agua: {agua}");
+        assert!(lava > 100, "muy poca lava: {lava}");
+        assert!(agua_pos.is_some());
+        assert!(lava_pos.is_some());
+    }
 }
 
 impl Nivel {
