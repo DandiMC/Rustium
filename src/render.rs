@@ -1101,9 +1101,14 @@ pub struct Renderer {
     pub part_ibuf: wgpu::Buffer,
     pub part_count: u32,
     pub part_fondo_count: u32,
-    // Densidad de la niebla del pase oscuro y escala del alfa del resaltado:
-    // la familia nueva usa 0.06 y la mitad de alfa que rd-132211.
+    // Densidad y color de la niebla del pase oscuro: la familia nueva usa
+    // 0.06 y la mitad de alfa que rd-132211. El juego cambia el color cuando
+    // la camara esta dentro de lava en 0.0.13a.
     pub fog_densidad: f32,
+    pub fog_color: [f32; 4],
+    /// Densidad para el pase principal cuando la camara esta dentro de un
+    /// liquido; 0 fuera del agua/lava deja el cielo sin niebla.
+    pub fog_densidad_principal: f32,
     pub hit_alpha_escala: f32,
     // Bloque que se colocaria con el clic: si esta, renderHit va texturado con
     // blending normal; si no, velo blanco aditivo (modo romper).
@@ -1205,6 +1210,13 @@ impl Renderer {
         // El atlas puede ser el de otra version (familia B tiene 6 tiles distintos):
         // RD_ATLAS_VERSION elige de que jar se saca, por defecto rd-132211.
         let version_atlas = std::env::var("RD_ATLAS_VERSION").unwrap_or_else(|_| "rd-132211".to_string());
+        // La release real de 0.0.13a no se conserva; su atlas se toma prestado
+        // del reupload oficial 0.0.13a_03, que es el que queda.
+        let atlas_source: &str = if version_atlas == "c0.0.13a" {
+            "c0.0.13a_03"
+        } else {
+            &version_atlas
+        };
         // Prioridad: RD_ATLAS (ruta elegida a mano o detectada por el launcher) ->
         // jar de la version en %APPDATA% -> terrain.png del jar de rd-132211 ->
         // textura de reemplazo propia.
@@ -1213,7 +1225,7 @@ impl Renderer {
             .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
             .map(|(_, _, px)| px)
             .or_else(|| {
-                cargar_png_del_jar(&version_atlas, "terrain.png")
+                cargar_png_del_jar(atlas_source, "terrain.png")
                     .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
                     .map(|(_, _, px)| px)
             })
@@ -1229,16 +1241,22 @@ impl Renderer {
         // c0.0.12a anadio agua, lava y bedrock. El jar de 0.0.11a no trae esas
         // caras. Primero se intentan importar del jar oficial de c0.0.13a_03
         // (la version con lava mas antigua que sigue en el launcher); si no
-        // esta instalada, se pintan los tiles propios del port.
-        if version_atlas == "c0.0.12a" {
-            let fuente = std::env::var("RD_ATLAS_012").ok()
-                .and_then(|r| cargar_atlas_de_ruta(&r))
-                .or_else(|| cargar_png_del_jar("c0.0.13a_03", "terrain.png"))
-                .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
-                .map(|(_, _, px)| px);
+        // esta instalada, se pintan los tiles propios del port. Las versiones
+        // 0.0.13a usan el mismo atlas oficial, pero conservan su lava opaca.
+        let familia_012 = es_familia_012a(&version_atlas);
+        if familia_012 || version_atlas == "c0.0.13a" || version_atlas == "c0.0.13a_03" {
+            let fuente = if familia_012 {
+                std::env::var("RD_ATLAS_012").ok()
+                    .and_then(|r| cargar_atlas_de_ruta(&r))
+                    .or_else(|| cargar_png_del_jar("c0.0.13a_03", "terrain.png"))
+            } else {
+                cargar_png_del_jar("c0.0.13a_03", "terrain.png")
+            }
+            .filter(|(w, h, _)| *w == ATLAS_SIZE as u32 && *h == ATLAS_SIZE as u32)
+            .map(|(_, _, px)| px);
             let importado = fuente
                 .as_deref()
-                .map(|src| importar_tiles_desde_013a(&mut atlas_data, src))
+                .map(|src| importar_tiles_desde_013a_con_alfa(&mut atlas_data, src, familia_012))
                 .unwrap_or(false);
             if !importado {
                 parchear_atlas_clasico_012(&mut atlas_data);
@@ -2141,6 +2159,8 @@ impl Renderer {
             part_count: 0,
             part_fondo_count: 0,
             fog_densidad: 0.2,
+            fog_color: [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0],
+            fog_densidad_principal: 0.0,
             hit_alpha_escala: 1.0,
             hit_preview: None,
             mostrar_cruz: false,
@@ -2379,7 +2399,7 @@ impl Renderer {
         // Pasada de niebla de rd-132211: GL_EXP, densidad 0.2, color (14,11,10).
         let fu = Uniforms {
             view_proj,
-            fog_color: [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0],
+            fog_color: self.fog_color,
             camera_pos: [eye[0], eye[1], eye[2], 1.0],
             fog_density: self.fog_densidad,
             fog_exp: 1.0,
@@ -2390,10 +2410,10 @@ impl Renderer {
         });
         let u = Uniforms {
             view_proj,
-            fog_color: [0.5, 0.8, 1.0, 1.0],
+            fog_color: self.fog_color,
             camera_pos: [eye[0], eye[1], eye[2], 1.0],
-            fog_density: 0.0,
-            fog_exp: 0.0,
+            fog_density: self.fog_densidad_principal,
+            fog_exp: 1.0,
             _pad: [0.0; 2],
         };
         self.queue.write_buffer(&self.uniform_buf, 0, unsafe {
@@ -3299,6 +3319,13 @@ pub fn cargar_png_del_jar(version: &str, nombre: &str) -> Option<(u32, u32, Vec<
     Some((w as u32, h as u32, rgba))
 }
 
+fn es_familia_012a(version: &str) -> bool {
+    matches!(
+        version,
+        "c0.0.12a" | "c0.0.12a_01" | "c0.0.12a_02" | "c0.0.12a_03"
+    )
+}
+
 /// Copia agua, lava y bedrock del atlas oficial de c0.0.13a_03 al atlas del
 /// port. En ese jar los tiles son 14 (agua), 17 (bedrock) y 30 (lava); el port
 /// usa 8, 7 y 9. La lava de c0.0.13a es opaca, pero la de c0.0.12a era
@@ -3306,6 +3333,10 @@ pub fn cargar_png_del_jar(version: &str, nombre: &str) -> Option<(u32, u32, Vec<
 /// los pixeles rojo oscuro). No se copia ningun asset al proyecto: se lee del
 /// jar que el usuario ya tiene instalado.
 pub fn importar_tiles_desde_013a(dst: &mut [u8], src: &[u8]) -> bool {
+    importar_tiles_desde_013a_con_alfa(dst, src, true)
+}
+
+fn importar_tiles_desde_013a_con_alfa(dst: &mut [u8], src: &[u8], alfa_012: bool) -> bool {
     let len = ATLAS_SIZE * ATLAS_SIZE * 4;
     if dst.len() < len || src.len() < len {
         return false;
@@ -3349,7 +3380,7 @@ pub fn importar_tiles_desde_013a(dst: &mut [u8], src: &[u8]) -> bool {
         for py in 0..TILE {
             for px in 0..TILE {
                 let mut p = tile(src, origen, px, py);
-                if destino == 9 {
+                if destino == 9 && alfa_012 {
                     // La lava de 0.0.12a tambien era transparente; el rojo
                     // oscuro tenia un poco mas de opacidad que el resto.
                     p[3] = if p[0] < 230 { 201 } else { 148 };

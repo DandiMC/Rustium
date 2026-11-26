@@ -10,7 +10,7 @@
 // Las esquinas y las UV son las de `Tile.renderFace`, cara por cara, en el mismo
 // orden (importa: es lo que hace que la hierba salga con el fleco arriba).
 
-use super::level::{Nivel, DEPTH, HEIGHT, WIDTH};
+use super::level::Nivel;
 use super::tiles;
 use crate::render::Vertex;
 
@@ -118,9 +118,9 @@ fn construir_filtrado(
     let mut idx: Vec<u32> = Vec::new();
     let x0 = cx * CHUNK;
     let y0 = cy * CHUNK;
-    for x in x0..(x0 + CHUNK).min(WIDTH) {
-        for y in y0..(y0 + CHUNK).min(HEIGHT) {
-            for z in 0..DEPTH {
+    for x in x0..(x0 + CHUNK).min(nivel.ancho) {
+        for y in y0..(y0 + CHUNK).min(nivel.alto) {
+            for z in 0..nivel.fondo {
                 let id = nivel.get(x as i32, y as i32, z as i32);
                 if id == tiles::AIRE {
                     continue;
@@ -191,14 +191,7 @@ mod tests {
 
     #[test]
     fn los_liquidos_van_en_la_malla_de_liquidos() {
-        let mut n = Nivel {
-            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
-            light: vec![0; WIDTH * HEIGHT],
-            random: crate::legacy::perlin::JavaRandom::new(0),
-            unprocessed: 0,
-            dirty: Vec::new(),
-            liquidos: Vec::new(),
-        };
+        let mut n = Nivel::nuevo_vacio(0, 256, 256, 64);
         n.blocks[0] = tiles::AGUA;
         n.light[0] = 2;
         let (_, opacos) = construir(&n, 0, 0, 0);
@@ -209,14 +202,7 @@ mod tests {
 
     #[test]
     fn la_capa_1_dibuja_las_caras_que_dan_a_aire_a_oscuras() {
-        let mut n = Nivel {
-            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
-            light: vec![0; WIDTH * HEIGHT],
-            random: crate::legacy::perlin::JavaRandom::new(0),
-            unprocessed: 0,
-            dirty: Vec::new(),
-            liquidos: Vec::new(),
-        };
+        let mut n = Nivel::nuevo_vacio(0, 256, 256, 64);
         // Piedra en (0,0,0) con la columna a oscuras desde z=1: la cara de
         // arriba da a aire sin luz (solo capa 1); las otras cinco dan a aire
         // iluminado (capa 0, incluidos los bordes del mapa).

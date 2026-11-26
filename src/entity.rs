@@ -155,10 +155,11 @@ impl Entity {
     // depth + 10, z aleatoria en todo el fondo. Antes la profundidad se sorteaba
     // solo hasta 64 en vez de 256, asi que jugador y zombis aparecian siempre en
     // una franja estrecha del mapa.
-    pub fn reset_pos(&mut self, _level: &dyn Mundo) {
-        let x = randf() * crate::world::WIDTH as f32;
-        let y = randf() * crate::world::HEIGHT as f32;
-        self.set_pos(x, y, crate::world::DEPTH as f32 + 10.0);
+    pub fn reset_pos(&mut self, level: &dyn Mundo) {
+        let (ancho, alto, fondo) = level.dimensiones();
+        let x = randf() * ancho as f32;
+        let y = randf() * alto as f32;
+        self.set_pos(x, y, fondo as f32 + 10.0);
     }
 
     // setPos: caja de 0.6 x 0.6 de planta y 1.8 de alto centrada en (x,y,z).

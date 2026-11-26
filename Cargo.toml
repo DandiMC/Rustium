@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -69,6 +69,27 @@ path = "src/bin/classic011a.rs"
 [[bin]]
 name = "classic012a"
 path = "src/bin/classic012a.rs"
+
+# Huecos reconstruidos entre c0.0.12a y c0.0.13a_03
+[[bin]]
+name = "classic012a01"
+path = "src/bin/classic012a01.rs"
+
+[[bin]]
+name = "classic012a02"
+path = "src/bin/classic012a02.rs"
+
+[[bin]]
+name = "classic012a03"
+path = "src/bin/classic012a03.rs"
+
+[[bin]]
+name = "classic013a"
+path = "src/bin/classic013a.rs"
+
+[[bin]]
+name = "classic013a03"
+path = "src/bin/classic013a03.rs"
 
 [dependencies]
 winit = "0.30"

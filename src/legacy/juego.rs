@@ -8,7 +8,7 @@
 // G suelta un zombi, Enter guarda level.dat, clic derecho rompe (con 64
 // particulas) y el izquierdo coloca el bloque elegido.
 
-use super::level::{Nivel, DEPTH, HEIGHT, WIDTH};
+use super::level::Nivel;
 use super::mesh;
 use super::particula::{self, Particula};
 use super::tiles;
@@ -34,9 +34,16 @@ const SMOKE_FRAMES: u32 = 12;
 // Chunks que hay que reconstruir al tocar un bloque (o dos: el apuntado y el
 // de la cara donde se coloca). Se marca la celda y sus vecinas, como
 // LevelRenderer.setDirty, y se recorta al mundo.
-fn chunks_tocados(x0: i32, y0: i32, x1: i32, y1: i32) -> (usize, usize, usize, usize) {
-    let nx = WIDTH / mesh::CHUNK;
-    let ny = HEIGHT / mesh::CHUNK;
+fn chunks_tocados(
+    ancho: usize,
+    alto: usize,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+) -> (usize, usize, usize, usize) {
+    let nx = ancho / mesh::CHUNK;
+    let ny = alto / mesh::CHUNK;
     (
         ((x0.min(x1) - 1).max(0) as usize / mesh::CHUNK).min(nx - 1),
         ((x0.max(x1) + 1).max(0) as usize / mesh::CHUNK).min(nx - 1),
@@ -56,11 +63,6 @@ fn bloque_para_tecla(version: &str, tecla: &str) -> Option<u8> {
         "3" => Some(tiles::LADRILLO),
         "4" => Some(tiles::MADERA),
         "6" if version != "rd-160052" => Some(tiles::ARBUSTO),
-        // c0.0.12a: agua, lava y la capa que cierra el mundo. Son las teclas
-        // que el jugador puede usar para probar los liquidos y el bedrock.
-        "7" if version == "c0.0.12a" => Some(tiles::AGUA),
-        "8" if version == "c0.0.12a" => Some(tiles::LAVA),
-        "9" if version == "c0.0.12a" => Some(tiles::BEDROCK),
         _ => None,
     }
 }
@@ -99,8 +101,9 @@ pub fn correr_clasico_reconstruida(
     event_loop.run_app(&mut app).unwrap();
 }
 
-/// Reconstruidas sin jar propio: su atlas y su piel salen de c0.0.11a, la
-/// primera Classic que se conserva.
+/// Reconstruidas sin jar propio: su piel sale de c0.0.11a, la primera Classic
+/// que se conserva. Las reuploads 0.0.12a_03/0.0.13a_03 son oficiales y no
+/// necesitan este respaldo.
 fn es_reconstruida(version: &str) -> bool {
     matches!(
         version,
@@ -108,11 +111,35 @@ fn es_reconstruida(version: &str) -> bool {
             | "mc-161616"
             | "mc-161625"
             | "mc-161648"
-            |         "c0.0.3a"
+            | "c0.0.3a"
             | "c0.0.9a"
             | "c0.0.10a"
             | "c0.0.12a"
+            | "c0.0.12a_01"
+            | "c0.0.12a_02"
+            | "c0.0.13a"
     )
+}
+
+/// Las versiones que comparten el mundo clasico con liquidos. La 0.0.13a_03
+/// usa el mismo generador, pero sin lagos de lava por encima del nivel del mar.
+fn es_clasico_con_liquidos(version: &str) -> bool {
+    matches!(
+        version,
+        "c0.0.12a"
+            | "c0.0.12a_01"
+            | "c0.0.12a_02"
+            | "c0.0.12a_03"
+            | "c0.0.13a"
+            | "c0.0.13a_03"
+    )
+}
+
+/// 0.0.13a volvio al salto de 0.0.11a y cambio la fisica de agua/lava y los
+/// controles de R y salto. Se mantiene separado del resto de Classic para no
+/// alterar las variantes de 0.0.12a.
+fn es_13a(version: &str) -> bool {
+    matches!(version, "c0.0.13a" | "c0.0.13a_03")
 }
 
 /// Reconstrucciones (sus jars no se conservan): 0.0.9a y 0.0.10a se montan
@@ -145,6 +172,9 @@ fn correr_modo(version: &'static str, modo: Modo) {
 }
 
 struct Jugador {
+    ancho: usize,
+    alto: usize,
+    fondo: usize,
     x: f32,
     y: f32,
     z: f32,
@@ -168,7 +198,7 @@ struct Jugador {
 }
 
 impl Jugador {
-    fn new() -> Self {
+    fn new(ancho: usize, alto: usize, fondo: usize) -> Self {
         // RD_ROT="yaw,pitch" fija la rotacion inicial (comodidad para capturas)
         let (mut y_rot, mut x_rot) = (0.0f32, 0.0f32);
         if let Ok(v) = std::env::var("RD_ROT") {
@@ -192,7 +222,7 @@ impl Jugador {
                 n / 1_000_000_000.0
             });
         let (mut px, mut py, mut pz) =
-            (WIDTH as f32 * fraccion(), HEIGHT as f32 * fraccion(), DEPTH as f32 + 10.0);
+            (ancho as f32 * fraccion(), alto as f32 * fraccion(), fondo as f32 + 10.0);
         if let Ok(v) = std::env::var("RD_POS") {
             let n: Vec<f32> = v.split(',').filter_map(|t| t.trim().parse().ok()).collect();
             if n.len() == 3 {
@@ -202,6 +232,9 @@ impl Jugador {
             }
         }
         let mut j = Jugador {
+            ancho,
+            alto,
+            fondo,
             x: px,
             y: py,
             z: pz,
@@ -305,9 +338,9 @@ impl Jugador {
     // Lo usa la R del original en cada tick mientras se mantiene pulsada.
     fn reset_pos(&mut self) {
         self.set_pos(
-            randf() * WIDTH as f32,
-            randf() * HEIGHT as f32,
-            DEPTH as f32 + 10.0,
+            randf() * self.ancho as f32,
+            randf() * self.alto as f32,
+            self.fondo as f32 + 10.0,
         );
         // Entity.resetPos del original solo llama a setPos: conserva la
         // velocidad actual. No la pongas a cero aqui.
@@ -336,14 +369,64 @@ impl Jugador {
     // Los valores de rd-132211 (0.12/0.005/0.8) no valen aqui: ese build usa
     // Timer(60) y constantes distintas.
     fn tick(&mut self, nivel: &Nivel, f: f32, s: f32, jump: bool, reset: bool) {
+        self.tick_con(nivel, f, s, jump, jump, reset, false);
+    }
+
+    // `jump_presionado` es el flanco de la tecla y `jump_mantenido` el estado
+    // continuo: 0.0.13a consume el salto en tierra pero permite nadar mientras
+    // se mantiene pulsado, como el Player.a() original. `reset` tambien es un
+    // flanco en 0.0.13a para que R no reinicie la posicion en cada tick.
+    fn tick_con(
+        &mut self,
+        nivel: &Nivel,
+        f: f32,
+        s: f32,
+        jump_presionado: bool,
+        jump_mantenido: bool,
+        reset: bool,
+        es_13a: bool,
+    ) {
         self.xo = self.x;
         self.yo = self.y;
         self.zo = self.z;
         if reset {
             self.reset_pos();
         }
+        if es_13a {
+            // Player.a() de 0.0.13a_03: salto 0.42, +0.04 por tick al nadar,
+            // gravedad 0.08/0.02 y friccion 0.8 en agua y 0.5 en lava.
+            let liquido = self.liquido(nivel);
+            if liquido.is_some() {
+                if jump_mantenido {
+                    self.zd += 0.04;
+                }
+            } else if jump_presionado && self.on_ground {
+                self.zd = 0.42;
+            }
+            let accel = if liquido.is_some() { 0.02 } else if self.on_ground { 0.1 } else { 0.02 };
+            self.move_relative(f, s, accel);
+            let (xd, yd, zd) = (self.xd, self.yd, self.zd);
+            self.mover(xd, yd, zd, nivel);
+            if liquido.is_some() {
+                let roce = if liquido == Some(tiles::LAVA) { 0.5 } else { 0.8 };
+                self.xd *= roce;
+                self.yd *= roce;
+                self.zd *= roce;
+                self.zd -= 0.02;
+            } else {
+                self.xd *= 0.91;
+                self.yd *= 0.98;
+                self.zd *= 0.91;
+                self.zd -= 0.08;
+                if self.on_ground {
+                    self.xd *= 0.6;
+                    self.zd *= 0.6;
+                }
+            }
+            return;
+        }
         let en_liquido = self.liquido(nivel).is_some();
-        if jump && (self.on_ground || en_liquido) {
+        if jump_presionado && (self.on_ground || en_liquido) {
             // Nadar: dentro del agua/lava el salto empuja hacia arriba sin la
             // velocidad del salto en seco.
             self.zd = if en_liquido { 0.18 } else { 0.5 };
@@ -406,6 +489,10 @@ struct App {
     extra_shots: bool,
     extra_fullscreen: bool,
     g_repeat: bool,
+    // 0.0.13a consume estos flancos una sola vez: mantener R ya no reinicia
+    // la posicion y mantener salto no hace saltar al aterrizar.
+    salto_presionado: bool,
+    reinicio_presionado: bool,
     fullscreen: bool,
     pedir_captura: bool,
     hit: Option<((i32, i32, i32), (i32, i32, i32))>,
@@ -428,16 +515,20 @@ impl App {
                 .unwrap_or(SPAWN_SEED)
         };
         let mut nivel = match modo {
-            Modo::Clasico if version == "c0.0.12a" => Nivel::new_clasico_012(seed),
+            Modo::Clasico if version == "c0.0.13a" => Nivel::new_013a_dev(seed),
+            Modo::Clasico if version == "c0.0.13a_03" => Nivel::new_clasico_013a03(seed),
+            Modo::Clasico if es_clasico_con_liquidos(version) => Nivel::new_clasico_012(seed),
             Modo::Clasico => Nivel::new_clasico(seed),
             Modo::Legacy => Nivel::new(seed),
         };
         // El test necesita una cara de la capa de niebla: un techo sobre la
         // camara deja su columna a oscuras, como una casa del jugador.
         if std::env::var_os("RD_SMOKE").is_some() {
+            let cx = (nivel.ancho / 2) as i32;
+            let cy = (nivel.alto / 2) as i32;
             for dx in -2..=2 {
                 for dy in -2..=2 {
-                    nivel.set(128 + dx, 128 + dy, 50, tiles::PIEDRA);
+                    nivel.set(cx + dx, cy + dy, 50, tiles::PIEDRA);
                 }
             }
         }
@@ -445,19 +536,29 @@ impl App {
         // en todo el mundo). RD_ZOMBIS_CERCA los pone delante para poder verlos;
         // RD_SMOKE_SIN_ZOMBIS deja la escena limpia para las capturas del velo.
         let cerca = std::env::var("RD_ZOMBIS_CERCA").is_ok();
-        let sin_zombis = std::env::var_os("RD_SMOKE_SIN_ZOMBIS").is_some();
+        // La wiki de 0.0.13a_03 documenta que los mobs ya no aparecen de forma
+        // natural. El arnes de humo puede seguir pidiendo uno con RD_SMOKE.
+        let sin_zombis = std::env::var_os("RD_SMOKE_SIN_ZOMBIS").is_some()
+            || (version == "c0.0.13a_03" && std::env::var_os("RD_SMOKE").is_none());
         let mut zombis = Vec::new();
         if !sin_zombis {
+            let cx = (nivel.ancho / 2) as f32;
+            let cy = (nivel.alto / 2) as f32;
             for i in 0..10 {
-                let mut z = Zombie::new(&nivel, 128.0, 0.0, 128.0);
+                let mut z = Zombie::new(&nivel, cx, 0.0, cy);
                 if cerca {
-                    z.e.set_pos(128.0 + (i % 5) as f32 * 1.5 - 3.0, 122.0 - (i / 5) as f32 * 2.0, DEPTH as f32 + 4.0);
+                    z.e.set_pos(
+                        cx + (i % 5) as f32 * 1.5 - 3.0,
+                        cy - 6.0 - (i / 5) as f32 * 2.0,
+                        nivel.fondo as f32 + 4.0,
+                    );
                 } else {
                     z.e.reset_pos(&nivel);
                 }
                 zombis.push(z);
             }
         }
+        let (ancho_mundo, alto_mundo, fondo_mundo) = (nivel.ancho, nivel.alto, nivel.fondo);
         App {
             version,
             modo,
@@ -475,7 +576,7 @@ impl App {
             window: None,
             renderer: None,
             nivel,
-            jugador: Jugador::new(),
+            jugador: Jugador::new(ancho_mundo, alto_mundo, fondo_mundo),
             zombis,
             particulas: Vec::new(),
             keys: HashSet::new(),
@@ -492,6 +593,8 @@ impl App {
             extra_shots: std::env::var_os("RD_F2_SHOTS").is_some(),
             extra_fullscreen: std::env::var_os("RD_F11_FULLSCREEN").is_some(),
             g_repeat: std::env::var_os("RD_G_REPEAT").is_some(),
+            salto_presionado: false,
+            reinicio_presionado: false,
             fullscreen: false,
             pedir_captura: false,
             hit: None,
@@ -534,8 +637,8 @@ impl App {
     }
 
     fn reconstruir_todo(&mut self) {
-        let nx = WIDTH / mesh::CHUNK;
-        let ny = HEIGHT / mesh::CHUNK;
+        let nx = self.nivel.ancho / mesh::CHUNK;
+        let ny = self.nivel.alto / mesh::CHUNK;
         let mut capa0 = Vec::with_capacity(nx * ny);
         let mut capa1 = Vec::with_capacity(nx * ny);
         let mut liquidos0 = Vec::with_capacity(nx * ny);
@@ -575,8 +678,9 @@ impl App {
     // pueden estar en un chunk vecino; antes solo se reconstruia el chunk del
     // bloque y quedaban caras viejas en las costuras de 16.
     fn tocar_zona(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
-        let nx = WIDTH / mesh::CHUNK;
-        let (cx0, cx1, cy0, cy1) = chunks_tocados(x0, y0, x1, y1);
+        let nx = self.nivel.ancho / mesh::CHUNK;
+        let (cx0, cx1, cy0, cy1) =
+            chunks_tocados(self.nivel.ancho, self.nivel.alto, x0, y0, x1, y1);
         let nivel = &self.nivel;
         let Some(r) = &mut self.renderer else { return };
         let mut n = 0u32;
@@ -827,6 +931,9 @@ impl ApplicationHandler for App {
                             let _ = self.nivel.save();
                         }
                         Key::Character(c) => {
+                            if c.eq_ignore_ascii_case("r") && es_13a(self.version) {
+                                self.reinicio_presionado = true;
+                            }
                             if let Some(id) = bloque_para_tecla(self.version, c.as_str()) {
                                 self.pintura = id;
                             } else if c.eq_ignore_ascii_case("y") && self.eje_y {
@@ -856,6 +963,9 @@ impl ApplicationHandler for App {
                         | Key::Named(NamedKey::Super)
                         | Key::Named(NamedKey::Meta) => {
                             self.keys.insert(" ".to_string());
+                            if es_13a(self.version) {
+                                self.salto_presionado = true;
+                            }
                         }
                         Key::Named(NamedKey::ArrowUp) => {
                             self.keys.insert("arrowup".to_string());
@@ -994,6 +1104,8 @@ impl ApplicationHandler for App {
         let s: f32 = if self.keys.contains("d") || self.keys.contains("arrowright") { 1.0 } else { 0.0 }
             - if self.keys.contains("a") || self.keys.contains("arrowleft") { 1.0 } else { 0.0 };
         let jump = self.keys.contains(" ");
+        let reset_mantenido = self.keys.contains("r") || self.keys.contains("R");
+        let version_13a = es_13a(self.version);
         self.tick_acc += dt;
         let mut steps = (self.tick_acc * TPS) as i32;
         if steps > 100 { steps = 100; }
@@ -1015,8 +1127,27 @@ impl ApplicationHandler for App {
                     i += 1;
                 }
             }
-            let reset = self.keys.contains("r") || self.keys.contains("R");
-            self.jugador.tick(&self.nivel, f, s, jump, reset);
+            if version_13a {
+                self.jugador.tick_con(
+                    &self.nivel,
+                    f,
+                    s,
+                    self.salto_presionado,
+                    jump,
+                    self.reinicio_presionado,
+                    true,
+                );
+                self.salto_presionado = false;
+                self.reinicio_presionado = false;
+            } else {
+                self.jugador.tick(
+                    &self.nivel,
+                    f,
+                    s,
+                    jump,
+                    reset_mantenido,
+                );
+            }
         }
         // LevelRenderer.updateDirtyChunks: una vez por frame, despues de todos
         // los ticks, para que la hierba/arbustos cambiados por el nivel se vean.
@@ -1130,6 +1261,33 @@ impl ApplicationHandler for App {
         }
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {
             r.set_particulas(&pv, &pv_fondo);
+            // 0.0.13a_03 elige GL_EXP: agua 0.02/0.02/0.2 con densidad 0.1,
+            // lava 0.6/0.1/0 con densidad 2.0. Antes de 13a la niebla de lava
+            // era naranja y menos densa; el resto de Classic conserva la niebla
+            // oscura normal del port.
+            if es_13a(self.version) {
+                match self.jugador.liquido(&self.nivel) {
+                    Some(tiles::AGUA) => {
+                        r.fog_color = [0.02, 0.02, 0.2, 1.0];
+                        r.fog_densidad = 0.1;
+                        r.fog_densidad_principal = 0.1;
+                    }
+                    Some(tiles::LAVA) => {
+                        r.fog_color = [0.6, 0.1, 0.0, 1.0];
+                        r.fog_densidad = 2.0;
+                        r.fog_densidad_principal = 2.0;
+                    }
+                    _ => {
+                        r.fog_color = [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0];
+                        r.fog_densidad = 0.06;
+                        r.fog_densidad_principal = 0.0;
+                    }
+                }
+            } else {
+                r.fog_color = [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0];
+                r.fog_densidad = 0.06;
+                r.fog_densidad_principal = 0.0;
+            }
             r.hit_preview = preview;
             // Extras de instancia: coordenadas en las versiones sin HUD propio
             // (F3) y captura de pantalla (F2).
@@ -1174,21 +1332,32 @@ mod tests {
     fn un_bloque_en_la_costura_marca_los_chunks_vecinos() {
         // (15,15) esta en la esquina del chunk 0: la luz cambia caras de los
         // chunks 0, 1 y 4, asi que hay que reconstruir los cuatro de la esquina.
-        assert_eq!(chunks_tocados(15, 15, 15, 15), (0, 1, 0, 1));
+        assert_eq!(chunks_tocados(256, 256, 15, 15, 15, 15), (0, 1, 0, 1));
         // Un bloque en el centro solo toca su chunk.
-        assert_eq!(chunks_tocados(8, 8, 8, 8), (0, 0, 0, 0));
+        assert_eq!(chunks_tocados(256, 256, 8, 8, 8, 8), (0, 0, 0, 0));
         // Fuera del mundo se recorta al ultimo chunk.
-        assert_eq!(chunks_tocados(300, 300, 300, 300), (15, 15, 15, 15));
+        assert_eq!(chunks_tocados(256, 256, 300, 300, 300, 300), (15, 15, 15, 15));
     }
 
     #[test]
     fn reset_pos_conserva_la_velocidad_como_el_original() {
-        let mut j = Jugador::new();
+        let mut j = Jugador::new(256, 256, 64);
         j.xd = 1.0;
         j.yd = 2.0;
         j.zd = 3.0;
         j.reset_pos();
         assert_eq!((j.xd, j.yd, j.zd), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn el_013a_usa_el_salto_corto_de_la_0_0_11a() {
+        let nivel = Nivel::new(12345);
+        let mut j = Jugador::new(256, 256, 64);
+        j.set_pos(128.5, 128.5, 100.0);
+        j.on_ground = true;
+        // 0.0.13a_03: zd = 0.42 y despues 0.91 de roce menos 0.08 de gravedad.
+        j.tick_con(&nivel, 0.0, 0.0, true, false, false, true);
+        assert!(j.zd > 0.0 && j.zd < 0.35, "salto 13a inesperado: {}", j.zd);
     }
 
     #[test]
@@ -1199,13 +1368,13 @@ mod tests {
             // por encima, sin colinas naturales de por medio.
             for x in 64..192 {
                 for y in 64..192 {
-                    for z in 0..DEPTH {
+                    for z in 0..nivel.fondo {
                         let id = if z <= altura { tiles::PIEDRA } else { tiles::AIRE };
                         nivel.set(x as i32, y as i32, z as i32, id);
                     }
                 }
             }
-            let mut j = Jugador::new();
+            let mut j = Jugador::new(256, 256, 64);
             j.set_pos(100.5, 170.5, 63.0);
             j.xo = j.x;
             j.yo = j.y;
@@ -1229,8 +1398,8 @@ mod tests {
     #[test]
     fn el_jugador_cae_y_se_queda_sobre_el_suelo() {
         let nivel = Nivel::new(12345);
-        let base = nivel.light[128 + 128 * WIDTH];
-        let mut j = Jugador::new();
+        let base = nivel.light[128 + 128 * nivel.ancho];
+        let mut j = Jugador::new(256, 256, 64);
         j.set_pos(128.5, 128.5, 74.0);
         j.xo = j.x;
         j.yo = j.y;
@@ -1246,6 +1415,20 @@ mod tests {
     }
 
     #[test]
+    fn el_jugador_cae_en_el_mundo_largo_de_013a() {
+        let nivel = Nivel::new_013a_dev(12345);
+        assert_eq!((nivel.ancho, nivel.alto, nivel.fondo), (32, 512, 64));
+        let mut j = Jugador::new(32, 512, 64);
+        j.set_pos(16.0, 256.0, 74.0);
+        for _ in 0..400 {
+            j.tick(&nivel, 0.0, 0.0, false, false);
+        }
+        // La superficie plana está en z=32; el jugador debe quedar encima, no
+        // atravesarla ni caer fuera del mundo.
+        assert!(j.z >= 33.0 && j.z < 35.0, "z inesperado en mundo largo: {}", j.z);
+    }
+
+    #[test]
     fn las_teclas_de_bloque_son_las_teclas_fisicas_del_original() {
         assert_eq!(bloque_para_tecla("rd-20090515", "1"), Some(tiles::PIEDRA));
         assert_eq!(bloque_para_tecla("rd-20090515", "2"), Some(tiles::TIERRA));
@@ -1258,5 +1441,19 @@ mod tests {
         assert_eq!(bloque_para_tecla("rd-20090515", "7"), None);
         // rd-160052 no define Bush: la 6 no debe seleccionar nada.
         assert_eq!(bloque_para_tecla("rd-160052", "6"), None);
+        // Hasta 0.0.13a_03 no hay teclas para agua, lava ni bedrock: el jar
+        // solo asigna 1/2/3/4/6 a piedra, tierra, ladrillo, madera y arbusto.
+        for version in [
+            "c0.0.12a",
+            "c0.0.12a_01",
+            "c0.0.12a_02",
+            "c0.0.12a_03",
+            "c0.0.13a",
+            "c0.0.13a_03",
+        ] {
+            assert_eq!(bloque_para_tecla(version, "7"), None);
+            assert_eq!(bloque_para_tecla(version, "8"), None);
+            assert_eq!(bloque_para_tecla(version, "9"), None);
+        }
     }
 }

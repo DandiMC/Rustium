@@ -3,7 +3,8 @@
 Launcher y port a Rust de las versiones pre-clásicas de Minecraft (rd-131655,
 rd-132211, rd-132328, rd-20090515, rd-160052 y rd-161348), de las Classic private
 alpha (mc-161607, mc-161616, mc-161625 y mc-161648) y de las primeras Classic
-(c0.0.3a, c0.0.9a, c0.0.10a, c0.0.11a y c0.0.12a), sin cuenta de Microsoft y sin
+(c0.0.3a, c0.0.9a, c0.0.10a, c0.0.11a, c0.0.12a y sus continuaciones hasta
+c0.0.13a_03), sin cuenta de Microsoft y sin
 descargar nada de Mojang: lee las texturas de la copia que ya tengas en el ordenador
 y, si no hay ninguna, dibuja las suyas.
 
@@ -23,7 +24,7 @@ y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.3.1-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.3.2-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -34,8 +35,8 @@ Solo hace falta **el instalador**: `Rustium-0.3.1-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las quince versiones (las seis
-pre-clásicas, las cuatro alpha privadas y las cinco primeras Classic):
+El selector encima de «Jugar» arranca cualquiera de las veinte versiones (las seis
+pre-clásicas, las cuatro alpha privadas y las diez primeras Classic):
 
 | versión | qué trae |
 |---|---|
@@ -53,14 +54,30 @@ pre-clásicas, las cuatro alpha privadas y las cinco primeras Classic):
 | c0.0.9a | reconstruida: el modo construir con el velo blanco por las seis caras, contador de fps, a 640×480 y Escape cierra |
 | c0.0.10a | reconstruida: igual que 0.0.9a pero Escape solo suelta el ratón |
 | c0.0.11a | la primera Classic conservada: terreno con cuevas de `NoiseMap`, HUD con fps y chunk updates, y el modo pintar que cambia con el botón derecho |
-| c0.0.12a | agua, lava y bedrock: océano alrededor de las islas, lagos de lava, natación y 7/8/9 para poner agua, lava y bedrock |
+| c0.0.12a | reconstruida: agua, lava y bedrock: océano alrededor de las islas, lagos de lava y natación; solo 1/2/3/4/6 seleccionan bloques, como en la build archivada |
+| c0.0.12a_01 | reconstruida: como 0.0.12a, con el reinicio de mobs al crear un nivel |
+| c0.0.12a_02 | reconstruida: la mejora de rendimiento de 0.0.12a, sin cambios de juego |
+| c0.0.12a_03 | el reupload archivado de 0.0.12a: correcciones de guardado y rendimiento |
+| c0.0.13a | reconstruida a partir de la build de desarrollo archivada: 854×480, salto de 0.0.11a, física de agua/lava, niebla azul/roja y el mundo plano de 32×512×64 con cuevas y lava subterránea |
+| c0.0.13a_03 | oficial y archivada: 854×480, sin lagos de lava sobre el nivel del mar y sin mobs naturales |
 
-Las cuatro mc-, c0.0.3a, c0.0.9a y c0.0.10a son **reconstrucciones**: sus jars nunca
-se archivaron. Salen del código de c0.0.11a y de lo que documenta la Minecraft Wiki
-de cada una, y llevan las texturas y la fuente de c0.0.11a.
+Las cuatro mc-, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02 y
+c0.0.13a son **reconstrucciones**: sus jars nunca se archivaron. Salen del código de
+c0.0.11a y de lo que documenta la Minecraft Wiki de cada una, y llevan las texturas y
+la fuente de c0.0.11a cuando no hay un jar propio. El launcher las marca con **REC**
+en el selector y en la lista de instancias; el id y la carpeta del mundo no cambian.
 
 rd-131655 (el «Cave game tech test») nunca tuvo jar publicado. Está reconstruido
 a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-132211.
+
+`c0.0.13a` sigue el jar que el launcher oficial archiva con ese nombre: la build de
+desarrollo para probar el tamaño del mundo, no la release perdida. Genera el mundo
+plano documentado de 32×512×64, cava cuevas y siembra lava bajo tierra. Su
+`level.dat` usa la cabecera de 0.0.13a (magia `0x271BB788`, nombre, autor, fecha y
+ancho/alto/profundidad); la cabecera también se lee, así que los niveles con otras
+dimensiones, como los documentados 1024×64×64 y 512×64×512, se cargan y se dibujan.
+Los guardados anteriores a 0.0.13a conservan el formato crudo de bloques y siguen
+abriéndose.
 
 ## Tus mundos
 
@@ -128,7 +145,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.3.1-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.3.2-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 

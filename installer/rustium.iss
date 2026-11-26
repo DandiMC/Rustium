@@ -11,7 +11,7 @@
 ; also where the launcher keeps its config (lang=...) and downloaded updates.
 
 #define MyAppName "Rustium"
-#define MyAppVersion "0.3.1"
+#define MyAppVersion "0.3.2"
 #define MyAppPublisher "DandiMC"
 #define MyAppExeName "Rustium.exe"
 
@@ -69,12 +69,17 @@ Source: "..\target\x86_64-pc-windows-gnu\release\mc161607.exe"; DestDir: "{app}"
 Source: "..\target\x86_64-pc-windows-gnu\release\mc161616.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\mc161625.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\mc161648.exe"; DestDir: "{app}"; Flags: ignoreversion
-; Classic: las tres reconstruidas, la primera conservada y la primera con liquidos.
+; Classic: reconstruidas, conservadas y las continuaciones con liquidos.
 Source: "..\target\x86_64-pc-windows-gnu\release\classic003a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic009a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic010a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic011a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic012a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic012a01.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic012a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic012a03.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic013a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic013a03.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Apache 2.0 asks for the licence and the attribution notice to be handed to
 ; every recipient, so they are installed next to the executables.

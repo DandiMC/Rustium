@@ -1,16 +1,21 @@
-// Level de la familia rd-160052 / rd-20090515: mundo de ids de tile con
-// profundidades de luz por columna, generado con dos mapas Perlin de altura y
-// uno de piedra.
-//
-// Ejes como el resto del port: x e y horizontales (y = fondo), z arriba.
-// El array va indexado (z * HEIGHT + y) * WIDTH + x, igual que el original
+// Level de la familia rd-160052 / rd-20090515 y de Classic: mundo de ids de
+// tile con profundidades de luz por columna. Los ejes del port son x e y
+// horizontales (y = fondo) y z arriba; el array va indexado
+// (z * alto + y) * ancho + x, igual que el original
 // ((y * height + z) * width + x con y = vertical, z = fondo).
+//
+// Hasta 0.0.12a_03 el level.dat era solo el array de bloques comprimido con
+// gzip. Desde 0.0.13a lleva una cabecera con nombre, autor, fecha y dimensiones;
+// 0.0.13a-dev usa un mundo plano de 32x512x64. El port acepta los dos formatos.
 
 use super::noisemap;
 use super::perlin;
 use super::tiles;
 use crate::world::BlockBox;
+use std::io;
+use std::path::Path;
 
+/// Dimensiones por defecto de Classic (x, fondo horizontal, altura).
 pub const WIDTH: usize = 256;
 pub const HEIGHT: usize = 256;
 pub const DEPTH: usize = 64;
@@ -18,7 +23,25 @@ pub const DEPTH: usize = 64;
 /// sobresalen por encima de esta cota.
 pub const SEA_LEVEL: i32 = (DEPTH as i32 * 5) / 8;
 
+/// Formato de level.dat. `Crudo` es el de rd-132211..0.0.12a_03; `Cabecera13a`
+/// es el que introdujo 0.0.13a y que también usa 0.0.13a_03.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Formato {
+    Crudo,
+    Cabecera13a,
+}
+
+// LevelIO: MAGIC_NUMBER = 656127880, CURRENT_VERSION = 1.
+const MAGIC_LEVEL: i32 = 656_127_880;
+const VERSION_LEVEL: u8 = 1;
+
 pub struct Nivel {
+    /// x: ancho.
+    pub ancho: usize,
+    /// z horizontal (el `height` del Level de Java).
+    pub alto: usize,
+    /// y vertical (el `depth` del Level de Java).
+    pub fondo: usize,
     pub blocks: Vec<u8>,
     pub light: Vec<i32>,
     pub random: perlin::JavaRandom,
@@ -32,22 +55,50 @@ pub struct Nivel {
     // jugador coloca un liquido, no con el oceano generado, para que el mundo
     // no se inunde entero nada mas empezar.
     pub liquidos: Vec<(i32, i32, i32)>,
+    pub formato: Formato,
+    pub nombre: String,
+    pub creador: String,
+    pub creado: i64,
+}
+
+fn ahora_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 impl Nivel {
-    pub fn new(seed: i64) -> Self {
-        let mut n = Nivel {
-            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
-            light: vec![0; WIDTH * HEIGHT],
+    fn vacio(seed: i64, ancho: usize, alto: usize, fondo: usize, formato: Formato) -> Self {
+        Nivel {
+            ancho,
+            alto,
+            fondo,
+            blocks: vec![0; ancho * alto * fondo],
+            light: vec![0; ancho * alto],
             random: perlin::JavaRandom::new(seed),
             unprocessed: 0,
             dirty: Vec::new(),
             liquidos: Vec::new(),
-        };
+            formato,
+            nombre: "A Nice World".to_string(),
+            creador: "noname".to_string(),
+            creado: ahora_millis(),
+        }
+    }
+
+    /// Nivel vacío con dimensiones arbitrarias. Lo usan los tests y la carga de
+    /// un level.dat con cabecera, antes de decidir su tamaño definitivo.
+    pub fn nuevo_vacio(seed: i64, ancho: usize, alto: usize, fondo: usize) -> Self {
+        Self::vacio(seed, ancho, alto, fondo, Formato::Crudo)
+    }
+
+    pub fn new(seed: i64) -> Self {
+        let mut n = Self::vacio(seed, WIDTH, HEIGHT, DEPTH, Formato::Crudo);
         if n.load().is_none() {
             n.generar(seed);
         }
-        n.calc_light(0, 0, WIDTH, HEIGHT);
+        n.calc_light(0, 0, n.ancho, n.alto);
         n.volcar_si_toca();
         n
     }
@@ -55,18 +106,11 @@ impl Nivel {
     // Classic c0.0.11a: Level encarga el mapa a LevelGen, que en vez de Perlin
     // usa cuatro NoiseMap y cava cuevas con un Random propio.
     pub fn new_clasico(seed: i64) -> Self {
-        let mut n = Nivel {
-            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
-            light: vec![0; WIDTH * HEIGHT],
-            random: perlin::JavaRandom::new(seed),
-            unprocessed: 0,
-            dirty: Vec::new(),
-            liquidos: Vec::new(),
-        };
+        let mut n = Self::vacio(seed, WIDTH, HEIGHT, DEPTH, Formato::Crudo);
         if n.load().is_none() {
             n.generar_clasico(seed);
         }
-        n.calc_light(0, 0, WIDTH, HEIGHT);
+        n.calc_light(0, 0, n.ancho, n.alto);
         n.volcar_si_toca();
         n
     }
@@ -74,21 +118,45 @@ impl Nivel {
     /// c0.0.12a: el mundo tiene una capa de bedrock, un oceano alrededor de las
     /// islas y lagos de lava. Es el primer Classic con liquidos.
     pub fn new_clasico_012(seed: i64) -> Self {
-        let mut n = Nivel {
-            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
-            light: vec![0; WIDTH * HEIGHT],
-            random: perlin::JavaRandom::new(seed),
-            unprocessed: 0,
-            dirty: Vec::new(),
-            liquidos: Vec::new(),
-        };
+        Self::new_clasico_012_con(seed, true)
+    }
+
+    /// c0.0.13a_03 es oficial y usa el level.dat con cabecera de 0.0.13a.
+    pub fn new_clasico_013a03(seed: i64) -> Self {
+        let mut n = Self::vacio(seed, WIDTH, HEIGHT, DEPTH, Formato::Cabecera13a);
         if n.load().is_none() {
-            n.generar_clasico_012(seed);
+            n.generar_clasico_012_con(seed, false);
+        }
+        n.liquidos.clear();
+        n.calc_light(0, 0, n.ancho, n.alto);
+        n.volcar_si_toca();
+        n
+    }
+
+    /// c0.0.13a-dev, la build archivada en el launcher: mundo completamente
+    /// plano de 32x512x64 (x, fondo, altura). `LevelGen` la genera con hierba en
+    /// la cota depth/2, tierra debajo, piedra en depth/3 y tuneles en la roca.
+    /// No hay lagos de lava en la superficie; la lava solo aparece en cuevas.
+    pub fn new_013a_dev(seed: i64) -> Self {
+        let mut n = Self::vacio(seed, 32, 512, 64, Formato::Cabecera13a);
+        if n.load().is_none() {
+            n.generar_013a_dev(seed);
+        }
+        n.liquidos.clear();
+        n.calc_light(0, 0, n.ancho, n.alto);
+        n.volcar_si_toca();
+        n
+    }
+
+    fn new_clasico_012_con(seed: i64, lava_superficie: bool) -> Self {
+        let mut n = Self::vacio(seed, WIDTH, HEIGHT, DEPTH, Formato::Crudo);
+        if n.load().is_none() {
+            n.generar_clasico_012_con(seed, lava_superficie);
         }
         // El oceano y los lagos generados son estaticos; solo los liquidos que
         // coloca el jugador entran en la cola de flujo.
         n.liquidos.clear();
-        n.calc_light(0, 0, WIDTH, HEIGHT);
+        n.calc_light(0, 0, n.ancho, n.alto);
         n.volcar_si_toca();
         n
     }
@@ -97,19 +165,24 @@ impl Nivel {
     // NoiseMap que 0.0.11a; encima se anaden el oceano, la capa de bedrock y
     // algunos lagos de lava. No usa ningun asset de Mojang.
     fn generar_clasico_012(&mut self, seed: i64) {
+        self.generar_clasico_012_con(seed, true);
+    }
+
+    fn generar_clasico_012_con(&mut self, seed: i64, lava_superficie: bool) {
+        let (w, h, d) = (self.ancho, self.alto, self.fondo);
         let sem = semillas(seed);
-        let h1 = noisemap::read(0, WIDTH, HEIGHT, sem[0]);
-        let h2 = noisemap::read(0, WIDTH, HEIGHT, sem[1]);
-        let cf = noisemap::read(1, WIDTH, HEIGHT, sem[2]);
-        let rock = noisemap::read(1, WIDTH, HEIGHT, sem[3]);
-        let lava = noisemap::read(2, WIDTH, HEIGHT, seed ^ 0x012A_5EED);
-        let mut superficie = vec![0i32; WIDTH * HEIGHT];
-        let d = DEPTH as i32;
+        let h1 = noisemap::read(0, w, h, sem[0]);
+        let h2 = noisemap::read(0, w, h, sem[1]);
+        let cf = noisemap::read(1, w, h, sem[2]);
+        let rock = noisemap::read(1, w, h, sem[3]);
+        let lava = noisemap::read(2, w, h, seed ^ 0x012A_5EED);
+        let mut superficie = vec![0i32; w * h];
+        let d = d as i32;
         let mar = SEA_LEVEL;
-        for x in 0..WIDTH {
-            for y in 0..HEIGHT {
-                for z in 0..DEPTH {
-                    let k = x + y * WIDTH;
+        for x in 0..w {
+            for y in 0..h {
+                for z in 0..d as usize {
+                    let k = x + y * w;
                     let dh1 = h1[k];
                     let mut dh2 = h2[k];
                     if cf[k] < 128 {
@@ -142,7 +215,8 @@ impl Nivel {
                     };
                     // Lagos de lava pequenos en la superficie. Es raro a
                     // proposito: no queremos convertir el mapa en un infierno.
-                    if id == tiles::CESPED && lava[k] > 252 {
+                    // En 0.0.13a_03 ya no aparecen por encima del nivel del mar.
+                    if lava_superficie && id == tiles::CESPED && lava[k] > 252 {
                         id = tiles::LAVA;
                     }
                     let i = self.idx(x, y, z);
@@ -151,7 +225,9 @@ impl Nivel {
             }
         }
         self.cavar_cuevas(seed);
-        self.anadir_lagos_lava(seed, &superficie);
+        if lava_superficie {
+            self.anadir_lagos_lava(seed, &superficie);
+        }
         self.anadir_lava_en_cuevas(seed);
     }
 
@@ -159,12 +235,13 @@ impl Nivel {
     // bloques sueltos; estos son pequenos y se colocan sobre tierra firme.
     fn anadir_lagos_lava(&mut self, seed: i64, superficie: &[i32]) {
         let mut rnd = perlin::JavaRandom::new(seed ^ 0x1A2A_910B);
-        let (w, h) = (WIDTH as i32, HEIGHT as i32);
+        let (w, h) = (self.ancho as i32, self.alto as i32);
+        let fondo = self.fondo as i32;
         for _ in 0..16 {
             let cx = 4 + rnd.next_int(w - 8);
             let cy = 4 + rnd.next_int(h - 8);
-            let k = cx as usize + cy as usize * WIDTH;
-            let alto = superficie[k].clamp(SEA_LEVEL + 2, DEPTH as i32 - 3);
+            let k = cx as usize + cy as usize * self.ancho;
+            let alto = superficie[k].clamp(SEA_LEVEL + 2, fondo - 3);
             for dx in -2..=2 {
                 for dy in -2..=2 {
                     let x = cx + dx;
@@ -172,10 +249,10 @@ impl Nivel {
                     if x < 1 || y < 1 || x >= w - 1 || y >= h - 1 {
                         continue;
                     }
-                    let k = x as usize + y as usize * WIDTH;
-                    let z = superficie[k].clamp(alto, DEPTH as i32 - 2);
+                    let k = x as usize + y as usize * self.ancho;
+                    let z = superficie[k].clamp(alto, fondo - 2);
                     self.set(x, y, z, tiles::LAVA);
-                    if z + 1 < DEPTH as i32 {
+                    if z + 1 < fondo {
                         self.set(x, y, z + 1, tiles::AIRE);
                     }
                 }
@@ -187,7 +264,7 @@ impl Nivel {
     // que el jugador encuentre lava tambien al explorar, no solo en la superficie.
     fn anadir_lava_en_cuevas(&mut self, seed: i64) {
         let mut rnd = perlin::JavaRandom::new(seed ^ 0x00C0_12A5);
-        let (w, h) = (WIDTH as i32, HEIGHT as i32);
+        let (w, h) = (self.ancho as i32, self.alto as i32);
         for _ in 0..(w * h / 900) {
             let x = rnd.next_int(w);
             let y = rnd.next_int(h);
@@ -202,19 +279,85 @@ impl Nivel {
         }
     }
 
+    /// `LevelGen.generateLevel` de c0.0.13a-dev. La build que se conserva hace
+    /// un mundo plano: en la cota `depth/2` hay hierba, debajo tierra y en el
+    /// tercio inferior piedra. Después cava los túneles y siembra lava en las
+    /// cuevas; el agua no llega a aparecer porque todas las columnas están
+    /// cerradas hasta la superficie.
+    fn generar_013a_dev(&mut self, seed: i64) {
+        let (w, h, d) = (self.ancho, self.alto, self.fondo);
+        for x in 0..w {
+            for y in 0..d {
+                for z in 0..h {
+                    let id = if y == d / 2 && y >= d / 2 - 1 {
+                        tiles::CESPED
+                    } else if y <= d / 2 {
+                        tiles::TIERRA
+                    } else {
+                        tiles::AIRE
+                    };
+                    let id = if y <= d / 3 { tiles::PIEDRA } else { id };
+                    let i = self.idx(x, z, y);
+                    self.blocks[i] = id;
+                }
+            }
+        }
+        self.cavar_cuevas(seed);
+        self.anadir_lava_013a_dev(seed);
+    }
+
+    /// `LevelGen.addLava` de 0.0.13a-dev. El original lanza
+    /// width*height*depth/10000 fuentes en la mitad inferior del mundo y las
+    /// rellena con flood fill. Aquí se colocan en bloques de aire de las cuevas.
+    fn anadir_lava_013a_dev(&mut self, seed: i64) {
+        let (w, h, d) = (self.ancho, self.alto, self.fondo);
+        let mut rnd = perlin::JavaRandom::new(seed ^ 0x013A_0001);
+        let count = w * h * d / 10000;
+        for _ in 0..count {
+            let x = rnd.next_int(w as i32);
+            let y = rnd.next_int((d / 2) as i32).max(1);
+            let z = rnd.next_int(h as i32);
+            if self.get(x, z, y) == tiles::AIRE {
+                self.flood_lava(x, z, y);
+            }
+        }
+    }
+
+    /// Relleno de lava de `LevelGen.floodFillLiquid`: una balsa conectada en
+    /// el mismo plano vertical. El original usa un flood fill de dos ejes a la
+    /// altura de la fuente; aquí se recorre con una pila y se limita a las
+    /// celdas de aire, para no atravesar roca.
+    fn flood_lava(&mut self, x: i32, z: i32, y: i32) {
+        let mut pila = vec![(x, z)];
+        while let Some((px, pz)) = pila.pop() {
+            if px < 0 || pz < 0 || px >= self.ancho as i32 || pz >= self.alto as i32 {
+                continue;
+            }
+            if self.get(px, pz, y) != tiles::AIRE {
+                continue;
+            }
+            self.set(px, pz, y, tiles::LAVA);
+            pila.push((px + 1, pz));
+            pila.push((px - 1, pz));
+            pila.push((px, pz + 1));
+            pila.push((px, pz - 1));
+        }
+    }
+
     // LevelGen.generateMap de c0.0.11a. Identico al de la familia B salvo los
     // cuatro NoiseMap y las cuevas (LevelGen se las hace aqui, no en Level).
     fn generar_clasico(&mut self, seed: i64) {
+        let (w, h, d) = (self.ancho, self.alto, self.fondo);
         let sem = semillas(seed);
-        let h1 = noisemap::read(0, WIDTH, HEIGHT, sem[0]);
-        let h2 = noisemap::read(0, WIDTH, HEIGHT, sem[1]);
-        let cf = noisemap::read(1, WIDTH, HEIGHT, sem[2]);
-        let rock = noisemap::read(1, WIDTH, HEIGHT, sem[3]);
-        let d = DEPTH as i32;
-        for x in 0..WIDTH {
-            for y in 0..HEIGHT {
-                for z in 0..DEPTH {
-                    let k = x + y * WIDTH;
+        let h1 = noisemap::read(0, w, h, sem[0]);
+        let h2 = noisemap::read(0, w, h, sem[1]);
+        let cf = noisemap::read(1, w, h, sem[2]);
+        let rock = noisemap::read(1, w, h, sem[3]);
+        let d = d as i32;
+        for x in 0..w {
+            for y in 0..h {
+                for z in 0..d as usize {
+                    let k = x + y * w;
                     let dh1 = h1[k];
                     let mut dh2 = h2[k];
                     if cf[k] < 128 {
@@ -248,11 +391,11 @@ impl Nivel {
     }
 
     // Segunda mitad de LevelGen.generateMap: gusanos de piedra que se comen la
-    // roca. Los 256 tuneles (w*h*d/256/64) salen de un Random que en el original
-    // se crea con la hora; aqui va con semilla para que el mundo se reproduzca.
+    // roca. Los túneles salen de un Random que en el original se crea con la
+    // hora; aqui va con semilla para que el mundo se reproduzca.
     fn cavar_cuevas(&mut self, seed: i64) {
         let mut random = perlin::JavaRandom::new(seed ^ 0xC0FFEE);
-        let (w, h, d) = (WIDTH as i32, HEIGHT as i32, DEPTH as i32);
+        let (w, h, d) = (self.ancho as i32, self.alto as i32, self.fondo as i32);
         let count = w * h * d / 256 / 64;
         for _ in 0..count {
             let mut x2 = random.next_float() * w as f32;
@@ -311,21 +454,22 @@ impl Nivel {
     fn idx(&self, x: usize, y: usize, z: usize) -> usize {
         // Java usa (alto * height + profundidad) * width + x; aqui x/y son
         // horizontales y z la altura, asi que el orden equivalente es este.
-        (z * HEIGHT + y) * WIDTH + x
+        (z * self.alto + y) * self.ancho + x
     }
 
     // generateMap() del original.
     fn generar(&mut self, seed: i64) {
+        let (w, h, d) = (self.ancho, self.alto, self.fondo);
         let sem = semillas(seed);
-        let h1 = perlin::read(0, WIDTH, HEIGHT, sem[0]);
-        let h2 = perlin::read(0, WIDTH, HEIGHT, sem[1]);
-        let cf = perlin::read(1, WIDTH, HEIGHT, sem[2]);
-        let rock = perlin::read(1, WIDTH, HEIGHT, sem[3]);
-        let d = DEPTH as i32;
-        for x in 0..WIDTH {
-            for y in 0..HEIGHT {
-                for z in 0..DEPTH {
-                    let k = x + y * WIDTH;
+        let h1 = perlin::read(0, w, h, sem[0]);
+        let h2 = perlin::read(0, w, h, sem[1]);
+        let cf = perlin::read(1, w, h, sem[2]);
+        let rock = perlin::read(1, w, h, sem[3]);
+        let d = d as i32;
+        for x in 0..w {
+            for y in 0..h {
+                for z in 0..d as usize {
+                    let k = x + y * w;
                     let dh1 = h1[k];
                     let mut dh2 = h2[k];
                     let cfh = cf[k];
@@ -359,13 +503,13 @@ impl Nivel {
     }
 
     pub fn calc_light(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
-        for x in x0..(x0 + x1).min(WIDTH) {
-            for y in y0..(y0 + y1).min(HEIGHT) {
-                let mut z = DEPTH - 1;
+        for x in x0..(x0 + x1).min(self.ancho) {
+            for y in y0..(y0 + y1).min(self.alto) {
+                let mut z = self.fondo - 1;
                 while z > 0 && !self.is_light_blocker(x, z, y) {
                     z -= 1;
                 }
-                self.light[x + y * WIDTH] = z as i32;
+                self.light[x + y * self.ancho] = z as i32;
             }
         }
     }
@@ -374,9 +518,9 @@ impl Nivel {
         if x < 0
             || y < 0
             || z < 0
-            || x as usize >= WIDTH
-            || y as usize >= HEIGHT
-            || z as usize >= DEPTH
+            || x as usize >= self.ancho
+            || y as usize >= self.alto
+            || z as usize >= self.fondo
         {
             return 0;
         }
@@ -387,9 +531,9 @@ impl Nivel {
         if x < 0
             || y < 0
             || z < 0
-            || x as usize >= WIDTH
-            || y as usize >= HEIGHT
-            || z as usize >= DEPTH
+            || x as usize >= self.ancho
+            || y as usize >= self.alto
+            || z as usize >= self.fondo
         {
             return false;
         }
@@ -424,24 +568,24 @@ impl Nivel {
         if x < 0
             || y < 0
             || z < 0
-            || x as usize >= WIDTH
-            || y as usize >= HEIGHT
-            || z as usize >= DEPTH
+            || x as usize >= self.ancho
+            || y as usize >= self.alto
+            || z as usize >= self.fondo
         {
             return true;
         }
-        z >= self.light[x as usize + y as usize * WIDTH]
+        z >= self.light[x as usize + y as usize * self.ancho]
     }
 
     // Cajas de colisión de los bloques que tocan la zona dada (Level.getCubes).
     pub fn cubes(&self, aabb: &BlockBox) -> Vec<BlockBox> {
         let mut out = Vec::new();
         let x0 = (aabb.x0.floor() as i32).max(0);
-        let x1 = ((aabb.x1 + 1.0).floor() as i32).min(WIDTH as i32);
+        let x1 = ((aabb.x1 + 1.0).floor() as i32).min(self.ancho as i32);
         let y0 = (aabb.y0.floor() as i32).max(0);
-        let y1 = ((aabb.y1 + 1.0).floor() as i32).min(HEIGHT as i32);
+        let y1 = ((aabb.y1 + 1.0).floor() as i32).min(self.alto as i32);
         let z0 = (aabb.z0.floor() as i32).max(0);
-        let z1 = ((aabb.z1 + 1.0).floor() as i32).min(DEPTH as i32);
+        let z1 = ((aabb.z1 + 1.0).floor() as i32).min(self.fondo as i32);
         for x in x0..x1 {
             for y in y0..y1 {
                 for z in z0..z1 {
@@ -469,6 +613,10 @@ impl crate::world::Mundo for Nivel {
     fn cajas(&self, bb: &BlockBox) -> Vec<BlockBox> {
         self.cubes(bb)
     }
+
+    fn dimensiones(&self) -> (usize, usize, usize) {
+        (self.ancho, self.alto, self.fondo)
+    }
 }
 
 // ------------------------------------------------ tick de los tiles (Level.tick)
@@ -477,13 +625,13 @@ impl Nivel {
     // Level.tick: acumula todos los bloques del mundo y procesa un tile al azar
     // por cada 400 acumulados (con 256x256x64 son ~10.000 por tick).
     pub fn tick(&mut self) {
-        self.unprocessed += (WIDTH * HEIGHT * DEPTH) as i32;
+        self.unprocessed += (self.ancho * self.alto * self.fondo) as i32;
         let mut ticks = self.unprocessed / 400;
         self.unprocessed -= ticks * 400;
         while ticks > 0 {
-            let x = self.random.next_int(WIDTH as i32);
-            let z = self.random.next_int(DEPTH as i32);
-            let y = self.random.next_int(HEIGHT as i32);
+            let x = self.random.next_int(self.ancho as i32);
+            let z = self.random.next_int(self.fondo as i32);
+            let y = self.random.next_int(self.alto as i32);
             let id = self.get(x, y, z);
             tiles::tick(self, id, x, y, z);
             ticks -= 1;
@@ -539,38 +687,148 @@ impl Nivel {
 }
 
 // ------------------------------------------------------------ guardar/cargar
-// El original escribe `level.dat` con GZIP del array de bloques tal cual. Aqui
-// se escribe un gzip valido (bloques deflate "stored", sin comprimir) para no
-// meter dependencias; al leerlo se aceptan esos mismos bloques.
+// Hasta 0.0.12a_03: GZIP del array de bloques tal cual. Desde 0.0.13a:
+// GZIP( magic 0x271BB788, version 1, writeUTF(nombre), writeUTF(creador),
+// writeLong(fecha), writeShort(width), writeShort(height), writeShort(depth),
+// bloques ). El array sigue el orden (y * height + z) * width + x.
 
-fn crc32(datos: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffffu32;
-    for &b in datos {
-        crc ^= b as u32;
-        for _ in 0..8 {
-            let m = (crc & 1).wrapping_neg();
-            crc = (crc >> 1) ^ (0xedb8_8320 & m);
-        }
+fn leer_utf(datos: &[u8], pos: &mut usize) -> Option<String> {
+    if *pos + 2 > datos.len() {
+        return None;
     }
-    !crc
+    let len = u16::from_be_bytes([datos[*pos], datos[*pos + 1]]) as usize;
+    *pos += 2;
+    if *pos + len > datos.len() {
+        return None;
+    }
+    let s = String::from_utf8(datos[*pos..*pos + len].to_vec()).ok()?;
+    *pos += len;
+    Some(s)
+}
+
+fn escribir_utf(out: &mut Vec<u8>, s: &str) {
+    let bytes = s.as_bytes();
+    let len = u16::try_from(bytes.len()).expect("nombre de mundo demasiado largo");
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(bytes);
+}
+
+// El jar usa ids separados para el agua/lava en reposo (9/11) y para sus
+// versiones animadas (8/10). El motor del port solo tiene un agua y una lava,
+// asi que al leer un level.dat de Java se normalizan y al escribir se vuelven
+// a codificar como las variantes en reposo.
+fn id_desde_java(id: u8) -> u8 {
+    match id {
+        9 => tiles::AGUA,
+        10 | 11 => tiles::LAVA,
+        _ => id,
+    }
+}
+
+fn id_a_java(id: u8) -> u8 {
+    match id {
+        tiles::AGUA => 9,
+        tiles::LAVA => 11,
+        _ => id,
+    }
+}
+
+/// Decodifica la cabecera de 0.0.13a. Devuelve None si el fichero no la tiene
+/// o si el array de bloques no mide width*height*depth.
+fn decodificar_cabecera(
+    datos: &[u8],
+) -> Option<(usize, usize, usize, Vec<u8>, String, String, i64)> {
+    if datos.len() < 4 + 1 + 2 + 2 + 8 + 6 {
+        return None;
+    }
+    let mut pos = 0usize;
+    let magic = i32::from_be_bytes(datos[pos..pos + 4].try_into().ok()?);
+    pos += 4;
+    if magic != MAGIC_LEVEL {
+        return None;
+    }
+    if datos[pos] != VERSION_LEVEL {
+        return None;
+    }
+    pos += 1;
+    let nombre = leer_utf(datos, &mut pos)?;
+    let creador = leer_utf(datos, &mut pos)?;
+    let creado = i64::from_be_bytes(datos[pos..pos + 8].try_into().ok()?);
+    pos += 8;
+    let ancho = u16::from_be_bytes([datos[pos], datos[pos + 1]]) as usize;
+    pos += 2;
+    let alto = u16::from_be_bytes([datos[pos], datos[pos + 1]]) as usize;
+    pos += 2;
+    let fondo = u16::from_be_bytes([datos[pos], datos[pos + 1]]) as usize;
+    pos += 2;
+    let largo = ancho.checked_mul(alto)?.checked_mul(fondo)?;
+    if datos.len() - pos != largo {
+        return None;
+    }
+    let mut blocks = datos[pos..].to_vec();
+    for b in &mut blocks {
+        *b = id_desde_java(*b);
+    }
+    Some((ancho, alto, fondo, blocks, nombre, creador, creado))
 }
 
 impl Nivel {
-    // GZIP normal, como el DataOutputStream(GZIPOutputStream) del original:
-    // cualquier lector de gzip (Java incluido) puede abrirlo.
-    pub fn save(&self) -> std::io::Result<()> {
-        crate::world::save_gzip_atomic(std::path::Path::new("level.dat"), &self.blocks)
+    fn codificar_cabecera(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(4 + 1 + 2 + 2 + 8 + 6 + self.blocks.len());
+        out.extend_from_slice(&MAGIC_LEVEL.to_be_bytes());
+        out.push(VERSION_LEVEL);
+        escribir_utf(&mut out, &self.nombre);
+        escribir_utf(&mut out, &self.creador);
+        out.extend_from_slice(&self.creado.to_be_bytes());
+        out.extend_from_slice(&(self.ancho as u16).to_be_bytes());
+        out.extend_from_slice(&(self.alto as u16).to_be_bytes());
+        out.extend_from_slice(&(self.fondo as u16).to_be_bytes());
+        out.extend(self.blocks.iter().map(|b| id_a_java(*b)));
+        out
     }
 
-    // Lee cualquier level.dat gzip (tambien los del Java original). Si el
-    // principal esta truncado, prueba el temporal y luego la copia anterior.
+    fn save_at(&self, path: &Path) -> io::Result<()> {
+        let datos = match self.formato {
+            Formato::Crudo => self.blocks.clone(),
+            Formato::Cabecera13a => self.codificar_cabecera(),
+        };
+        crate::world::save_gzip_atomic(path, &datos)
+    }
+
+    // GZIP normal, como el DataOutputStream(GZIPOutputStream) del original.
+    pub fn save(&self) -> io::Result<()> {
+        self.save_at(Path::new("level.dat"))
+    }
+
+    fn load_at(&mut self, path: &Path) -> Option<()> {
+        let datos = crate::world::load_gzip_any(path)?;
+        if let Some((ancho, alto, fondo, blocks, nombre, creador, creado)) =
+            decodificar_cabecera(&datos)
+        {
+            self.ancho = ancho;
+            self.alto = alto;
+            self.fondo = fondo;
+            self.blocks = blocks;
+            self.light = vec![0; ancho * alto];
+            self.nombre = nombre;
+            self.creador = creador;
+            self.creado = creado;
+            self.formato = Formato::Cabecera13a;
+            return Some(());
+        }
+        // Formato antiguo: solo bloques, sin dimensiones. Solo vale para el
+        // tamaño con el que se construyó este Nivel.
+        if datos.len() == self.ancho * self.alto * self.fondo {
+            self.blocks.copy_from_slice(&datos);
+            return Some(());
+        }
+        None
+    }
+
+    // Lee cualquier level.dat gzip (también los del Java original): primero
+    // prueba la cabecera de 0.0.13a y, si no, el formato crudo antiguo.
     pub fn load(&mut self) -> Option<()> {
-        let data = crate::world::load_gzip_with_backup(
-            std::path::Path::new("level.dat"),
-            self.blocks.len(),
-        )?;
-        self.blocks.copy_from_slice(&data);
-        Some(())
+        self.load_at(Path::new("level.dat"))
     }
 }
 
@@ -597,28 +855,14 @@ mod tests_012 {
     use super::*;
 
     fn generar(seed: i64) -> Nivel {
-        let mut n = Nivel {
-            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
-            light: vec![0; WIDTH * HEIGHT],
-            random: perlin::JavaRandom::new(seed),
-            unprocessed: 0,
-            dirty: Vec::new(),
-            liquidos: Vec::new(),
-        };
+        let mut n = Nivel::nuevo_vacio(seed, WIDTH, HEIGHT, DEPTH);
         n.generar_clasico_012(seed);
         n
     }
 
     #[test]
     fn el_agua_colocada_se_extiende() {
-        let mut n = Nivel {
-            blocks: vec![0; WIDTH * HEIGHT * DEPTH],
-            light: vec![0; WIDTH * HEIGHT],
-            random: perlin::JavaRandom::new(1),
-            unprocessed: 0,
-            dirty: Vec::new(),
-            liquidos: Vec::new(),
-        };
+        let mut n = Nivel::nuevo_vacio(1, WIDTH, HEIGHT, DEPTH);
         for x in 8..13 {
             for y in 8..13 {
                 n.set(x, y, 10, tiles::PIEDRA);
@@ -643,21 +887,21 @@ mod tests_012 {
         let mut lava_pos = None;
         let mut agua_playa = Vec::new();
         let mut lava_aire = Vec::new();
-        for x in 0..WIDTH {
-            for y in 0..HEIGHT {
+        for x in 0..n.ancho {
+            for y in 0..n.alto {
                 assert_eq!(n.get(x as i32, y as i32, 0), tiles::BEDROCK);
-                for z in 0..DEPTH {
+                for z in 0..n.fondo {
                     match n.get(x as i32, y as i32, z as i32) {
                         tiles::AGUA => {
                             agua += 1;
                             if agua_pos.is_none()
-                                && z + 1 < DEPTH
+                                && z + 1 < n.fondo
                                 && n.get(x as i32, y as i32, z as i32 + 1) == tiles::AIRE
                             {
                                 agua_pos = Some((x, y, z));
                             }
                             if agua_playa.len() < 8
-                                && z + 1 < DEPTH
+                                && z + 1 < n.fondo
                                 && n.get(x as i32, y as i32, z as i32 + 1) == tiles::AIRE
                                 && (x > 20 && x < 236 && y > 20 && y < 236)
                             {
@@ -670,7 +914,7 @@ mod tests_012 {
                                 lava_pos = Some((x, y, z));
                             }
                             if lava_aire.len() < 8
-                                && z + 1 < DEPTH
+                                && z + 1 < n.fondo
                                 && n.get(x as i32, y as i32, z as i32 + 1) == tiles::AIRE
                             {
                                 lava_aire.push((x, y, z));
@@ -688,6 +932,96 @@ mod tests_012 {
         assert!(agua_pos.is_some());
         assert!(lava_pos.is_some());
     }
+
+    #[test]
+    fn el_013a03_no_genera_lava_sobre_el_mar() {
+        let mut n = Nivel::nuevo_vacio(12345, WIDTH, HEIGHT, DEPTH);
+        n.generar_clasico_012_con(12345, false);
+        let mut lava_bajo = 0usize;
+        for x in 0..n.ancho {
+            for y in 0..n.alto {
+                for z in 0..n.fondo {
+                    if n.get(x as i32, y as i32, z as i32) == tiles::LAVA {
+                        assert!((z as i32) < SEA_LEVEL, "lava sobre el mar en {x},{y},{z}");
+                        lava_bajo += 1;
+                    }
+                }
+            }
+        }
+        assert!(lava_bajo > 0, "no queda lava en las cuevas: {lava_bajo}");
+    }
+
+    #[test]
+    fn el_013a_dev_es_plano_largo_y_sin_lava_superficial() {
+        let n = Nivel::new_013a_dev(12345);
+        assert_eq!((n.ancho, n.alto, n.fondo), (32, 512, 64));
+        let mut lava = 0;
+        for x in 0..n.ancho {
+            for y in 0..n.alto {
+                assert_eq!(n.get(x as i32, y as i32, 32), tiles::CESPED);
+                assert_eq!(n.get(x as i32, y as i32, 31), tiles::TIERRA);
+                assert_eq!(n.get(x as i32, y as i32, 22), tiles::TIERRA);
+                for z in 0..n.fondo {
+                    let id = n.get(x as i32, y as i32, z as i32);
+                    if z > 32 {
+                        assert_eq!(id, tiles::AIRE, "bloque sobre el plano en {x},{y},{z}");
+                    }
+                    if id == tiles::LAVA {
+                        lava += 1;
+                    }
+                }
+            }
+        }
+        assert!(lava > 0, "la build documenta lava en las cuevas");
+    }
+
+    #[test]
+    fn la_cabecera_013a_guarda_dimensiones_y_bloques() {
+        let dir = std::env::temp_dir().join(format!(
+            "rustium-cabecera-{}-{}",
+            std::process::id(),
+            ahora_millis()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("level.dat");
+        let mut n = Nivel::nuevo_vacio(7, 32, 512, 64);
+        n.formato = Formato::Cabecera13a;
+        n.nombre = "A Nice World".to_string();
+        n.creador = "noname".to_string();
+        n.blocks[0] = tiles::PIEDRA;
+        let ultimo = n.blocks.len() - 1;
+        n.blocks[ultimo] = tiles::CESPED;
+        n.save_at(&path).unwrap();
+
+        let mut leido = Nivel::nuevo_vacio(0, 1, 1, 1);
+        leido.load_at(&path).unwrap();
+        assert_eq!((leido.ancho, leido.alto, leido.fondo), (32, 512, 64));
+        assert_eq!(leido.formato, Formato::Cabecera13a);
+        assert_eq!(leido.nombre, "A Nice World");
+        assert_eq!(leido.creador, "noname");
+        assert_eq!(leido.get(0, 0, 0), tiles::PIEDRA);
+        assert_eq!(leido.blocks, n.blocks);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn la_cabecera_normaliza_los_ids_de_liquidos_del_jar() {
+        let mut n = Nivel::nuevo_vacio(0, 2, 2, 2);
+        n.formato = Formato::Cabecera13a;
+        let agua = n.blocks.len() - 2;
+        let lava = n.blocks.len() - 1;
+        n.blocks[agua] = tiles::AGUA;
+        n.blocks[lava] = tiles::LAVA;
+        let datos = n.codificar_cabecera();
+        let (_, _, _, bloques, _, _, _) = decodificar_cabecera(&datos).unwrap();
+        assert_eq!(bloques[agua], tiles::AGUA);
+        assert_eq!(bloques[lava], tiles::LAVA);
+        // En el archivo viajan como calmWater/calmLava del jar.
+        let inicio = datos.len() - n.blocks.len();
+        assert_eq!(datos[inicio + agua], 9);
+        assert_eq!(datos[inicio + lava], 11);
+    }
+
 }
 
 impl Nivel {

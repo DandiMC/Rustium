@@ -3,7 +3,8 @@
 Launcher and Rust port of the pre-classic Minecraft builds (rd-131655, rd-132211,
 rd-132328, rd-20090515, rd-160052 and rd-161348), the Classic private alphas
 (mc-161607, mc-161616, mc-161625 and mc-161648) and the first Classics
-(c0.0.3a, c0.0.9a, c0.0.10a, c0.0.11a and c0.0.12a), with no Microsoft account and nothing
+(c0.0.3a, c0.0.9a, c0.0.10a, c0.0.11a, c0.0.12a and its continuations through
+c0.0.13a_03), with no Microsoft account and nothing
 downloaded from Mojang: it reads the textures of the copy already on your computer
 and, if there is none, draws its own.
 
@@ -23,7 +24,7 @@ and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.3.1-setup.exe`.
+You only need **the installer**: `Rustium-0.3.2-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -34,8 +35,8 @@ You only need **the installer**: `Rustium-0.3.1-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the fifteen builds (the six
-pre-classics, the four private alphas and the first five Classics):
+The picker above the Play button starts any of the twenty builds (the six
+pre-classics, the four private alphas and the first ten Classics):
 
 | build | what it brings |
 |---|---|
@@ -53,14 +54,30 @@ pre-classics, the four private alphas and the first five Classics):
 | c0.0.9a | reconstructed: build mode with the white overlay on all sides, fps counter, 640×480 and Escape quits |
 | c0.0.10a | reconstructed: like 0.0.9a, but Escape only releases the mouse |
 | c0.0.11a | the first Classic that survives: `NoiseMap` terrain with caves, an fps/chunk-update HUD and the paint mode the right button toggles |
-| c0.0.12a | water, lava and bedrock: an ocean around the islands, lava lakes, swimming, and 7/8/9 to place water, lava and bedrock |
+| c0.0.12a | reconstructed: water, lava and bedrock: an ocean around the islands, lava lakes and swimming; only 1/2/3/4/6 select blocks, as in the archived build |
+| c0.0.12a_01 | reconstructed: like 0.0.12a, with mobs resetting on a new level |
+| c0.0.12a_02 | reconstructed: the performance improvement of 0.0.12a, with no gameplay changes |
+| c0.0.12a_03 | the archived 0.0.12a reupload: saving and performance fixes |
+| c0.0.13a | reconstructed from the archived development build: 854×480, the 0.0.11a jump, 13a water/lava physics, blue/red fog and the flat 32×512×64 world with caves and underground lava |
+| c0.0.13a_03 | official and archived: 854×480, no lava lakes above sea level and no natural mobs |
 
-The four mc- builds, c0.0.3a, c0.0.9a and c0.0.10a are **reconstructions**: their jars
-were never archived. They are built from c0.0.11a's code plus what the Minecraft
-Wiki documents for each, and use c0.0.11a's textures and font.
+The four mc- builds, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02
+and c0.0.13a are **reconstructions**: their jars were never archived. They are built
+from c0.0.11a's code plus what the Minecraft Wiki documents for each, and use
+c0.0.11a's textures and font when there is no jar of their own. The launcher marks
+them with **REC** in the picker and the instance list; the id and world folder do not
+change.
 
 rd-131655 (the "Cave game tech test") never had a released jar. It is reconstructed
 from the Minecraft Wiki and uses the same RubyDung textures as rd-132211.
+
+`c0.0.13a` follows the jar the official launcher archives under that name: the
+world-size development build, not the lost release. It generates the documented
+flat 32×512×64 world, carves caves and seeds lava underground. Its `level.dat` uses
+the 0.0.13a header (magic `0x271BB788`, name, creator, time and width/height/depth);
+the header is also read, so levels with other dimensions such as the documented
+1024×64×64 and 512×64×512 tests load and render. Saves from before 0.0.13a keep the
+old raw-block format, and those old worlds still load.
 
 ## Your worlds
 
@@ -126,7 +143,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.3.1-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.3.2-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 

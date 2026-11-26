@@ -202,23 +202,30 @@ pub fn save_gzip_atomic(path: &Path, blocks: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Loads a gzip level from the main file, a completed temporary file, or the
-/// previous `.bak`. The length check rejects a truncated save.
-pub fn load_gzip_with_backup(path: &Path, expected_len: usize) -> Option<Vec<u8>> {
+/// Loads the decompressed bytes of a gzip level from the main file, a
+/// completed temporary file, or the previous `.bak`. The caller decides how to
+/// interpret them: raw blocks (pre-0.0.13a) or the 0.0.13a header.
+pub fn load_gzip_any(path: &Path) -> Option<Vec<u8>> {
     for candidate in [path.to_path_buf(), temp_path(path), backup_path(path)] {
         let Ok(file) = File::open(&candidate) else {
             continue;
         };
-        let mut data = Vec::with_capacity(expected_len);
+        let mut data = Vec::new();
         if GzDecoder::new(BufReader::new(file))
             .read_to_end(&mut data)
             .is_ok()
-            && data.len() == expected_len
         {
             return Some(data);
         }
     }
     None
+}
+
+/// Loads a gzip level from the main file, a completed temporary file, or the
+/// previous `.bak`. The length check rejects a truncated save.
+pub fn load_gzip_with_backup(path: &Path, expected_len: usize) -> Option<Vec<u8>> {
+    let data = load_gzip_any(path)?;
+    (data.len() == expected_len).then_some(data)
 }
 
 impl Level {
@@ -473,11 +480,19 @@ impl Level {
 // Level de rd-132211/rd-132328 y el Nivel de la familia rd-160052..rd-161348.
 pub trait Mundo {
     fn cajas(&self, bb: &BlockBox) -> Vec<BlockBox>;
+    /// (x, z horizontal, y vertical), the same order as the Classic level
+    /// header. Los dos motores del port comparten esta interfaz para que las
+    /// entidades puedan reaparecer en mundos de distinto tamano.
+    fn dimensiones(&self) -> (usize, usize, usize);
 }
 
 impl Mundo for Level {
     fn cajas(&self, bb: &BlockBox) -> Vec<BlockBox> {
         self.cubes(bb)
+    }
+
+    fn dimensiones(&self) -> (usize, usize, usize) {
+        (WIDTH, HEIGHT, DEPTH)
     }
 }
 
