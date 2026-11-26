@@ -15,6 +15,10 @@ struct Uniforms {
     fog_density: f32,
     // 1.0 = GL_EXP (rd-132211); 0.0 = la cuadratica de la familia nueva
     fog_exp: f32,
+    // 1.0 = GL_LINEAR (0.0.14a base); start/end en bloques.
+    fog_linear: f32,
+    fog_start: f32,
+    fog_end: f32,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -53,6 +57,9 @@ fn fs_main(v: VOut) -> @location(0) vec4<f32> {
     if (u.fog_exp > 0.5) {
         fog = 1.0 - exp(-dist * u.fog_density);
     }
+    if (u.fog_linear > 0.5) {
+        fog = clamp((dist - u.fog_start) / max(u.fog_end - u.fog_start, 0.0001), 0.0, 1.0);
+    }
     let rgb = mix(c.rgb * v.shade, u.fog_color.rgb, clamp(fog, 0.0, 1.0));
     return vec4<f32>(rgb, 1.0);
 }
@@ -68,6 +75,9 @@ struct Uniforms {
     camera_pos: vec4<f32>,
     fog_density: f32,
     fog_exp: f32,
+    fog_linear: f32,
+    fog_start: f32,
+    fog_end: f32,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -99,6 +109,9 @@ fn fs_main(v: VOut) -> @location(0) vec4<f32> {
     var fog = 1.0 - exp(-dist * dist * u.fog_density * u.fog_density);
     if (u.fog_exp > 0.5) {
         fog = 1.0 - exp(-dist * u.fog_density);
+    }
+    if (u.fog_linear > 0.5) {
+        fog = clamp((dist - u.fog_start) / max(u.fog_end - u.fog_start, 0.0001), 0.0, 1.0);
     }
     let rgb = mix(c.rgb * v.shade, u.fog_color.rgb, clamp(fog, 0.0, 1.0));
     return vec4<f32>(rgb, c.a);
@@ -966,12 +979,23 @@ fn hud_textura(id: u8, cara: usize) -> u32 {
         2 if cara == 0 => 2, // cesped: tierra abajo
         2 => 3,              // cesped: lados con fleco
         3 => 2,              // tierra
-        4 => 16,             // ladrillo
-        5 => 4,              // madera
-        6 => 15,             // arbusto
+        4 => 16,             // adoquin (ladrillo en 0.0.11a)
+        5 => 4,              // tablones
+        6 => 15,             // arbusto/sapling
         7 => 7,              // bedrock de c0.0.12a
         8 => 8,              // agua
         9 => 9,              // lava
+        // 0.0.14a: el preview del bloque elegido usa los tiles nuevos. El
+        // bedrock, el agua y la lava no están en la paleta, así que no
+        // necesitan el atlas nuevo aquí.
+        10 => 18,            // arena
+        11 => 19,            // grava
+        12 => 32,            // mena de oro
+        13 => 33,            // mena de hierro
+        14 => 34,            // mena de carbón
+        15 if cara == 0 || cara == 1 => 21, // tronco: anillos
+        15 => 20,            // tronco: corteza
+        16 => 22,            // hojas
         _ => 0,
     }
 }
@@ -1109,6 +1133,13 @@ pub struct Renderer {
     /// Densidad para el pase principal cuando la camara esta dentro de un
     /// liquido; 0 fuera del agua/lava deja el cielo sin niebla.
     pub fog_densidad_principal: f32,
+    /// 0.0.14a base: niebla lineal azul (start 0, end 1024 por defecto).
+    /// Las demas versiones conservan su niebla exponencial/cuadratica.
+    pub fog_color_principal: [f32; 4],
+    pub fog_exp_principal: f32,
+    pub fog_linear_principal: f32,
+    pub fog_start_principal: f32,
+    pub fog_end_principal: f32,
     pub hit_alpha_escala: f32,
     // Bloque que se colocaria con el clic: si esta, renderHit va texturado con
     // blending normal; si no, velo blanco aditivo (modo romper).
@@ -1137,6 +1168,14 @@ pub struct Renderer {
     pub chunks_fog: Vec<Option<Chunk>>,
     pub fog_uniform: wgpu::Buffer,
     pub fog_bg: wgpu::BindGroup,
+    // Nubes de 0.0.14a: plano a Level.depth+2 con clouds.png del jar.
+    pub cloud_pipeline: wgpu::RenderPipeline,
+    pub cloud_bg: Option<wgpu::BindGroup>,
+    pub cloud_vbuf: wgpu::Buffer,
+    pub cloud_ibuf: wgpu::Buffer,
+    pub nubes: bool,
+    pub nubes_dim: [f32; 3],
+    pub nubes_inicio: std::time::Instant,
 }
 
 pub struct Chunk {
@@ -1152,7 +1191,10 @@ struct Uniforms {
     camera_pos: [f32; 4],
     fog_density: f32,
     fog_exp: f32,
-    _pad: [f32; 2],
+    fog_linear: f32,
+    fog_start: f32,
+    fog_end: f32,
+    _pad: [f32; 3],
 }
 
 impl Renderer {
@@ -1212,10 +1254,13 @@ impl Renderer {
         let version_atlas = std::env::var("RD_ATLAS_VERSION").unwrap_or_else(|_| "rd-132211".to_string());
         // La release real de 0.0.13a no se conserva; su atlas se toma prestado
         // del reupload oficial 0.0.13a_03, que es el que queda.
-        let atlas_source: &str = if version_atlas == "c0.0.13a" {
-            "c0.0.13a_03"
-        } else {
-            &version_atlas
+        // 0.0.14a esta perdida; el atlas que queda es el de la ultima build de
+        // desarrollo, 0.0.14a_08, que ya trae arena, grava, menas, troncos y
+        // hojas en los tiles definitivos.
+        let atlas_source: &str = match version_atlas.as_str() {
+            "c0.0.13a" => "c0.0.13a_03",
+            "c0.0.14a" => "c0.0.14a_08",
+            _ => version_atlas.as_str(),
         };
         // Prioridad: RD_ATLAS (ruta elegida a mano o detectada por el launcher) ->
         // jar de la version en %APPDATA% -> terrain.png del jar de rd-132211 ->
@@ -1260,6 +1305,18 @@ impl Renderer {
                 .unwrap_or(false);
             if !importado {
                 parchear_atlas_clasico_012(&mut atlas_data);
+            }
+        }
+        // Si no esta el jar de 0.0.14a_08, el atlas cae en el de 0.0.11a y los
+        // tiles nuevos seguiran siendo el magenta de relleno. Se pintan los
+        // colores propios del port (no son texturas de Mojang).
+        if version_atlas == "c0.0.14a" {
+            let tx = 18 % TILES_PER_ROW;
+            let ty = 18 / TILES_PER_ROW;
+            let i = ((ty * TILE + 8) * ATLAS_SIZE + tx * TILE + 8) * 4;
+            let magenta = atlas_data[i] > 180 && atlas_data[i + 1] < 150 && atlas_data[i + 2] > 200;
+            if magenta {
+                parchear_atlas_014(&mut atlas_data);
             }
         }
         // RD_ATLAS_DUMP=1 escribe el atlas que se esta usando, para comprobarlo
@@ -1392,6 +1449,113 @@ impl Renderer {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Greater,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        // Nubes de 0.0.14a: un plano a Level.depth+2 con clouds.png del jar.
+        // La 0.0.14a base las introdujo; _08 solo anadio sombras en agua/lava.
+        let cloud_bg = cargar_png_del_jar(atlas_source, "clouds.png").map(|(w, h, rgba)| {
+            let tex = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("clouds"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &tex,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * 4),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+            let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+            let samp = device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("cloud sampler"),
+                address_mode_u: wgpu::AddressMode::Repeat,
+                address_mode_v: wgpu::AddressMode::Repeat,
+                address_mode_w: wgpu::AddressMode::Repeat,
+                mag_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            });
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("cloud bg"),
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: uniform_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&samp) },
+                ],
+            })
+        });
+        let cloud_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cloud vbuf"),
+            size: 4 * std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let cloud_indices: [u32; 6] = [0, 1, 2, 0, 2, 3];
+        let cloud_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("cloud ibuf"),
+            contents: unsafe {
+                std::slice::from_raw_parts(cloud_indices.as_ptr() as *const u8, 24)
+            },
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let cloud_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("cloud pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Vertex::layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -2161,6 +2325,11 @@ impl Renderer {
             fog_densidad: 0.2,
             fog_color: [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0],
             fog_densidad_principal: 0.0,
+            fog_color_principal: [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0],
+            fog_exp_principal: 1.0,
+            fog_linear_principal: 0.0,
+            fog_start_principal: 0.0,
+            fog_end_principal: 0.0,
             hit_alpha_escala: 1.0,
             hit_preview: None,
             mostrar_cruz: false,
@@ -2188,6 +2357,13 @@ impl Renderer {
             model_tex_bgl,
             model_bg: None,
             model_vbuf,
+            cloud_pipeline,
+            cloud_bg,
+            cloud_vbuf,
+            cloud_ibuf,
+            nubes: false,
+            nubes_dim: [0.0; 3],
+            nubes_inicio: std::time::Instant::now(),
         }
     }
 
@@ -2403,22 +2579,51 @@ impl Renderer {
             camera_pos: [eye[0], eye[1], eye[2], 1.0],
             fog_density: self.fog_densidad,
             fog_exp: 1.0,
-            _pad: [0.0; 2],
+            fog_linear: 0.0,
+            fog_start: 0.0,
+            fog_end: 0.0,
+            _pad: [0.0; 3],
         };
         self.queue.write_buffer(&self.fog_uniform, 0, unsafe {
             std::slice::from_raw_parts(&fu as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
         });
         let u = Uniforms {
             view_proj,
-            fog_color: self.fog_color,
+            fog_color: self.fog_color_principal,
             camera_pos: [eye[0], eye[1], eye[2], 1.0],
             fog_density: self.fog_densidad_principal,
-            fog_exp: 1.0,
-            _pad: [0.0; 2],
+            fog_exp: self.fog_exp_principal,
+            fog_linear: self.fog_linear_principal,
+            fog_start: self.fog_start_principal,
+            fog_end: self.fog_end_principal,
+            _pad: [0.0; 3],
         };
         self.queue.write_buffer(&self.uniform_buf, 0, unsafe {
             std::slice::from_raw_parts(&u as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
         });
+        // Nubes: plano unico como el de LevelRenderer.a(float). La textura se
+        // repite cada 2048 bloques y el desplazamiento es lento.
+        if self.nubes {
+            let (w, d, h) = (self.nubes_dim[0], self.nubes_dim[1], self.nubes_dim[2]);
+            let t = self.nubes_inicio.elapsed().as_secs_f32() * 20.0;
+            let scroll = t * 0.03 / 2048.0;
+            let (x0, x1) = (-2048.0f32, w + 2048.0);
+            let (y0, y1) = (-2048.0f32, d + 2048.0);
+            let z = h + 2.0;
+            let uv = |x: f32, y: f32| [x / 2048.0 + scroll, y / 2048.0];
+            let nubes = [
+                Vertex { pos: [x0, z, y0], uv: uv(x0, y0), shade: 1.0 },
+                Vertex { pos: [x1, z, y0], uv: uv(x1, y0), shade: 1.0 },
+                Vertex { pos: [x1, z, y1], uv: uv(x1, y1), shade: 1.0 },
+                Vertex { pos: [x0, z, y1], uv: uv(x0, y1), shade: 1.0 },
+            ];
+            self.queue.write_buffer(&self.cloud_vbuf, 0, unsafe {
+                std::slice::from_raw_parts(
+                    nubes.as_ptr() as *const u8,
+                    std::mem::size_of::<Vertex>() * 4,
+                )
+            });
+        }
         // Overlay 2D (FPS con F3 y cruz de mira): geometria ya en clip space
         let mut ui_count = 0u32;
         let mut ui_verts: Vec<f32> = Vec::new();
@@ -2537,7 +2742,10 @@ impl Renderer {
                 camera_pos: [eye[0], eye[1], eye[2], 1.0],
                 fog_density: 0.0,
                 fog_exp: 0.0,
-                _pad: [0.0; 2],
+                fog_linear: 0.0,
+                fog_start: 0.0,
+                fog_end: 0.0,
+                _pad: [0.0; 3],
             };
             self.queue.write_buffer(&self.model_uniform, 0, unsafe {
                 std::slice::from_raw_parts(&mu as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
@@ -2592,6 +2800,15 @@ impl Renderer {
                 pass.set_vertex_buffer(0, c.vbuf.slice(..));
                 pass.set_index_buffer(c.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..c.icount, 0, 0..1);
+            }
+            if self.nubes {
+                if let Some(bg) = &self.cloud_bg {
+                    pass.set_pipeline(&self.cloud_pipeline);
+                    pass.set_bind_group(0, bg, &[]);
+                    pass.set_vertex_buffer(0, self.cloud_vbuf.slice(..));
+                    pass.set_index_buffer(self.cloud_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..6, 0, 0..1);
+                }
             }
             // Zombis a plena luz, como el primer bucle de Zombie.render.
             if lit_n > 0 {
@@ -2743,7 +2960,10 @@ impl Renderer {
                 camera_pos: [0.0; 4],
                 fog_density: 0.0,
                 fog_exp: 0.0,
-                _pad: [0.0; 2],
+                fog_linear: 0.0,
+                fog_start: 0.0,
+                fog_end: 0.0,
+                _pad: [0.0; 3],
             };
             self.queue.write_buffer(&self.hud_uniform, 0, unsafe {
                 std::slice::from_raw_parts(
@@ -3431,6 +3651,43 @@ pub fn parchear_atlas_clasico_012(data: &mut [u8]) {
     }
 }
 
+/// Colores de relleno para los tiles que anadio 0.0.14a. Se usan solo si el
+/// equipo no tiene el jar de 0.0.14a_08; no son texturas de Mojang.
+pub fn parchear_atlas_014(data: &mut [u8]) {
+    if data.len() < ATLAS_SIZE * ATLAS_SIZE * 4 {
+        return;
+    }
+    let tiles = [
+        (13usize, 41i32, 93i32, 255i32),
+        (17usize, 83i32, 83i32, 83i32),
+        (18usize, 183i32, 175i32, 123i32),
+        (19usize, 106i32, 106i32, 106i32),
+        (20usize, 100i32, 80i32, 48i32),
+        (21usize, 155i32, 125i32, 77i32),
+        (22usize, 74i32, 122i32, 58i32),
+        (30usize, 245i32, 65i32, 0i32),
+        (32usize, 170i32, 155i32, 90i32),
+        (33usize, 150i32, 120i32, 105i32),
+        (34usize, 90i32, 90i32, 90i32),
+    ];
+    for (tile, br, bg, bb) in tiles {
+        let tx = tile % TILES_PER_ROW;
+        let ty = tile / TILES_PER_ROW;
+        for py in 0..TILE {
+            for px in 0..TILE {
+                let x = tx * TILE + px;
+                let y = ty * TILE + py;
+                let i = (y * ATLAS_SIZE + x) * 4;
+                let h = (hash2(x, y, 0x014A_08 ^ tile as u32) % 35) as i32 - 17;
+                data[i] = (br + h).clamp(0, 255) as u8;
+                data[i + 1] = (bg + h).clamp(0, 255) as u8;
+                data[i + 2] = (bb + h).clamp(0, 255) as u8;
+                data[i + 3] = 255;
+            }
+        }
+    }
+}
+
 // Textura de REEMPLAZO: la usa el juego cuando el equipo no tiene ninguna copia
 // de la version original (no es de Mojang: los colores y el ruido son nuestros).
 // Es jugable y se ve decente en vez del tablero magenta de depuracion, que queda
@@ -3461,7 +3718,21 @@ pub fn generate_atlas() -> Vec<u8> {
     for ty in 0..TILES_PER_ROW {
         for tx in 0..TILES_PER_ROW {
             let tile = ty * TILES_PER_ROW + tx;
-            let (br, bg, bb) = if tile < 16 { BASE[tile] } else { (110, 110, 120) };
+            let (br, bg, bb) = match tile {
+                13 => (41, 93, 255),   // agua en el atlas de 0.0.14a
+                0..=15 => BASE[tile],
+                17 => (58, 58, 58),    // bedrock
+                18 => (183, 175, 123), // arena
+                19 => (106, 106, 106), // grava
+                20 => (100, 80, 48),   // tronco (corteza)
+                21 => (155, 125, 77),  // tronco (anillos)
+                22 => (74, 122, 58),   // hojas
+                30 => (245, 65, 0),    // lava
+                32 => (170, 155, 90),  // mena de oro
+                33 => (150, 120, 105), // mena de hierro
+                34 => (90, 90, 90),    // mena de carbón
+                _ => (110, 110, 120),
+            };
             for py in 0..TILE {
                 for px in 0..TILE {
                     let x = tx * TILE + px;

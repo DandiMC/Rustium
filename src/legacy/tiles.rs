@@ -17,6 +17,29 @@ pub const ARBUSTO: u8 = 6;
 pub const BEDROCK: u8 = 7;
 pub const AGUA: u8 = 8;
 pub const LAVA: u8 = 9;
+// c0.0.14a: arena, grava, las tres menas y la madera/hojas de los arboles.
+// Los ids 1-9 no cambian para que un mundo viejo se siga leyendo igual; al
+// guardar se traducen a los ids de Java (12-18).
+pub const ARENA: u8 = 10;
+pub const GRAVA: u8 = 11;
+pub const MENA_ORO: u8 = 12;
+pub const MENA_HIERRO: u8 = 13;
+pub const MENA_CARBON: u8 = 14;
+pub const TRONCO: u8 = 15;
+pub const HOJAS: u8 = 16;
+
+/// 0.0.14a reordeno el atlas: bedrock, agua y lava dejaron de estar en 7/8/9
+/// y pasaron a 17, 13 y 30. El resto de bloques que ya existian conservan su
+/// tile (cesped 0/2/3, piedra 1, tierra 2, adoquin 16, tablones 4, arbusto 15).
+static ATLAS_014: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn usar_atlas_014() {
+    ATLAS_014.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn atlas_014() -> bool {
+    ATLAS_014.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 pub fn es_liquido(id: u8) -> bool {
     id == AGUA || id == LAVA
@@ -27,6 +50,12 @@ pub fn es_liquido(id: u8) -> bool {
 /// (En nuestro motor: 0 = abajo, 1 = arriba, 2/3 = los dos lados del eje y,
 /// 4/5 = los dos lados del eje x.)
 pub fn textura(id: u8, cara: usize) -> u32 {
+    textura_con(id, cara, atlas_014())
+}
+
+/// Igual que `textura`, pero con el atlas elegido por el llamante. Existe para
+/// poder probar las dos disposiciones sin depender del estado global.
+pub fn textura_con(id: u8, cara: usize, atlas014: bool) -> u32 {
     match id {
         PIEDRA => 1,
         CESPED => match cara {
@@ -38,9 +67,21 @@ pub fn textura(id: u8, cara: usize) -> u32 {
         LADRILLO => 16,
         MADERA => 4,
         ARBUSTO => 15,
-        BEDROCK => 7,
-        AGUA => 8,
-        LAVA => 9,
+        BEDROCK => if atlas014 { 17 } else { 7 },
+        AGUA => if atlas014 { 13 } else { 8 },
+        LAVA => if atlas014 { 30 } else { 9 },
+        ARENA => 18,
+        GRAVA => 19,
+        MENA_ORO => 32,
+        MENA_HIERRO => 33,
+        MENA_CARBON => 34,
+        // El tronco usa la cara de arriba/abajo (21, los anillos) y la lateral
+        // (20, la corteza), como el tile 17 de Java.
+        TRONCO => match cara {
+            0 | 1 => 21,
+            _ => 20,
+        },
+        HOJAS => 22,
         _ => 0,
     }
 }
@@ -55,14 +96,29 @@ pub fn textura_particula(id: u8) -> u32 {
 }
 
 pub fn solido(id: u8) -> bool {
-    // Tile.isSolid() es true por defecto, pero Bush lo sobrescribe a false y su
-    // getAABB() devuelve null: se atraviesa y no frena al jugador.
-    id != AIRE && id != ARBUSTO && !es_liquido(id)
+    // Tile.isSolid() es true por defecto, pero Bush y Leaves lo sobrescriben a
+    // false: se atraviesan y no frenan al jugador.
+    id != AIRE && id != ARBUSTO && id != HOJAS && !es_liquido(id)
+}
+
+/// Arena y grava caen: en 0.0.14a se asientan de golpe en el fondo de la
+/// columna en cuanto se colocan sobre aire.
+pub fn cae(id: u8) -> bool {
+    id == ARENA || id == GRAVA
+}
+
+/// Bloques que el jugador puede elegir con las teclas en 0.0.14a (1-9).
+pub fn pintable_014(id: u8) -> bool {
+    matches!(
+        id,
+        PIEDRA | CESPED | TIERRA | LADRILLO | MADERA | ARENA | GRAVA | TRONCO | HOJAS
+    )
 }
 
 pub fn bloquea_luz(id: u8) -> bool {
-    // Bush.blocksLight() tambien devuelve false: deja pasar la luz.
-    id != AIRE && id != ARBUSTO && !es_liquido(id)
+    // Bush y Leaves.blocksLight() devuelven false: dejan pasar la luz. En el
+    // Java las hojas son `solid=false` y `blocksLight=false` (clase a.b).
+    id != AIRE && id != ARBUSTO && id != HOJAS && !es_liquido(id)
 }
 
 /// Factor de luz por cara, igual que Tile.render del original:
@@ -130,5 +186,27 @@ mod tests {
         assert!(solido(PIEDRA));
         assert!(bloquea_luz(PIEDRA));
         assert!(solido(BEDROCK));
+    }
+
+    #[test]
+    fn la_014_tiene_sus_propios_tiles_y_la_grava_cae() {
+        // Sin el atlas nuevo, bedrock/agua/lava conservan los indices de
+        // 0.0.11a; con el, pasan a los del atlas de 0.0.14a.
+        assert_eq!(textura_con(BEDROCK, 1, false), 7);
+        assert_eq!(textura_con(AGUA, 1, false), 8);
+        assert_eq!(textura_con(LAVA, 1, false), 9);
+        assert_eq!(textura_con(BEDROCK, 1, true), 17);
+        assert_eq!(textura_con(AGUA, 1, true), 13);
+        assert_eq!(textura_con(LAVA, 1, true), 30);
+        assert_eq!(textura_con(ARENA, 1, true), 18);
+        assert_eq!(textura_con(GRAVA, 1, true), 19);
+        assert_eq!(textura_con(MENA_ORO, 1, true), 32);
+        assert_eq!(textura_con(MENA_HIERRO, 1, true), 33);
+        assert_eq!(textura_con(MENA_CARBON, 1, true), 34);
+        assert_eq!(textura_con(TRONCO, 0, true), 21);
+        assert_eq!(textura_con(TRONCO, 2, true), 20);
+        assert_eq!(textura_con(HOJAS, 1, true), 22);
+        assert!(cae(ARENA) && cae(GRAVA) && !cae(PIEDRA));
+        assert!(pintable_014(TRONCO) && !pintable_014(AGUA));
     }
 }

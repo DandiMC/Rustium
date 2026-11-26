@@ -114,10 +114,11 @@ enum GameVersion {
     C0012a03,
     C0013a,
     C0013a03,
+    C0014a,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 20] = [
+    const ALL: [GameVersion; 21] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
@@ -138,6 +139,7 @@ impl GameVersion {
         GameVersion::C0012a03,
         GameVersion::C0013a,
         GameVersion::C0013a03,
+        GameVersion::C0014a,
     ];
 
     /// The build name, as the original version is called everywhere else.
@@ -163,6 +165,7 @@ impl GameVersion {
             GameVersion::C0012a03 => "c0.0.12a_03",
             GameVersion::C0013a => "c0.0.13a",
             GameVersion::C0013a03 => "c0.0.13a_03",
+            GameVersion::C0014a => "c0.0.14a",
         }
     }
 
@@ -183,6 +186,7 @@ impl GameVersion {
                 | GameVersion::C0012a01
                 | GameVersion::C0012a02
                 | GameVersion::C0013a
+                | GameVersion::C0014a
         )
     }
 
@@ -249,6 +253,9 @@ impl GameVersion {
             }
             GameVersion::C0013a03 => {
                 if win { "classic013a03.exe" } else { "classic013a03" }
+            }
+            GameVersion::C0014a => {
+                if win { "classic014a.exe" } else { "classic014a" }
             }
         }
     }
@@ -2945,6 +2952,12 @@ fn version_textures(base: &Path, game: GameVersion) -> bool {
     // rd-131655 no tuvo jar: sus texturas son las mismas de RubyDung que
     // trae rd-132211, asi que hereda su deteccion. 0.0.9a y 0.0.10a no se
     // conservan: sus texturas son las de c0.0.11a.
+    // 0.0.14a esta perdida; sus texturas son las de la ultima build de
+    // desarrollo, 0.0.14a_08, que es la que queda archivada.
+    if game == GameVersion::C0014a {
+        return !installed_copies(base, "c0.0.14a_08").is_empty()
+            || atlas_ok(&base.join("versions").join("c0.0.14a_08").join("terrain.png"));
+    }
     let game = match game {
         GameVersion::Rd131655 => GameVersion::Rd132211,
         GameVersion::Mc161607

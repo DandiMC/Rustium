@@ -57,6 +57,23 @@ fn chunks_tocados(
 // pero esos son los keycodes de LWJGL de las teclas fisicas 1,2,3,4,6
 // (Keyboard.KEY_1=2 ... KEY_4=5, KEY_6=7). rd-160052 no tiene el tile Bush.
 fn bloque_para_tecla(version: &str, tecla: &str) -> Option<u8> {
+    // 0.0.14a es la primera con las nueve teclas y con menas, arena, grava y
+    // madera. La wiki no detalla el orden de la paleta; se sigue el de los ids
+    // de Java, que es el que usa el selector de bloque del raton.
+    if version == "c0.0.14a" {
+        return match tecla {
+            "1" => Some(tiles::PIEDRA),
+            "2" => Some(tiles::CESPED),
+            "3" => Some(tiles::TIERRA),
+            "4" => Some(tiles::LADRILLO),
+            "5" => Some(tiles::MADERA),
+            "6" => Some(tiles::ARENA),
+            "7" => Some(tiles::GRAVA),
+            "8" => Some(tiles::TRONCO),
+            "9" => Some(tiles::HOJAS),
+            _ => None,
+        };
+    }
     match tecla {
         "1" => Some(tiles::PIEDRA),
         "2" => Some(tiles::TIERRA),
@@ -76,6 +93,13 @@ pub fn correr(version: &'static str) {
 /// segun el modo que cambia el derecho).
 pub fn correr_clasico(version: &'static str) {
     correr_clasico_con(version, 1024, 768, true);
+}
+
+/// c0.0.14a: misma ventana que 0.0.13a (854x480), pero con el atlas nuevo,
+/// las nueve teclas de bloque y los bloques que caen.
+pub fn correr_clasico_014() {
+    tiles::usar_atlas_014();
+    correr_clasico_con("c0.0.14a", 854, 480, true);
 }
 
 /// Reconstruidas sin jar propio (mc-161607 a mc-161648 y c0.0.3a): comparten
@@ -497,6 +521,9 @@ struct App {
     pedir_captura: bool,
     hit: Option<((i32, i32, i32), (i32, i32, i32))>,
     smoke_frames: u32,
+    // 0.0.14a: mantener el boton repite la accion cada 0,25 s.
+    mouse_repeat: Option<winit::event::MouseButton>,
+    repeat_acc: f32,
 }
 
 impl App {
@@ -515,6 +542,7 @@ impl App {
                 .unwrap_or(SPAWN_SEED)
         };
         let mut nivel = match modo {
+            Modo::Clasico if version == "c0.0.14a" => Nivel::new_clasico_014(seed),
             Modo::Clasico if version == "c0.0.13a" => Nivel::new_013a_dev(seed),
             Modo::Clasico if version == "c0.0.13a_03" => Nivel::new_clasico_013a03(seed),
             Modo::Clasico if es_clasico_con_liquidos(version) => Nivel::new_clasico_012(seed),
@@ -539,7 +567,8 @@ impl App {
         // La wiki de 0.0.13a_03 documenta que los mobs ya no aparecen de forma
         // natural. El arnes de humo puede seguir pidiendo uno con RD_SMOKE.
         let sin_zombis = std::env::var_os("RD_SMOKE_SIN_ZOMBIS").is_some()
-            || (version == "c0.0.13a_03" && std::env::var_os("RD_SMOKE").is_none());
+            || (matches!(version, "c0.0.13a_03" | "c0.0.14a")
+                && std::env::var_os("RD_SMOKE").is_none());
         let mut zombis = Vec::new();
         if !sin_zombis {
             let cx = (nivel.ancho / 2) as f32;
@@ -599,6 +628,8 @@ impl App {
             pedir_captura: false,
             hit: None,
             smoke_frames: 0,
+            mouse_repeat: None,
+            repeat_acc: 0.0,
         }
     }
 
@@ -788,6 +819,32 @@ impl App {
             t += dt;
         }
         None
+    }
+}
+
+impl App {
+    /// 0.0.14a: mantener el izquierdo construye o rompe cada 0,25 s, como el
+    /// original. Solo se repite el izquierdo; el derecho cambia de modo.
+    fn repetir_clic(&mut self) {
+        let a = (self.tick_acc * TPS).clamp(0.0, 1.0);
+        if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
+            if self.edit_mode == 0 {
+                let id = self.nivel.get(bx, by, bz);
+                if self.nivel.set(bx, by, bz, tiles::AIRE) {
+                    particula::destruir(
+                        tiles::textura_particula(id),
+                        bx, by, bz,
+                        &mut self.particulas,
+                    );
+                }
+            } else {
+                let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
+                if self.casilla_libre(nx, ny, nz) {
+                    self.nivel.set(nx, ny, nz, self.pintura);
+                }
+            }
+        }
+        self.reconstruir_cambios();
     }
 }
 
@@ -984,6 +1041,9 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                if state == ElementState::Released && self.mouse_repeat == Some(button) {
+                    self.mouse_repeat = None;
+                }
                 if state == ElementState::Pressed {
                     if !self.grabbed {
                         if window
@@ -997,6 +1057,23 @@ impl ApplicationHandler for App {
                         // clic tambien rompe o coloca.
                     }
                     let a = (self.tick_acc * TPS).clamp(0.0, 1.0);
+                    // 0.0.14a: el boton central copia el bloque apuntado si esta
+                    // en la paleta de las teclas 1-9.
+                    if button == MouseButton::Middle && self.modo == Modo::Clasico {
+                        if let Some(((bx, by, bz), _)) = self.raycast(self.jugador.camara(a)) {
+                            let id = self.nivel.get(bx, by, bz);
+                            if tiles::pintable_014(id) {
+                                self.pintura = id;
+                            }
+                        }
+                    }
+                    if self.modo == Modo::Clasico
+                        && self.version == "c0.0.14a"
+                        && button == MouseButton::Left
+                    {
+                        self.mouse_repeat = Some(button);
+                        self.repeat_acc = 0.0;
+                    }
                     if self.modo == Modo::Clasico && !self.modo_edicion {
                         // c0.0.3a, antes del modo que anadio 0.0.9a: el
                         // izquierdo coloca (aun dentro del jugador, como el
@@ -1098,6 +1175,17 @@ impl ApplicationHandler for App {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
         self.last = now;
+        if self.version == "c0.0.14a" {
+            if self.mouse_repeat.is_some() {
+                self.repeat_acc += dt;
+                if self.repeat_acc >= 0.25 {
+                    self.repeat_acc -= 0.25;
+                    self.repetir_clic();
+                }
+            } else {
+                self.repeat_acc = 0.0;
+            }
+        }
 
         let f: f32 = if self.keys.contains("w") || self.keys.contains("arrowup") { 1.0 } else { 0.0 }
             - if self.keys.contains("s") || self.keys.contains("arrowdown") { 1.0 } else { 0.0 };
@@ -1261,32 +1349,66 @@ impl ApplicationHandler for App {
         }
         if let (Some(r), Some(w)) = (&mut self.renderer, &self.window) {
             r.set_particulas(&pv, &pv_fondo);
+            // 0.0.14a base: plano de nubes a nivel.alto+2 (Level.depth+2 en el
+            // original, donde depth es la altura). La extension del plano usa
+            // el fondo del mundo. _08 no cambio las nubes.
+            r.nubes = self.version == "c0.0.14a";
+            r.nubes_dim = [
+                self.nivel.ancho as f32,
+                self.nivel.fondo as f32,
+                self.nivel.alto as f32,
+            ];
             // 0.0.13a_03 elige GL_EXP: agua 0.02/0.02/0.2 con densidad 0.1,
             // lava 0.6/0.1/0 con densidad 2.0. Antes de 13a la niebla de lava
             // era naranja y menos densa; el resto de Classic conserva la niebla
             // oscura normal del port.
-            if es_13a(self.version) {
+            // 0.0.14a base: niebla lineal azul 0->1024 en el pase iluminado
+            // (K por defecto del original, c=0) y exponencial 0.01 con
+            // (14,11,10) en el oscuro. Bajo agua/lava usa los mismos
+            // colores/densidades que 0.0.13a, como setupFog del original.
+            let es_014 = self.version == "c0.0.14a";
+            if es_13a(self.version) || es_014 {
                 match self.jugador.liquido(&self.nivel) {
                     Some(tiles::AGUA) => {
                         r.fog_color = [0.02, 0.02, 0.2, 1.0];
                         r.fog_densidad = 0.1;
                         r.fog_densidad_principal = 0.1;
+                        r.fog_color_principal = r.fog_color;
+                        r.fog_exp_principal = 1.0;
+                        r.fog_linear_principal = 0.0;
                     }
                     Some(tiles::LAVA) => {
                         r.fog_color = [0.6, 0.1, 0.0, 1.0];
                         r.fog_densidad = 2.0;
                         r.fog_densidad_principal = 2.0;
+                        r.fog_color_principal = r.fog_color;
+                        r.fog_exp_principal = 1.0;
+                        r.fog_linear_principal = 0.0;
                     }
                     _ => {
                         r.fog_color = [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0];
-                        r.fog_densidad = 0.06;
+                        r.fog_densidad = if es_014 { 0.01 } else { 0.06 };
                         r.fog_densidad_principal = 0.0;
+                        if es_014 {
+                            r.fog_color_principal = [0.5, 0.8, 1.0, 1.0];
+                            r.fog_exp_principal = 0.0;
+                            r.fog_linear_principal = 1.0;
+                            r.fog_start_principal = 0.0;
+                            r.fog_end_principal = 1024.0;
+                        } else {
+                            r.fog_color_principal = r.fog_color;
+                            r.fog_exp_principal = 1.0;
+                            r.fog_linear_principal = 0.0;
+                        }
                     }
                 }
             } else {
                 r.fog_color = [14.0 / 255.0, 11.0 / 255.0, 10.0 / 255.0, 1.0];
                 r.fog_densidad = 0.06;
                 r.fog_densidad_principal = 0.0;
+                r.fog_color_principal = r.fog_color;
+                r.fog_exp_principal = 1.0;
+                r.fog_linear_principal = 0.0;
             }
             r.hit_preview = preview;
             // Extras de instancia: coordenadas en las versiones sin HUD propio
@@ -1455,5 +1577,12 @@ mod tests {
             assert_eq!(bloque_para_tecla(version, "8"), None);
             assert_eq!(bloque_para_tecla(version, "9"), None);
         }
+        // 0.0.14a estrena las nueve teclas y la paleta con los bloques nuevos.
+        assert_eq!(bloque_para_tecla("c0.0.14a", "1"), Some(tiles::PIEDRA));
+        assert_eq!(bloque_para_tecla("c0.0.14a", "3"), Some(tiles::TIERRA));
+        assert_eq!(bloque_para_tecla("c0.0.14a", "6"), Some(tiles::ARENA));
+        assert_eq!(bloque_para_tecla("c0.0.14a", "7"), Some(tiles::GRAVA));
+        assert_eq!(bloque_para_tecla("c0.0.14a", "8"), Some(tiles::TRONCO));
+        assert_eq!(bloque_para_tecla("c0.0.14a", "9"), Some(tiles::HOJAS));
     }
 }

@@ -91,6 +91,11 @@ path = "src/bin/classic013a.rs"
 name = "classic013a03"
 path = "src/bin/classic013a03.rs"
 
+# Primera con menas, arboles y bloques que caen (jar perdido; REC)
+[[bin]]
+name = "classic014a"
+path = "src/bin/classic014a.rs"
+
 [dependencies]
 winit = "0.30"
 wgpu = "25"

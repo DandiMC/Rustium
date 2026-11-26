@@ -35,8 +35,8 @@ Solo hace falta **el instalador**: `Rustium-0.3.2-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las veinte versiones (las seis
-pre-clásicas, las cuatro alpha privadas y las diez primeras Classic):
+El selector encima de «Jugar» arranca cualquiera de las veintiuna versiones (las seis
+pre-clásicas, las cuatro alpha privadas y las once primeras Classic):
 
 | versión | qué trae |
 |---|---|
@@ -60,15 +60,23 @@ pre-clásicas, las cuatro alpha privadas y las diez primeras Classic):
 | c0.0.12a_03 | el reupload archivado de 0.0.12a: correcciones de guardado y rendimiento |
 | c0.0.13a | reconstruida a partir de la build de desarrollo archivada: 854×480, salto de 0.0.11a, física de agua/lava, niebla azul/roja y el mundo plano de 32×512×64 con cuevas y lava subterránea |
 | c0.0.13a_03 | oficial y archivada: 854×480, sin lagos de lava sobre el nivel del mar y sin mobs naturales |
+| c0.0.14a | reconstruida: arena, grava y las tres menas, árboles de tronco y hojas, arena y grava que caen, nubes, niebla lineal azul, paleta de nueve bloques y el atlas de 0.0.14a |
 
-Las cuatro mc-, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02 y
-c0.0.13a son **reconstrucciones**: sus jars nunca se archivaron. Salen del código de
+Las cuatro mc-, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02,
+c0.0.13a y c0.0.14a son **reconstrucciones**: sus jars nunca se archivaron. Salen del código de
 c0.0.11a y de lo que documenta la Minecraft Wiki de cada una, y llevan las texturas y
 la fuente de c0.0.11a cuando no hay un jar propio. El launcher las marca con **REC**
 en el selector y en la lista de instancias; el id y la carpeta del mundo no cambian.
 
 rd-131655 (el «Cave game tech test») nunca tuvo jar publicado. Está reconstruido
 a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-132211.
+
+`c0.0.14a` también está perdida: sus tiles nuevos salen del jar archivado de
+0.0.14a_08 y su generador sigue lo que documenta la wiki: playas, menas de 10-30
+bloques y árboles. La reconstrucción sigue el comportamiento de la **0.0.14a
+base**, no el de `_08`: la copa de los árboles es la cuadrada y no se copian los
+cambios exclusivos de `_08` (copa en cruz, niebla blanca y sombras en agua/lava).
+Del jar de `_08` solo se toman las texturas que la release perdida no conserva.
 
 `c0.0.13a` sigue el jar que el launcher oficial archiva con ese nombre: la build de
 desarrollo para probar el tamaño del mundo, no la release perdida. Genera el mundo

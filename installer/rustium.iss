@@ -80,6 +80,7 @@ Source: "..\target\x86_64-pc-windows-gnu\release\classic012a02.exe"; DestDir: "{
 Source: "..\target\x86_64-pc-windows-gnu\release\classic012a03.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic013a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic013a03.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic014a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Apache 2.0 asks for the licence and the attribution notice to be handed to
 ; every recipient, so they are installed next to the executables.

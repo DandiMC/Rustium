@@ -133,6 +133,20 @@ impl Nivel {
         n
     }
 
+    /// c0.0.14a: el salto de familia. Sigue el mundo clasico de 256x256x64,
+    /// pero el generador anade playas de arena y grava, menas de carbon,
+    /// hierro y oro, y arboles de tronco y hojas. La arena y la grava caen.
+    pub fn new_clasico_014(seed: i64) -> Self {
+        let mut n = Self::vacio(seed, WIDTH, HEIGHT, DEPTH, Formato::Cabecera13a);
+        if n.load().is_none() {
+            n.generar_clasico_014(seed);
+        }
+        n.liquidos.clear();
+        n.calc_light(0, 0, n.ancho, n.alto);
+        n.volcar_si_toca();
+        n
+    }
+
     /// c0.0.13a-dev, la build archivada en el launcher: mundo completamente
     /// plano de 32x512x64 (x, fondo, altura). `LevelGen` la genera con hierba en
     /// la cota depth/2, tierra debajo, piedra en depth/3 y tuneles en la roca.
@@ -229,6 +243,146 @@ impl Nivel {
             self.anadir_lagos_lava(seed, &superficie);
         }
         self.anadir_lava_en_cuevas(seed);
+    }
+
+    /// Generador de 0.0.14a. La wiki documenta el terreno nuevo con playas,
+    /// menas y arboles, pero no su algoritmo exacto (el jar esta perdido), asi
+    /// que se parte del relieve y las cuevas de 0.0.12a y se decoran encima.
+    fn generar_clasico_014(&mut self, seed: i64) {
+        self.generar_clasico_012_con(seed, false);
+        self.sembrar_playas(seed);
+        self.sembrar_menas(seed);
+        self.sembrar_arboles(seed);
+    }
+
+    fn altura_superficie(&self, x: i32, y: i32) -> Option<i32> {
+        let mut z = self.fondo as i32 - 1;
+        while z >= 0 {
+            let id = self.get(x, y, z);
+            if id != tiles::AIRE && !tiles::es_liquido(id) {
+                return Some(z);
+            }
+            z -= 1;
+        }
+        None
+    }
+
+    /// Playas: la arena aparece en la orilla, a la altura del mar. La grava
+    /// forma algunos bancos sueltos, como en las capturas de la version.
+    fn sembrar_playas(&mut self, seed: i64) {
+        let (w, h) = (self.ancho as i32, self.alto as i32);
+        for x in 0..w {
+            for y in 0..h {
+                let Some(z) = self.altura_superficie(x, y) else { continue };
+                if self.get(x, y, z) != tiles::CESPED {
+                    continue;
+                }
+                if z <= SEA_LEVEL + 1 && z >= SEA_LEVEL - 2 {
+                    let i = self.idx(x as usize, y as usize, z as usize);
+                    self.blocks[i] = tiles::ARENA;
+                    if z > 0 && self.get(x, y, z - 1) == tiles::TIERRA {
+                        let j = self.idx(x as usize, y as usize, (z - 1) as usize);
+                        self.blocks[j] = tiles::ARENA;
+                    }
+                }
+            }
+        }
+        let mut rnd = perlin::JavaRandom::new(seed ^ 0x0E14_A9E5);
+        for _ in 0..28 {
+            let cx = 4 + rnd.next_int(w - 8);
+            let cy = 4 + rnd.next_int(h - 8);
+            let radio = 1 + rnd.next_int(4);
+            for dx in -radio..=radio {
+                for dy in -radio..=radio {
+                    if dx * dx + dy * dy > radio * radio {
+                        continue;
+                    }
+                    let (x, y) = (cx + dx, cy + dy);
+                    let Some(z) = self.altura_superficie(x, y) else { continue };
+                    if self.get(x, y, z) == tiles::CESPED {
+                        let i = self.idx(x as usize, y as usize, z as usize);
+                        self.blocks[i] = tiles::GRAVA;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Menas de 10-30 bloques, como las documenta la wiki. El carbon sale a
+    /// cualquier profundidad, el hierro en la mitad y el oro cerca del fondo.
+    fn sembrar_menas(&mut self, seed: i64) {
+        let mut rnd = perlin::JavaRandom::new(seed ^ 0x014A_0E5);
+        let (w, h, d) = (self.ancho as i32, self.alto as i32, self.fondo as i32);
+        let capas: [(u8, usize, i32, i32); 3] = [
+            (tiles::MENA_CARBON, 70, 24, d - 3),
+            (tiles::MENA_HIERRO, 50, 8, d * 2 / 3),
+            (tiles::MENA_ORO, 18, 2, d / 2),
+        ];
+        for (id, copias, zmin, zmax) in capas {
+            for _ in 0..copias {
+                let mut x = rnd.next_int(w);
+                let mut y = rnd.next_int(h);
+                let mut z = zmin + rnd.next_int((zmax - zmin).max(1));
+                let n = 10 + rnd.next_int(21);
+                for _ in 0..n {
+                    if self.get(x, y, z) == tiles::PIEDRA {
+                        let i = self.idx(x as usize, y as usize, z as usize);
+                        self.blocks[i] = id;
+                    }
+                    x = (x + rnd.next_int(3) - 1).clamp(0, w - 1);
+                    y = (y + rnd.next_int(3) - 1).clamp(0, h - 1);
+                    z = (z + rnd.next_int(3) - 1).clamp(0, d - 1);
+                }
+            }
+        }
+    }
+
+    /// Arboles de roble: tronco de 4-6 y copa de hojas, sobre cesped por
+    /// encima del nivel del mar. No se plantan si no caben en el mundo.
+    fn sembrar_arboles(&mut self, seed: i64) {
+        let mut rnd = perlin::JavaRandom::new(seed ^ 0x00A7_7E55);
+        let (w, h, d) = (self.ancho as i32, self.alto as i32, self.fondo as i32);
+        for _ in 0..150 {
+            let x = 4 + rnd.next_int(w - 8);
+            let y = 4 + rnd.next_int(h - 8);
+            let Some(z) = self.altura_superficie(x, y) else { continue };
+            if self.get(x, y, z) != tiles::CESPED || z <= SEA_LEVEL {
+                continue;
+            }
+            let alto = 4 + rnd.next_int(3);
+            if z + alto + 2 >= d {
+                continue;
+            }
+            for i in 1..=alto {
+                let zi = z + i;
+                if self.get(x, y, zi) == tiles::AIRE || self.get(x, y, zi) == tiles::HOJAS {
+                    let j = self.idx(x as usize, y as usize, zi as usize);
+                    self.blocks[j] = tiles::TRONCO;
+                }
+            }
+            let copa = z + alto;
+            for dz in -1..=1 {
+                let r: i32 = if dz == 1 { 1 } else { 2 };
+                for dx in -r..=r {
+                    for dy in -r..=r {
+                        // 0.0.14a base: la capa de arriba es un 3x3 completo. La
+                        // 0.0.14a_08 la cambio a forma de cruz recortando las
+                        // esquinas; esa variante no se usa aqui.
+                        if dz != 1 && dx.abs() == r && dy.abs() == r {
+                            continue;
+                        }
+                        let (lx, ly, lz) = (x + dx, y + dy, copa + dz);
+                        if lx < 0 || ly < 0 || lz < 0 || lx >= w || ly >= h || lz >= d {
+                            continue;
+                        }
+                        if self.get(lx, ly, lz) == tiles::AIRE {
+                            let j = self.idx(lx as usize, ly as usize, lz as usize);
+                            self.blocks[j] = tiles::HOJAS;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Lagos de lava de superficie. El primer 0.0.12a tenia lagos, no solo
@@ -541,13 +695,54 @@ impl Nivel {
         if self.blocks[i] == id {
             return false;
         }
+        let antes = self.blocks[i];
         self.blocks[i] = id;
         self.dirty.push((x, y));
         if tiles::es_liquido(id) && self.liquidos.len() < 8192 {
             self.liquidos.push((x, y, z));
         }
+        if tiles::cae(id) {
+            self.asentar(x, y, z);
+        } else if id == tiles::AIRE && antes != tiles::AIRE {
+            self.asentar_columna(x, y, z + 1);
+        }
         self.calc_light(x as usize, y as usize, 1, 1);
         true
+    }
+
+    /// Arena y grava se asientan de golpe: mientras debajo haya aire o un
+    /// liquido, el bloque baja. No usa `set` para no encadenar asentamientos.
+    fn asentar(&mut self, x: i32, y: i32, z: i32) {
+        let id = self.get(x, y, z);
+        if !tiles::cae(id) {
+            return;
+        }
+        let mut zz = z;
+        while zz > 0 {
+            let abajo = self.get(x, y, zz - 1);
+            if abajo == tiles::AIRE || tiles::es_liquido(abajo) {
+                let i = self.idx(x as usize, y as usize, zz as usize);
+                let j = self.idx(x as usize, y as usize, (zz - 1) as usize);
+                self.blocks[i] = tiles::AIRE;
+                self.blocks[j] = id;
+                self.dirty.push((x, y));
+                zz -= 1;
+            } else {
+                break;
+            }
+        }
+        if zz != z {
+            self.calc_light(x as usize, y as usize, 1, 1);
+        }
+    }
+
+    /// Si se quita el soporte, la arena/grava que tenga encima cae tambien.
+    fn asentar_columna(&mut self, x: i32, y: i32, z0: i32) {
+        for z in z0..self.fondo as i32 {
+            if tiles::cae(self.get(x, y, z)) {
+                self.asentar(x, y, z);
+            }
+        }
     }
 
     // LevelListener.tileChanged: el juego consume las columnas cambiadas y
@@ -721,6 +916,13 @@ fn id_desde_java(id: u8) -> u8 {
     match id {
         9 => tiles::AGUA,
         10 | 11 => tiles::LAVA,
+        12 => tiles::ARENA,
+        13 => tiles::GRAVA,
+        14 => tiles::MENA_ORO,
+        15 => tiles::MENA_HIERRO,
+        16 => tiles::MENA_CARBON,
+        17 => tiles::TRONCO,
+        18 => tiles::HOJAS,
         _ => id,
     }
 }
@@ -729,6 +931,13 @@ fn id_a_java(id: u8) -> u8 {
     match id {
         tiles::AGUA => 9,
         tiles::LAVA => 11,
+        tiles::ARENA => 12,
+        tiles::GRAVA => 13,
+        tiles::MENA_ORO => 14,
+        tiles::MENA_HIERRO => 15,
+        tiles::MENA_CARBON => 16,
+        tiles::TRONCO => 17,
+        tiles::HOJAS => 18,
         _ => id,
     }
 }
@@ -1020,6 +1229,81 @@ mod tests_012 {
         let inicio = datos.len() - n.blocks.len();
         assert_eq!(datos[inicio + agua], 9);
         assert_eq!(datos[inicio + lava], 11);
+    }
+
+    #[test]
+    fn la_014_siembra_playas_menas_y_arboles() {
+        // Generar sin pasar por load(): en el directorio del proyecto puede
+        // haber un level.dat de pruebas que taparia el mundo nuevo.
+        let mut n = Nivel::vacio(12_345, WIDTH, HEIGHT, DEPTH, Formato::Cabecera13a);
+        n.generar_clasico_014(12_345);
+        let mut arena = 0;
+        let mut menas = 0;
+        let mut troncos = 0;
+        let mut hojas = 0;
+        for &b in &n.blocks {
+            match b {
+                tiles::ARENA => arena += 1,
+                tiles::MENA_ORO | tiles::MENA_HIERRO | tiles::MENA_CARBON => menas += 1,
+                tiles::TRONCO => troncos += 1,
+                tiles::HOJAS => hojas += 1,
+                _ => {}
+            }
+        }
+        assert!(arena > 0, "la 0.0.14a tiene playas de arena");
+        assert!(menas > 0, "la 0.0.14a tiene menas");
+        assert!(troncos > 0, "la 0.0.14a tiene arboles");
+        assert!(hojas > troncos, "cada tronco lleva su copa de hojas");
+    }
+
+    #[test]
+    fn la_arena_y_la_grava_caen_hasta_el_fondo() {
+        let mut n = Nivel::nuevo_vacio(0, 4, 4, 8);
+        n.set(1, 1, 0, tiles::PIEDRA);
+        n.set(1, 1, 6, tiles::ARENA);
+        assert_eq!(n.get(1, 1, 1), tiles::ARENA);
+        assert_eq!(n.get(1, 1, 6), tiles::AIRE);
+        // La grava tambien, y al quitar el soporte cae lo que tenga encima.
+        n.set(2, 2, 0, tiles::PIEDRA);
+        n.set(2, 2, 1, tiles::GRAVA);
+        n.set(2, 2, 2, tiles::GRAVA);
+        assert_eq!(n.get(2, 2, 1), tiles::GRAVA);
+        n.set(2, 2, 0, tiles::AIRE);
+        assert_eq!(n.get(2, 2, 0), tiles::GRAVA);
+    }
+
+    #[test]
+    fn la_copa_de_los_arboles_de_014a_es_cuadrada() {
+        let mut n = Nivel::vacio(12_345, WIDTH, HEIGHT, DEPTH, Formato::Cabecera13a);
+        n.generar_clasico_014(12_345);
+        let mut copas = 0;
+        for x in 1..(n.ancho - 1) {
+            for y in 1..(n.alto - 1) {
+                for z in 1..(n.fondo - 1) {
+                    if n.get(x as i32, y as i32, z as i32) != tiles::HOJAS {
+                        continue;
+                    }
+                    if n.get(x as i32, y as i32, z as i32 + 1) != tiles::AIRE {
+                        continue;
+                    }
+                    let mut completa = true;
+                    for dx in -1..=1 {
+                        for dy in -1..=1 {
+                            if dx == 0 && dy == 0 {
+                                continue;
+                            }
+                            if n.get((x as i32) + dx, (y as i32) + dy, z as i32) != tiles::HOJAS {
+                                completa = false;
+                            }
+                        }
+                    }
+                    if completa {
+                        copas += 1;
+                    }
+                }
+            }
+        }
+        assert!(copas > 0, "la copa superior debe ser un 3x3 completo");
     }
 
 }

@@ -35,8 +35,8 @@ You only need **the installer**: `Rustium-0.3.2-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the twenty builds (the six
-pre-classics, the four private alphas and the first ten Classics):
+The picker above the Play button starts any of the twenty-one builds (the six
+pre-classics, the four private alphas and the first eleven Classics):
 
 | build | what it brings |
 |---|---|
@@ -60,9 +60,10 @@ pre-classics, the four private alphas and the first ten Classics):
 | c0.0.12a_03 | the archived 0.0.12a reupload: saving and performance fixes |
 | c0.0.13a | reconstructed from the archived development build: 854×480, the 0.0.11a jump, 13a water/lava physics, blue/red fog and the flat 32×512×64 world with caves and underground lava |
 | c0.0.13a_03 | official and archived: 854×480, no lava lakes above sea level and no natural mobs |
+| c0.0.14a | reconstructed: sand, gravel and the three ores, trees of logs and leaves, sand and gravel fall, clouds, linear blue fog, a nine-slot block palette and the 0.0.14a atlas |
 
-The four mc- builds, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02
-and c0.0.13a are **reconstructions**: their jars were never archived. They are built
+The four mc- builds, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02,
+c0.0.13a and c0.0.14a are **reconstructions**: their jars were never archived. They are built
 from c0.0.11a's code plus what the Minecraft Wiki documents for each, and use
 c0.0.11a's textures and font when there is no jar of their own. The launcher marks
 them with **REC** in the picker and the instance list; the id and world folder do not
@@ -72,7 +73,13 @@ rd-131655 (the "Cave game tech test") never had a released jar. It is reconstruc
 from the Minecraft Wiki and uses the same RubyDung textures as rd-132211.
 
 `c0.0.13a` follows the jar the official launcher archives under that name: the
-world-size development build, not the lost release. It generates the documented
+world-size development build, not the lost release. 0.0.14a is also lost, so its
+new tiles come from the archived 0.0.14a_08 jar and its generator follows the wiki:
+beaches, ore veins of 10-30 blocks and trees. This reconstruction follows the
+**0.0.14a base** behaviour, not `_08`: the tree canopy is the square one and the
+`_08`-only changes (cross-shaped top, white fog and water/lava shadows) are not
+copied. The `_08` jar is used only for the textures the lost release does not keep.
+It generates the documented
 flat 32×512×64 world, carves caves and seeds lava underground. Its `level.dat` uses
 the 0.0.13a header (magic `0x271BB788`, name, creator, time and width/height/depth);
 the header is also read, so levels with other dimensions such as the documented
