@@ -2332,8 +2332,15 @@ impl ApplicationHandler for App {
                 }
                 self.zombis[i].tick_con(&self.nivel, Fisica::ZOMBI_LEGACY);
                 if es_025(self.version) {
-                    self.zombis[i].e.xd *= 1.25;
-                    self.zombis[i].e.zd *= 1.25;
+                    // Mas rapidos, con tope para que el factor no se acumule
+                    // tick tras tick y los mobs salgan disparados.
+                    let sp = (self.zombis[i].e.xd * self.zombis[i].e.xd
+                        + self.zombis[i].e.zd * self.zombis[i].e.zd)
+                        .sqrt();
+                    if sp < 0.35 {
+                        self.zombis[i].e.xd *= 1.25;
+                        self.zombis[i].e.zd *= 1.25;
+                    }
                 }
                 if es_supervivencia(self.version) && self.zombis[i].salud <= 0 {
                     self.matar_mob(i);
