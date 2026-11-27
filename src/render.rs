@@ -1243,6 +1243,8 @@ pub struct Renderer {
     pub inventario: Vec<u8>,
     pub inventario_sel: usize,
     pub inventario_visible: bool,
+    /// 0.0.21a pinta el inventario con fondo gris en vez del panel oscuro.
+    pub inventario_gris: bool,
     pub hud_uniform: wgpu::Buffer,
     pub hud_bg: wgpu::BindGroup,
     pub hud_vbuf: wgpu::Buffer,
@@ -2440,6 +2442,7 @@ impl Renderer {
             inventario: Vec::new(),
             inventario_sel: 0,
             inventario_visible: false,
+            inventario_gris: false,
             hud_uniform,
             hud_bg,
             hud_vbuf,
@@ -2816,8 +2819,18 @@ impl Renderer {
             let esc = self.config.height as f32 / 240.0;
             let sw_gui = self.config.width as f32 / esc;
             let x0 = (sw_gui - INV_ANCHO) / 2.0;
+            let panel = if self.inventario_gris {
+                [0.55, 0.55, 0.55, 0.96]
+            } else {
+                [0.10, 0.10, 0.12, 0.96]
+            };
+            let casilla = if self.inventario_gris {
+                [0.38, 0.38, 0.38, 0.92]
+            } else {
+                [0.16, 0.16, 0.18, 0.90]
+            };
             ui_rect(&mut ui_verts, 0.0, 0.0, self.config.width as f32, self.config.height as f32, [0.0, 0.0, 0.0, 0.55], self.config.width, self.config.height);
-            ui_rect(&mut ui_verts, (x0 - 4.0) * esc, (INV_Y - 4.0) * esc, (INV_ANCHO + 8.0) * esc, (INV_ALTO + 8.0) * esc, [0.10, 0.10, 0.12, 0.96], self.config.width, self.config.height);
+            ui_rect(&mut ui_verts, (x0 - 4.0) * esc, (INV_Y - 4.0) * esc, (INV_ANCHO + 8.0) * esc, (INV_ALTO + 8.0) * esc, panel, self.config.width, self.config.height);
             for i in 0..INV_COLS * INV_ROWS {
                 let col = (i % INV_COLS) as f32;
                 let row = (i / INV_COLS) as f32;
@@ -2829,7 +2842,7 @@ impl Renderer {
                     [0.35, 0.35, 0.38, 0.85]
                 };
                 ui_rect(&mut ui_verts, sx * esc, sy * esc, 22.0 * esc, 22.0 * esc, borde, self.config.width, self.config.height);
-                ui_rect(&mut ui_verts, (sx + 1.0) * esc, (sy + 1.0) * esc, 20.0 * esc, 20.0 * esc, [0.16, 0.16, 0.18, 0.90], self.config.width, self.config.height);
+                ui_rect(&mut ui_verts, (sx + 1.0) * esc, (sy + 1.0) * esc, 20.0 * esc, 20.0 * esc, casilla, self.config.width, self.config.height);
             }
         }
         if !ui_verts.is_empty() {

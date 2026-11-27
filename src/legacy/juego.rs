@@ -159,6 +159,9 @@ fn es_reconstruida(version: &str) -> bool {
             | "c0.0.18a_02"
             | "c0.0.19a"
             | "c0.0.20a"
+            | "c0.0.21a"
+            | "c0.0.22a"
+            | "c0.0.23a"
     )
 }
 
@@ -202,21 +205,50 @@ fn es_familia_014(version: &str) -> bool {
             | "c0.0.19a_06"
             | "c0.0.20a"
             | "c0.0.20a_02"
+            | "c0.0.21a"
+            | "c0.0.22a"
+            | "c0.0.23a"
     )
+}
+
+/// 0.0.21a: inventario gris, se puede andar y cambiar de casilla con el
+/// inventario abierto, y el alcance de construccion crece.
+fn es_021a(version: &str) -> bool {
+    matches!(version, "c0.0.21a" | "c0.0.22a" | "c0.0.23a")
+}
+
+/// 0.0.22a: sonido, musica y mute con M. La lava de 0.0.22a_05 baja a un tick
+/// de cada tres.
+fn es_022a(version: &str) -> bool {
+    matches!(version, "c0.0.22a" | "c0.0.23a")
+}
+
+/// 0.0.23a: menu de opciones con Escape y controles configurables.
+fn es_023a(version: &str) -> bool {
+    version == "c0.0.23a"
 }
 
 /// 0.0.19a: cristal, esponja, barra rapida y animacion de liquidos.
 fn es_019a(version: &str) -> bool {
     matches!(
         version,
-        "c0.0.19a" | "c0.0.19a_06" | "c0.0.20a" | "c0.0.20a_02"
+        "c0.0.19a"
+            | "c0.0.19a_06"
+            | "c0.0.20a"
+            | "c0.0.20a_02"
+            | "c0.0.21a"
+            | "c0.0.22a"
+            | "c0.0.23a"
     )
 }
 
 /// 0.0.20a: inventario con B, oro, telas, flores, setas, /solid y bedrock
 /// irrompible.
 fn es_020a(version: &str) -> bool {
-    matches!(version, "c0.0.20a" | "c0.0.20a_02")
+    matches!(
+        version,
+        "c0.0.20a" | "c0.0.20a_02" | "c0.0.21a" | "c0.0.22a" | "c0.0.23a"
+    )
 }
 
 /// La paleta de la barra rapida de 0.0.19a, en el orden exacto de la wiki:
@@ -267,6 +299,74 @@ fn paleta_020() -> Vec<u8> {
     v
 }
 
+// 0.0.22a: sonidos basicos sin dependencias. Se sintetiza un WAV corto en
+// memoria y se reproduce con PlaySound (winmm). En otros sistemas no suena.
+#[cfg(windows)]
+fn reproducir_wav(wav: &'static [u8]) {
+    #[link(name = "winmm")]
+    extern "system" {
+        fn PlaySound(data: *const u8, module: usize, flags: u32) -> i32;
+    }
+    const SND_ASYNC: u32 = 0x0001;
+    const SND_NODEFAULT: u32 = 0x0002;
+    const SND_MEMORY: u32 = 0x0004;
+    unsafe {
+        PlaySound(wav.as_ptr(), 0, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+    }
+}
+
+#[cfg(not(windows))]
+fn reproducir_wav(_wav: &'static [u8]) {}
+
+fn wav_tono(freq: f32, ms: u32, ruido: bool) -> Vec<u8> {
+    let rate = 22_050u32;
+    let n = (rate * ms / 1000).max(1);
+    let mut out = Vec::with_capacity(44 + (n as usize) * 2);
+    let data_len = n * 2;
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36 + data_len).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&rate.to_le_bytes());
+    out.extend_from_slice(&(rate * 2).to_le_bytes());
+    out.extend_from_slice(&2u16.to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data_len.to_le_bytes());
+    let mut semilla = 0x1234_5678u32;
+    for i in 0..n {
+        let t = i as f32 / rate as f32;
+        let env = (1.0 - i as f32 / n as f32).powf(2.0);
+        let s = if ruido {
+            semilla = semilla.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (semilla >> 16) as f32 / 32_768.0 - 1.0
+        } else {
+            (std::f32::consts::TAU * freq * t).sin()
+        };
+        let v = (s * env * 0.22 * 32_767.0) as i16;
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out
+}
+
+fn sonar_colocar(activo: bool) {
+    if !activo {
+        return;
+    }
+    static WAV: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    reproducir_wav(WAV.get_or_init(|| wav_tono(520.0, 45, false)));
+}
+
+fn sonar_romper(activo: bool) {
+    if !activo {
+        return;
+    }
+    static WAV: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    reproducir_wav(WAV.get_or_init(|| wav_tono(180.0, 70, true)));
+}
+
 /// 0.0.16a estreno la consola de chat y los comandos de servidor. En el port
 /// se conserva como consola de un solo jugador.
 fn es_chat(version: &str) -> bool {
@@ -281,6 +381,9 @@ fn es_chat(version: &str) -> bool {
             | "c0.0.19a_06"
             | "c0.0.20a"
             | "c0.0.20a_02"
+            | "c0.0.21a"
+            | "c0.0.22a"
+            | "c0.0.23a"
     )
 }
 
@@ -289,7 +392,7 @@ fn es_017a(version: &str) -> bool {
     matches!(
         version,
         "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02" | "c0.0.19a" | "c0.0.19a_06"
-            | "c0.0.20a" | "c0.0.20a_02"
+            | "c0.0.20a" | "c0.0.20a_02" | "c0.0.21a" | "c0.0.22a" | "c0.0.23a"
     )
 }
 
@@ -298,7 +401,7 @@ fn es_018a(version: &str) -> bool {
     matches!(
         version,
         "c0.0.18a" | "c0.0.18a_02" | "c0.0.19a" | "c0.0.19a_06" | "c0.0.20a"
-            | "c0.0.20a_02"
+            | "c0.0.20a_02" | "c0.0.21a" | "c0.0.22a" | "c0.0.23a"
     )
 }
 
@@ -681,6 +784,11 @@ struct App {
     inventario_sel: usize,
     inventario_ids: Vec<u8>,
     solid: bool,
+    // 0.0.22a: sonido (M lo silencia) y 0.0.23a: menu de opciones con Escape.
+    sonido: bool,
+    pausa: bool,
+    pausa_sel: usize,
+    distancia_corta: bool,
     // 0.0.19a limita el bucle a 100 fps.
     ultimo_frame: Instant,
 }
@@ -711,6 +819,9 @@ impl App {
                 .unwrap_or(SPAWN_SEED)
         };
         let mut nivel = match modo {
+            Modo::Clasico if es_023a(version) => Nivel::new_clasico_023(seed),
+            Modo::Clasico if es_022a(version) => Nivel::new_clasico_022(seed),
+            Modo::Clasico if es_021a(version) => Nivel::new_clasico_021(seed),
             Modo::Clasico if es_020a(version) => Nivel::new_clasico_020(seed),
             Modo::Clasico if es_019a(version) => Nivel::new_clasico_019(seed),
             Modo::Clasico if version == "c0.0.14a" => Nivel::new_clasico_014(seed),
@@ -826,6 +937,10 @@ impl App {
             inventario_sel: 0,
             inventario_ids,
             solid: false,
+            sonido: true,
+            pausa: false,
+            pausa_sel: 0,
+            distancia_corta: false,
             ultimo_frame: Instant::now(),
         }
     }
@@ -887,6 +1002,34 @@ impl App {
                 2.0,
                 52.0,
             ));
+        }
+        // 0.0.23a: menu de pausa con las opciones que la wiki documenta.
+        if self.pausa {
+            let opciones = [
+                "Continuar".to_string(),
+                format!(
+                    "Mostrar FPS: {}",
+                    if self.hud_visible { "Si" } else { "No" }
+                ),
+                format!(
+                    "Invertir raton: {}",
+                    if self.invertir_y { "Si" } else { "No" }
+                ),
+                format!(
+                    "Distancia: {}",
+                    if self.distancia_corta { "Corta" } else { "Larga" }
+                ),
+                format!(
+                    "Sonido: {}",
+                    if self.sonido { "Si" } else { "No" }
+                ),
+            ];
+            lineas.push(("OPCIONES (flechas + Enter)".to_string(), 2.0, 70.0));
+            for (i, opcion) in opciones.iter().enumerate() {
+                let marca = if i == self.pausa_sel { ">" } else { " " };
+                lineas.push((format!("{marca} {opcion}"), 2.0, 84.0 + i as f32 * 10.0));
+            }
+            lineas.push(("WASD mover, raton mirar, 1-9 barra".to_string(), 2.0, 146.0));
         }
         // 0.0.16a: consola de chat. El registro se ve al escribir y unos
         // segundos despues de un comando; la linea de entrada va abajo.
@@ -1118,7 +1261,9 @@ impl App {
         let limit = self.jugador.bbox().grown(3.0, 3.0, 3.0);
         let mut normal = [0i32, 0, 0];
         let mut t = 0.0f32;
-        while t < 200.0 {
+        // 0.0.21a aumento el alcance de construccion.
+        let alcance = if es_021a(self.version) { 256.0 } else { 200.0 };
+        while t < alcance {
             if pos[0] < limit.x0 || pos[0] > limit.x1
                 || pos[1] < limit.y0 || pos[1] > limit.y1
                 || pos[2] < limit.z0 || pos[2] > limit.z1
@@ -1175,10 +1320,15 @@ impl App {
             let n = self.nivel.absorber_esponja(x, y, z);
             if n > 0 {
                 self.chat(format!("La esponja absorbe {n} bloques de agua."));
+                sonar_colocar(self.sonido);
                 return true;
             }
         }
-        self.nivel.set(x, y, z, self.pintura)
+        let puesto = self.nivel.set(x, y, z, self.pintura);
+        if puesto {
+            sonar_colocar(self.sonido);
+        }
+        puesto
     }
 
     /// Rompe un bloque. Desde 0.0.20a el bedrock es irrompible, incluso en el
@@ -1191,6 +1341,7 @@ impl App {
         }
         if self.nivel.set(x, y, z, tiles::AIRE) {
             particula::destruir(tiles::textura_particula(id), x, y, z, &mut self.particulas);
+            sonar_romper(self.sonido);
             true
         } else {
             false
@@ -1219,6 +1370,37 @@ impl App {
     /// Elige la casilla del inventario y la copia a la barra rapida. Es lo que
     /// hace 0.0.20a: el inventario no es un cajon aparte, cambia el bloque de
     /// la casilla activa.
+    fn abrir_pausa(&mut self) {
+        self.pausa = true;
+        self.pausa_sel = 0;
+        if let Some(w) = self.window.clone() {
+            let _ = w.set_cursor_grab(winit::window::CursorGrabMode::None);
+            w.set_cursor_visible(true);
+        }
+        self.grabbed = false;
+    }
+
+    fn cerrar_pausa(&mut self) {
+        self.pausa = false;
+        if let Some(w) = self.window.clone() {
+            if w.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+                w.set_cursor_visible(false);
+                self.grabbed = true;
+            }
+        }
+    }
+
+    fn accion_pausa(&mut self) {
+        match self.pausa_sel {
+            0 => self.cerrar_pausa(),
+            1 => self.hud_visible = !self.hud_visible,
+            2 => self.invertir_y = !self.invertir_y,
+            3 => self.distancia_corta = !self.distancia_corta,
+            4 => self.sonido = !self.sonido,
+            _ => {}
+        }
+    }
+
     fn elegir_del_inventario(&mut self) {
         if let Some(&id) = self.inventario_ids.get(self.inventario_sel) {
             self.hotbar[self.hotbar_sel] = id;
@@ -1368,8 +1550,38 @@ impl ApplicationHandler for App {
                     }
                     return;
                 }
+                // 0.0.23a: Escape abre el menu de opciones.
+                if es_023a(self.version)
+                    && !self.inventario_abierto
+                    && state == ElementState::Pressed
+                    && !repeat
+                    && matches!(&logical_key, Key::Named(NamedKey::Escape))
+                {
+                    if self.pausa {
+                        self.cerrar_pausa();
+                    } else {
+                        self.abrir_pausa();
+                    }
+                    return;
+                }
+                if self.pausa {
+                    if state == ElementState::Pressed && !repeat {
+                        match &logical_key {
+                            Key::Named(NamedKey::ArrowUp) => {
+                                self.pausa_sel = (self.pausa_sel + 4) % 5;
+                            }
+                            Key::Named(NamedKey::ArrowDown) => {
+                                self.pausa_sel = (self.pausa_sel + 1) % 5;
+                            }
+                            Key::Named(NamedKey::Enter) => self.accion_pausa(),
+                            _ => {}
+                        }
+                    }
+                    return;
+                }
                 // 0.0.20a: el inventario se navega con las flechas y Enter; B o
-                // Escape lo cierran. Mientras esta abierto no mueve al jugador.
+                // Escape lo cierran. Desde 0.0.21a se puede andar y cambiar de
+                // casilla mientras esta abierto.
                 if self.inventario_abierto {
                     if state == ElementState::Pressed && !repeat {
                         let total = self.inventario_ids.len().max(1);
@@ -1393,6 +1605,20 @@ impl ApplicationHandler for App {
                                 self.inventario_sel = ((row + 1) % 4) * 9 + col;
                             }
                             Key::Named(NamedKey::Enter) => self.elegir_del_inventario(),
+                            Key::Character(c) if es_021a(self.version) => {
+                                if let Ok(n) = c.parse::<usize>() {
+                                    if (1..=9).contains(&n) {
+                                        self.hotbar_sel = n - 1;
+                                        self.pintura = self.hotbar[self.hotbar_sel];
+                                    }
+                                } else if matches!(
+                                    c.to_ascii_lowercase().as_str(),
+                                    "w" | "a" | "s" | "d"
+                                ) {
+                                    // 0.0.21a deja andar con el inventario abierto.
+                                    self.keys.insert(c.to_ascii_lowercase());
+                                }
+                            }
                             _ => {}
                         }
                         self.inventario_sel = self.inventario_sel.min(total - 1);
@@ -1480,6 +1706,16 @@ impl ApplicationHandler for App {
                             if c.eq_ignore_ascii_case("r") && es_13a(self.version) {
                                 self.reinicio_presionado = true;
                             }
+                            // 0.0.22a: M silencia el sonido (no hay musica en el
+                            // port, pero el ajuste se conserva).
+                            if c.eq_ignore_ascii_case("m") && es_022a(self.version) {
+                                self.sonido = !self.sonido;
+                                self.chat(format!(
+                                    "Sonido {}.",
+                                    if self.sonido { "activado" } else { "desactivado" }
+                                ));
+                                return;
+                            }
                             // 0.0.19a: las teclas 1-9 eligen la barra rapida.
                             if es_019a(self.version) {
                                 if let Ok(n) = c.parse::<usize>() {
@@ -1540,7 +1776,7 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                if self.chat_abierto || self.inventario_abierto {
+                if self.chat_abierto || self.inventario_abierto || self.pausa {
                     return;
                 }
                 if state == ElementState::Released && self.mouse_repeat == Some(button) {
@@ -1690,7 +1926,9 @@ impl ApplicationHandler for App {
         }
 
         // Con la consola abierta el jugador no se mueve: las teclas son texto.
-        let bloqueado = self.chat_abierto || self.inventario_abierto;
+        let bloqueado = self.chat_abierto
+            || (self.inventario_abierto && !es_021a(self.version))
+            || self.pausa;
         let f: f32 = if bloqueado { 0.0 } else {
             (if self.keys.contains("w") || self.keys.contains("arrowup") { 1.0 } else { 0.0 })
                 - (if self.keys.contains("s") || self.keys.contains("arrowdown") { 1.0 } else { 0.0 })
@@ -1702,8 +1940,14 @@ impl ApplicationHandler for App {
         let jump = !bloqueado && self.keys.contains(" ");
         let reset_mantenido = self.keys.contains("r") || self.keys.contains("R");
         let version_13a = es_13a(self.version);
-        self.tick_acc += dt;
-        let mut steps = (self.tick_acc * TPS) as i32;
+        if !self.pausa {
+            self.tick_acc += dt;
+        }
+        let mut steps = if self.pausa {
+            0
+        } else {
+            (self.tick_acc * TPS) as i32
+        };
         if steps > 100 { steps = 100; }
         self.tick_acc -= steps as f32 / TPS;
         for _ in 0..steps {
@@ -1925,7 +2169,7 @@ impl ApplicationHandler for App {
                             r.fog_exp_principal = 0.0;
                             r.fog_linear_principal = 1.0;
                             r.fog_start_principal = 0.0;
-                            r.fog_end_principal = 1024.0;
+                            r.fog_end_principal = if self.distancia_corta { 96.0 } else { 1024.0 };
                         } else {
                             r.fog_color_principal = r.fog_color;
                             r.fog_exp_principal = 1.0;
@@ -1974,6 +2218,7 @@ impl ApplicationHandler for App {
                 r.set_hotbar(&[], 0);
             }
             if es_020a(self.version) {
+                r.inventario_gris = es_021a(self.version);
                 r.set_inventario(
                     &self.inventario_ids,
                     self.inventario_sel,

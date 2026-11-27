@@ -128,10 +128,13 @@ enum GameVersion {
     C0019a06,
     C0020a,
     C0020a02,
+    C0021a,
+    C0022a,
+    C0023a,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 34] = [
+    const ALL: [GameVersion; 37] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
@@ -166,6 +169,9 @@ impl GameVersion {
         GameVersion::C0019a06,
         GameVersion::C0020a,
         GameVersion::C0020a02,
+        GameVersion::C0021a,
+        GameVersion::C0022a,
+        GameVersion::C0023a,
     ];
 
     /// The build name, as the original version is called everywhere else.
@@ -205,6 +211,9 @@ impl GameVersion {
             GameVersion::C0019a06 => "c0.0.19a_06",
             GameVersion::C0020a => "c0.0.20a",
             GameVersion::C0020a02 => "c0.0.20a_02",
+            GameVersion::C0021a => "c0.0.21a",
+            GameVersion::C0022a => "c0.0.22a",
+            GameVersion::C0023a => "c0.0.23a",
         }
     }
 
@@ -236,6 +245,9 @@ impl GameVersion {
                 | GameVersion::C0018a02
                 | GameVersion::C0019a
                 | GameVersion::C0020a
+                | GameVersion::C0021a
+                | GameVersion::C0022a
+                | GameVersion::C0023a
         )
     }
 
@@ -344,6 +356,15 @@ impl GameVersion {
             }
             GameVersion::C0020a02 => {
                 if win { "classic020a02.exe" } else { "classic020a02" }
+            }
+            GameVersion::C0021a => {
+                if win { "classic021a.exe" } else { "classic021a" }
+            }
+            GameVersion::C0022a => {
+                if win { "classic022a.exe" } else { "classic022a" }
+            }
+            GameVersion::C0023a => {
+                if win { "classic023a.exe" } else { "classic023a" }
             }
         }
     }

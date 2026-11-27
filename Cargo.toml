@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -158,6 +158,21 @@ path = "src/bin/classic020a.rs"
 [[bin]]
 name = "classic020a02"
 path = "src/bin/classic020a02.rs"
+
+# 0.0.21a: inventario gris, andar con el inventario abierto y mas alcance
+[[bin]]
+name = "classic021a"
+path = "src/bin/classic021a.rs"
+
+# 0.0.22a: sonidos, mute con M y lava lenta
+[[bin]]
+name = "classic022a"
+path = "src/bin/classic022a.rs"
+
+# 0.0.23a: menu de opciones y ultima Classic de construccion
+[[bin]]
+name = "classic023a"
+path = "src/bin/classic023a.rs"
 
 [dependencies]
 winit = "0.30"

@@ -68,6 +68,9 @@ pub struct Nivel {
     pub liquidos: Vec<(i32, i32, i32)>,
     /// 0.0.15a: la lava espera un tick de cada dos antes de extenderse.
     pub lava_lenta: bool,
+    /// 0.0.22a_05 bajo la lava a un tick de cada tres. Las builds anteriores
+    /// conservan el dos de 0.0.15a.
+    pub lava_cada: u64,
     /// 0.0.20a: las flores y setas se marchitan a oscuras. 0.0.24 lo quita.
     pub plantas_no_decauen: bool,
     /// Ticks transcurridos, para el flujo lento de la lava.
@@ -98,6 +101,7 @@ impl Nivel {
             dirty: Vec::new(),
             liquidos: Vec::new(),
             lava_lenta: false,
+            lava_cada: 2,
             plantas_no_decauen: false,
             ticks: 0,
             formato,
@@ -183,6 +187,28 @@ impl Nivel {
     /// 0.0.20a: sobre el mundo de 0.0.15a crecen dienteleones y rosas en la
     /// hierba y setas en las cuevas. Las plantas se marchitan a oscuras hasta
     /// 0.0.24.
+    /// 0.0.21a: mismo mundo y bloques que 0.0.20a; cambian la interfaz del
+    /// inventario y el alcance de construccion.
+    pub fn new_clasico_021(seed: i64) -> Self {
+        Self::new_clasico_020(seed)
+    }
+
+    /// 0.0.22a: estrena sonido y musica; en el mundo solo cambia el brillo de la
+    /// lava, que ya venia de 0.0.15a.
+    pub fn new_clasico_022(seed: i64) -> Self {
+        let mut n = Self::new_clasico_020(seed);
+        n.lava_cada = 3;
+        n
+    }
+
+    /// 0.0.23a: ultima Classic de construccion. La lava sigue lenta y el mundo
+    /// es el mismo.
+    pub fn new_clasico_023(seed: i64) -> Self {
+        let mut n = Self::new_clasico_020(seed);
+        n.lava_cada = 3;
+        n
+    }
+
     pub fn new_clasico_020(seed: i64) -> Self {
         // Si ya hay un level.dat no se vuelven a sembrar flores y setas: si no,
         // cada arranque anadiria plantas nuevas al mismo mundo.
@@ -1013,7 +1039,7 @@ impl Nivel {
             }
             // 0.0.15a: la lava se expande a la mitad de velocidad. Se guarda
             // para el tick siguiente en vez de perder el frente de flujo.
-            if id == tiles::LAVA && self.lava_lenta && self.ticks % 2 == 0 {
+            if id == tiles::LAVA && self.lava_lenta && self.ticks % self.lava_cada.max(1) == 0 {
                 diferidos.push((x, y, z));
                 continue;
             }
