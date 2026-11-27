@@ -157,6 +157,8 @@ fn es_reconstruida(version: &str) -> bool {
             | "c0.0.17a"
             | "c0.0.18a"
             | "c0.0.18a_02"
+            | "c0.0.19a"
+            | "c0.0.20a"
     )
 }
 
@@ -196,7 +198,73 @@ fn es_familia_014(version: &str) -> bool {
             | "c0.0.17a"
             | "c0.0.18a"
             | "c0.0.18a_02"
+            | "c0.0.19a"
+            | "c0.0.19a_06"
+            | "c0.0.20a"
+            | "c0.0.20a_02"
     )
+}
+
+/// 0.0.19a: cristal, esponja, barra rapida y animacion de liquidos.
+fn es_019a(version: &str) -> bool {
+    matches!(
+        version,
+        "c0.0.19a" | "c0.0.19a_06" | "c0.0.20a" | "c0.0.20a_02"
+    )
+}
+
+/// 0.0.20a: inventario con B, oro, telas, flores, setas, /solid y bedrock
+/// irrompible.
+fn es_020a(version: &str) -> bool {
+    matches!(version, "c0.0.20a" | "c0.0.20a_02")
+}
+
+/// La paleta de la barra rapida de 0.0.19a, en el orden exacto de la wiki:
+/// piedra, tierra, esponja, tablones, sapling, tronco, hojas, cristal, grava.
+fn hotbar_019() -> [u8; 9] {
+    [
+        tiles::PIEDRA,
+        tiles::TIERRA,
+        tiles::ESPONJA,
+        tiles::MADERA,
+        tiles::ARBUSTO,
+        tiles::TRONCO,
+        tiles::HOJAS,
+        tiles::CRISTAL,
+        tiles::GRAVA,
+    ]
+}
+
+/// Todos los bloques colocables de 0.0.20a, en el orden del inventario: los
+/// nueve clasicos, cristal/esponja/oro, las dieciseis telas, las plantas y las
+/// menas. El bedrock entra al final porque /solid lo desbloquea.
+fn paleta_020() -> Vec<u8> {
+    let mut v = vec![
+        tiles::PIEDRA,
+        tiles::CESPED,
+        tiles::TIERRA,
+        tiles::LADRILLO,
+        tiles::MADERA,
+        tiles::ARENA,
+        tiles::GRAVA,
+        tiles::TRONCO,
+        tiles::HOJAS,
+        tiles::CRISTAL,
+        tiles::ESPONJA,
+        tiles::ORO,
+    ];
+    v.extend(tiles::TELA_BLANCA..=tiles::TELA_ROSA);
+    v.extend([
+        tiles::DENTELEON,
+        tiles::ROSA,
+        tiles::CHAMPINON_MARRON,
+        tiles::CHAMPINON_ROJO,
+        tiles::MENA_ORO,
+        tiles::MENA_HIERRO,
+        tiles::MENA_CARBON,
+        tiles::BEDROCK,
+    ]);
+    v
 }
 
 /// 0.0.16a estreno la consola de chat y los comandos de servidor. En el port
@@ -204,18 +272,34 @@ fn es_familia_014(version: &str) -> bool {
 fn es_chat(version: &str) -> bool {
     matches!(
         version,
-        "c0.0.16a" | "c0.0.16a_02" | "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02"
+        "c0.0.16a"
+            | "c0.0.16a_02"
+            | "c0.0.17a"
+            | "c0.0.18a"
+            | "c0.0.18a_02"
+            | "c0.0.19a"
+            | "c0.0.19a_06"
+            | "c0.0.20a"
+            | "c0.0.20a_02"
     )
 }
 
 /// 0.0.17a: /setspawn y la lista de jugadores con Tab.
 fn es_017a(version: &str) -> bool {
-    matches!(version, "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02")
+    matches!(
+        version,
+        "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02" | "c0.0.19a" | "c0.0.19a_06"
+            | "c0.0.20a" | "c0.0.20a_02"
+    )
 }
 
 /// 0.0.18a: /teleport.
 fn es_018a(version: &str) -> bool {
-    matches!(version, "c0.0.18a" | "c0.0.18a_02")
+    matches!(
+        version,
+        "c0.0.18a" | "c0.0.18a_02" | "c0.0.19a" | "c0.0.19a_06" | "c0.0.20a"
+            | "c0.0.20a_02"
+    )
 }
 
 fn es_lista_jugadores(version: &str) -> bool {
@@ -589,6 +673,16 @@ struct App {
     tab_lista: bool,
     // Punto de aparicion para /setspawn y /spawn.
     spawn: (f32, f32, f32),
+    // 0.0.19a: barra rapida de nueve bloques y la casilla activa.
+    hotbar: [u8; 9],
+    hotbar_sel: usize,
+    // 0.0.20a: inventario (B) y modo /solid.
+    inventario_abierto: bool,
+    inventario_sel: usize,
+    inventario_ids: Vec<u8>,
+    solid: bool,
+    // 0.0.19a limita el bucle a 100 fps.
+    ultimo_frame: Instant,
 }
 
 impl App {
@@ -617,6 +711,8 @@ impl App {
                 .unwrap_or(SPAWN_SEED)
         };
         let mut nivel = match modo {
+            Modo::Clasico if es_020a(version) => Nivel::new_clasico_020(seed),
+            Modo::Clasico if es_019a(version) => Nivel::new_clasico_019(seed),
             Modo::Clasico if version == "c0.0.14a" => Nivel::new_clasico_014(seed),
             Modo::Clasico if version == "c0.0.14a_08" => Nivel::new_clasico_014a08(seed),
             Modo::Clasico
@@ -674,6 +770,8 @@ impl App {
         let (ancho_mundo, alto_mundo, fondo_mundo) = (nivel.ancho, nivel.alto, nivel.fondo);
         let jugador = Jugador::new(ancho_mundo, alto_mundo, fondo_mundo);
         let spawn = (jugador.x, jugador.y, jugador.z);
+        let hotbar = if es_019a(version) { hotbar_019() } else { [0u8; 9] };
+        let inventario_ids = if es_020a(version) { paleta_020() } else { Vec::new() };
         App {
             version,
             modo,
@@ -699,7 +797,7 @@ impl App {
             grabbed: false,
             last: Instant::now(),
             tick_acc: 0.0,
-            pintura: tiles::PIEDRA,
+            pintura: if es_019a(version) { hotbar[0] } else { tiles::PIEDRA },
             fps_frames: 0,
             fps_t: Instant::now(),
             fps: 0,
@@ -722,6 +820,13 @@ impl App {
             chat_log: Vec::new(),
             chat_hasta: None,
             tab_lista: false,
+            hotbar,
+            hotbar_sel: 0,
+            inventario_abierto: false,
+            inventario_sel: 0,
+            inventario_ids,
+            solid: false,
+            ultimo_frame: Instant::now(),
         }
     }
 
@@ -757,6 +862,31 @@ impl App {
         // 0.0.17a: la lista de jugadores aparece mientras se mantiene Tab.
         if self.tab_lista && es_lista_jugadores(self.version) {
             lineas.push(("Jugadores (1): Jugador".to_string(), 2.0, 32.0));
+        }
+        // 0.0.19a: nombre del bloque de la casilla activa, como el texto que
+        // aparece encima de la barra rapida.
+        if self.hud_visible && self.mostrar_version && es_019a(self.version) {
+            lineas.push((
+                format!(
+                    "[{}] {}",
+                    self.hotbar_sel + 1,
+                    tiles::nombre(self.pintura)
+                ),
+                2.0,
+                32.0,
+            ));
+        }
+        if self.inventario_abierto {
+            lineas.push(("INVENTARIO: flechas + Enter, B cierra".to_string(), 2.0, 42.0));
+            lineas.push((
+                format!(
+                    "Casilla {}: {}",
+                    self.hotbar_sel + 1,
+                    tiles::nombre(self.pintura)
+                ),
+                2.0,
+                52.0,
+            ));
         }
         // 0.0.16a: consola de chat. El registro se ve al escribir y unos
         // segundos despues de un comando; la linea de entrada va abajo.
@@ -811,6 +941,9 @@ impl App {
                 if es_018a(self.version) {
                     self.chat("/teleport <x> <y> <z>  (o /tp)".to_string());
                 }
+                if es_020a(self.version) {
+                    self.chat("/solid  (bedrock irrompible)".to_string());
+                }
                 self.chat("/clear".to_string());
             }
             "broadcast" => {
@@ -860,6 +993,15 @@ impl App {
                     self.jugador.yd = 0.0;
                     self.jugador.zd = 0.0;
                     self.chat(format!("Teleportado a {x:.1}, {y:.1}, {z:.1}."));
+                }
+            }
+            "solid" if es_020a(self.version) => {
+                self.solid = !self.solid;
+                if self.solid {
+                    self.pintura = tiles::BEDROCK;
+                    self.chat("Modo solido activado: bedrock seleccionado.".to_string());
+                } else {
+                    self.chat("Modo solido desactivado.".to_string());
                 }
             }
             "clear" => {
@@ -1026,24 +1168,77 @@ impl App {
 }
 
 impl App {
+    /// Coloca el bloque elegido. La esponja de 0.0.19a chupa el agua de un
+    /// cubo de 5x5x5 y desaparece; si no hay agua, se queda puesta.
+    fn colocar(&mut self, x: i32, y: i32, z: i32) -> bool {
+        if self.pintura == tiles::ESPONJA {
+            let n = self.nivel.absorber_esponja(x, y, z);
+            if n > 0 {
+                self.chat(format!("La esponja absorbe {n} bloques de agua."));
+                return true;
+            }
+        }
+        self.nivel.set(x, y, z, self.pintura)
+    }
+
+    /// Rompe un bloque. Desde 0.0.20a el bedrock es irrompible, incluso en el
+    /// modo de construccion.
+    fn romper(&mut self, x: i32, y: i32, z: i32) -> bool {
+        let id = self.nivel.get(x, y, z);
+        if es_020a(self.version) && id == tiles::BEDROCK {
+            self.chat("El bedrock es irrompible desde 0.0.20a.".to_string());
+            return false;
+        }
+        if self.nivel.set(x, y, z, tiles::AIRE) {
+            particula::destruir(tiles::textura_particula(id), x, y, z, &mut self.particulas);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn abrir_inventario(&mut self) {
+        self.inventario_abierto = true;
+        if let Some(w) = self.window.clone() {
+            let _ = w.set_cursor_grab(winit::window::CursorGrabMode::None);
+            w.set_cursor_visible(true);
+        }
+        self.grabbed = false;
+    }
+
+    fn cerrar_inventario(&mut self) {
+        self.inventario_abierto = false;
+        if let Some(w) = self.window.clone() {
+            if w.set_cursor_grab(winit::window::CursorGrabMode::Locked).is_ok() {
+                w.set_cursor_visible(false);
+                self.grabbed = true;
+            }
+        }
+    }
+
+    /// Elige la casilla del inventario y la copia a la barra rapida. Es lo que
+    /// hace 0.0.20a: el inventario no es un cajon aparte, cambia el bloque de
+    /// la casilla activa.
+    fn elegir_del_inventario(&mut self) {
+        if let Some(&id) = self.inventario_ids.get(self.inventario_sel) {
+            self.hotbar[self.hotbar_sel] = id;
+            self.pintura = id;
+            self.chat(format!("Casilla {}: {}.", self.hotbar_sel + 1, tiles::nombre(id)));
+        }
+        self.cerrar_inventario();
+    }
+
     /// 0.0.14a: mantener el izquierdo construye o rompe cada 0,25 s, como el
     /// original. Solo se repite el izquierdo; el derecho cambia de modo.
     fn repetir_clic(&mut self) {
         let a = (self.tick_acc * TPS).clamp(0.0, 1.0);
         if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
             if self.edit_mode == 0 {
-                let id = self.nivel.get(bx, by, bz);
-                if self.nivel.set(bx, by, bz, tiles::AIRE) {
-                    particula::destruir(
-                        tiles::textura_particula(id),
-                        bx, by, bz,
-                        &mut self.particulas,
-                    );
-                }
+                self.romper(bx, by, bz);
             } else {
                 let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
                 if self.casilla_libre(nx, ny, nz) {
-                    self.nivel.set(nx, ny, nz, self.pintura);
+                    self.colocar(nx, ny, nz);
                 }
             }
         }
@@ -1105,7 +1300,7 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        let Some(window) = &self.window else { return };
+        let Some(window) = self.window.clone() else { return };
         match event {
             WindowEvent::CloseRequested => {
                 let _ = self.nivel.save();
@@ -1171,6 +1366,46 @@ impl ApplicationHandler for App {
                         }
                         _ => {}
                     }
+                    return;
+                }
+                // 0.0.20a: el inventario se navega con las flechas y Enter; B o
+                // Escape lo cierran. Mientras esta abierto no mueve al jugador.
+                if self.inventario_abierto {
+                    if state == ElementState::Pressed && !repeat {
+                        let total = self.inventario_ids.len().max(1);
+                        let col = self.inventario_sel % 9;
+                        let row = self.inventario_sel / 9;
+                        match &logical_key {
+                            Key::Named(NamedKey::Escape) => self.cerrar_inventario(),
+                            Key::Character(c) if c.eq_ignore_ascii_case("b") => {
+                                self.cerrar_inventario()
+                            }
+                            Key::Named(NamedKey::ArrowLeft) => {
+                                self.inventario_sel = row * 9 + (col + 8) % 9;
+                            }
+                            Key::Named(NamedKey::ArrowRight) => {
+                                self.inventario_sel = row * 9 + (col + 1) % 9;
+                            }
+                            Key::Named(NamedKey::ArrowUp) => {
+                                self.inventario_sel = ((row + 3) % 4) * 9 + col;
+                            }
+                            Key::Named(NamedKey::ArrowDown) => {
+                                self.inventario_sel = ((row + 1) % 4) * 9 + col;
+                            }
+                            Key::Named(NamedKey::Enter) => self.elegir_del_inventario(),
+                            _ => {}
+                        }
+                        self.inventario_sel = self.inventario_sel.min(total - 1);
+                    }
+                    return;
+                }
+                // 0.0.20a: B abre el inventario de bloques.
+                if state == ElementState::Pressed
+                    && !repeat
+                    && es_020a(self.version)
+                    && matches!(&logical_key, Key::Character(c) if c.eq_ignore_ascii_case("b"))
+                {
+                    self.abrir_inventario();
                     return;
                 }
                 // 0.0.16a: T abre la consola de chat.
@@ -1245,6 +1480,16 @@ impl ApplicationHandler for App {
                             if c.eq_ignore_ascii_case("r") && es_13a(self.version) {
                                 self.reinicio_presionado = true;
                             }
+                            // 0.0.19a: las teclas 1-9 eligen la barra rapida.
+                            if es_019a(self.version) {
+                                if let Ok(n) = c.parse::<usize>() {
+                                    if (1..=9).contains(&n) {
+                                        self.hotbar_sel = n - 1;
+                                        self.pintura = self.hotbar[self.hotbar_sel];
+                                        return;
+                                    }
+                                }
+                            }
                             if let Some(id) = bloque_para_tecla(self.version, c.as_str()) {
                                 self.pintura = id;
                             } else if c.eq_ignore_ascii_case("y") && self.eje_y {
@@ -1295,7 +1540,7 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                if self.chat_abierto {
+                if self.chat_abierto || self.inventario_abierto {
                     return;
                 }
                 if state == ElementState::Released && self.mouse_repeat == Some(button) {
@@ -1339,17 +1584,10 @@ impl ApplicationHandler for App {
                             match button {
                                 MouseButton::Left => {
                                     let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
-                                    self.nivel.set(nx, ny, nz, self.pintura);
+                                    self.colocar(nx, ny, nz);
                                 }
                                 MouseButton::Right => {
-                                    let id = self.nivel.get(bx, by, bz);
-                                    if self.nivel.set(bx, by, bz, tiles::AIRE) {
-                                        particula::destruir(
-                                            tiles::textura_particula(id),
-                                            bx, by, bz,
-                                            &mut self.particulas,
-                                        );
-                                    }
+                                    self.romper(bx, by, bz);
                                 }
                                 _ => {}
                             }
@@ -1365,18 +1603,11 @@ impl ApplicationHandler for App {
                             MouseButton::Left => {
                                 if let Some(((bx, by, bz), normal)) = self.raycast(self.jugador.camara(a)) {
                                     if self.edit_mode == 0 {
-                                        let id = self.nivel.get(bx, by, bz);
-                                        if self.nivel.set(bx, by, bz, tiles::AIRE) {
-                                            particula::destruir(
-                                                tiles::textura_particula(id),
-                                                bx, by, bz,
-                                                &mut self.particulas,
-                                            );
-                                        }
+                                        self.romper(bx, by, bz);
                                     } else {
                                         let (nx, ny, nz) = (bx + normal.0, by + normal.1, bz + normal.2);
                                         if self.casilla_libre(nx, ny, nz) {
-                                            self.nivel.set(nx, ny, nz, self.pintura);
+                                            self.colocar(nx, ny, nz);
                                         }
                                     }
                                 }
@@ -1388,14 +1619,7 @@ impl ApplicationHandler for App {
                         match button {
                             // Boton derecho: romper + las 64 particulas del tile
                             MouseButton::Right => {
-                                let id = self.nivel.get(bx, by, bz);
-                                if self.nivel.set(bx, by, bz, tiles::AIRE) {
-                                    particula::destruir(
-                                        tiles::textura_particula(id),
-                                        bx, by, bz,
-                                        &mut self.particulas,
-                                    );
-                                }
+                                self.romper(bx, by, bz);
                             }
                             // Boton izquierdo: colocar el bloque elegido
                             MouseButton::Left => {
@@ -1403,7 +1627,7 @@ impl ApplicationHandler for App {
                                 // RubyDung no comprueba solidez al colocar: el
                                 // setTile de la cara contigua sustituye lo que
                                 // hubiera (tambien un arbusto).
-                                self.nivel.set(nx, ny, nz, self.pintura);
+                                self.colocar(nx, ny, nz);
                             }
                             _ => {}
                         }
@@ -1429,8 +1653,29 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // 0.0.19a limita el bucle a 100 fps (10 ms por frame). El arnes de humo
+        // se salta el limite para terminar rapido.
+        if es_019a(self.version) && std::env::var_os("RD_SMOKE").is_none() {
+            let objetivo = std::time::Duration::from_millis(10);
+            let transcurrido = self.ultimo_frame.elapsed();
+            if transcurrido < objetivo {
+                std::thread::sleep(objetivo - transcurrido);
+            }
+            self.ultimo_frame = Instant::now();
+        }
         let now = Instant::now();
-        let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
+        // 0.0.19a_06 corrigio el temporizador: un paron largo ya no se convierte
+        // en una rafaga de ticks (se recorta a 100 ms). 0.0.19a conserva el
+        // comportamiento anterior de recuperar hasta un segundo.
+        let tope = if matches!(
+            self.version,
+            "c0.0.19a_06" | "c0.0.20a" | "c0.0.20a_02"
+        ) {
+            0.1
+        } else {
+            1.0
+        };
+        let dt = now.duration_since(self.last).as_secs_f32().min(tope);
         self.last = now;
         if es_familia_014(self.version) {
             if self.mouse_repeat.is_some() {
@@ -1445,7 +1690,7 @@ impl ApplicationHandler for App {
         }
 
         // Con la consola abierta el jugador no se mueve: las teclas son texto.
-        let bloqueado = self.chat_abierto;
+        let bloqueado = self.chat_abierto || self.inventario_abierto;
         let f: f32 = if bloqueado { 0.0 } else {
             (if self.keys.contains("w") || self.keys.contains("arrowup") { 1.0 } else { 0.0 })
                 - (if self.keys.contains("s") || self.keys.contains("arrowdown") { 1.0 } else { 0.0 })
@@ -1639,7 +1884,14 @@ impl ApplicationHandler for App {
                         // indigo; las builds anteriores conservan el azul oscuro.
                         let indigo = matches!(
                             self.version,
-                            "c0.0.16a_02" | "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02"
+                            "c0.0.16a_02"
+                                | "c0.0.17a"
+                                | "c0.0.18a"
+                                | "c0.0.18a_02"
+                                | "c0.0.19a"
+                                | "c0.0.19a_06"
+                                | "c0.0.20a"
+                                | "c0.0.20a_02"
                         );
                         r.fog_color = if indigo {
                             [0.18, 0.08, 0.42, 1.0]
@@ -1709,8 +1961,27 @@ impl ApplicationHandler for App {
             {
                 r.pedir_captura = true;
             }
-            // El original siempre enseña el bloque elegido en la esquina
-            r.hud_bloque = if self.mostrar_version { Some(self.pintura) } else { None };
+            // El original siempre enseña el bloque elegido en la esquina; desde
+            // 0.0.19a ese hueco lo ocupa la barra rapida.
+            r.hud_bloque = if self.mostrar_version && !es_019a(self.version) {
+                Some(self.pintura)
+            } else {
+                None
+            };
+            if es_019a(self.version) {
+                r.set_hotbar(&self.hotbar, self.hotbar_sel);
+            } else {
+                r.set_hotbar(&[], 0);
+            }
+            if es_020a(self.version) {
+                r.set_inventario(
+                    &self.inventario_ids,
+                    self.inventario_sel,
+                    self.inventario_abierto,
+                );
+            } else {
+                r.set_inventario(&[], 0, false);
+            }
             r.render(eye, yaw, pitch, hit, fps, &mv, &mv_fondo);
             w.request_redraw();
             if smoke {

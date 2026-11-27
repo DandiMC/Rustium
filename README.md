@@ -24,7 +24,7 @@ and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.3.5-setup.exe`.
+You only need **the installer**: `Rustium-0.3.6-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -35,7 +35,7 @@ You only need **the installer**: `Rustium-0.3.5-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the thirty builds (the six
+The picker above the Play button starts any of the thirty-four builds (the six
 pre-classics, the four private alphas and the first twenty Classics):
 
 | build | what it brings |
@@ -70,10 +70,14 @@ pre-classics, the four private alphas and the first twenty Classics):
 | c0.0.17a | `/setspawn`, `/spawn` and the player list with Tab; the chat log appears while typing |
 | c0.0.18a | `/teleport <x> <y> <z>` (or `/tp`), adapted from the admin command to coordinates |
 | c0.0.18a_02 | the font accepts `\`, `|`, `@` and `$`; the chat console passes them through |
+| c0.0.19a | glass, sponge, gold block, a nine-slot hotbar, animated water/lava and a 100 fps cap |
+| c0.0.19a_06 | timer fix for 0.0.19a: same blocks and hotbar, steadier ticks |
+| c0.0.20a | B inventory, sixteen wools, dandelions, roses, mushrooms, `/solid` and unbreakable bedrock |
+| c0.0.20a_02 | water transparency fix for 0.0.20a, with the inventory and plants intact |
 
 The four mc- builds, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02,
 c0.0.13a, c0.0.14a, c0.0.15a, c0.0.15a_01, c0.0.15a_02, c0.0.16a, c0.0.16a_02,
-c0.0.17a, c0.0.18a and c0.0.18a_02 are **reconstructions**: their jars were never archived. They are built
+c0.0.17a, c0.0.18a, c0.0.18a_02, c0.0.19a and c0.0.20a are **reconstructions**: their jars were never archived. They are built
 from c0.0.11a's code plus what the Minecraft Wiki documents for each, and use
 c0.0.11a's textures and font when there is no jar of their own. The launcher marks
 them with **REC** in the picker and the instance list; the id and world folder do not
@@ -162,7 +166,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.3.5-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.3.6-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 

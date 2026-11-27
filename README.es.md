@@ -24,7 +24,7 @@ y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.3.5-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.3.6-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -35,7 +35,7 @@ Solo hace falta **el instalador**: `Rustium-0.3.5-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las treinta versiones (las seis
+El selector encima de «Jugar» arranca cualquiera de las treinta y cuatro versiones (las seis
 pre-clásicas, las cuatro alpha privadas y las veinte primeras Classic):
 
 | versión | qué trae |
@@ -70,10 +70,14 @@ pre-clásicas, las cuatro alpha privadas y las veinte primeras Classic):
 | c0.0.17a | `/setspawn`, `/spawn` y la lista de jugadores con Tab; el registro de chat aparece al escribir |
 | c0.0.18a | `/teleport <x> <y> <z>` (o `/tp`), adaptado del comando de admin a coordenadas |
 | c0.0.18a_02 | la fuente acepta `\`, `|`, `@` y `$`; la consola de chat los deja pasar |
+| c0.0.19a | cristal, esponja, bloque de oro, barra rápida de nueve bloques, agua y lava animadas y límite de 100 fps |
+| c0.0.19a_06 | corrección del temporizador de 0.0.19a: mismos bloques y barra, ticks más estables |
+| c0.0.20a | inventario con B, dieciséis telas, dienteleones, rosas, setas, `/solid` y bedrock irrompible |
+| c0.0.20a_02 | arreglo de la transparencia del agua de 0.0.20a, con el inventario y las plantas intactos |
 
 Las cuatro mc-, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02,
 c0.0.13a, c0.0.14a, c0.0.15a, c0.0.15a_01, c0.0.15a_02, c0.0.16a, c0.0.16a_02,
-c0.0.17a, c0.0.18a y c0.0.18a_02 son **reconstrucciones**: sus jars nunca se archivaron. Salen del código de
+c0.0.17a, c0.0.18a, c0.0.18a_02, c0.0.19a y c0.0.20a son **reconstrucciones**: sus jars nunca se archivaron. Salen del código de
 c0.0.11a y de lo que documenta la Minecraft Wiki de cada una, y llevan las texturas y
 la fuente de c0.0.11a cuando no hay un jar propio. El launcher las marca con **REC**
 en el selector y en la lista de instancias; el id y la carpeta del mundo no cambian.
@@ -165,7 +169,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.3.5-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.3.6-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 

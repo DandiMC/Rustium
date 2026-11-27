@@ -28,6 +28,33 @@ pub const MENA_CARBON: u8 = 14;
 pub const TRONCO: u8 = 15;
 pub const HOJAS: u8 = 16;
 
+// 0.0.19a: cristal y esponja. 0.0.20a: bloque de oro, las dieciseis telas,
+// denteleon, rosa y las dos setas. Los ids nuevos no pisan los antiguos, asi
+// que un mundo de 0.0.18a se sigue leyendo igual.
+pub const CRISTAL: u8 = 17;
+pub const ESPONJA: u8 = 18;
+pub const ORO: u8 = 19;
+pub const TELA_BLANCA: u8 = 20;
+pub const TELA_GRIS_CLARA: u8 = 21;
+pub const TELA_GRIS_OSCURA: u8 = 22;
+pub const TELA_ROJA: u8 = 23;
+pub const TELA_NARANJA: u8 = 24;
+pub const TELA_AMARILLA: u8 = 25;
+pub const TELA_CHARTREUSE: u8 = 26;
+pub const TELA_VERDE: u8 = 27;
+pub const TELA_VERDE_PRIMAVERA: u8 = 28;
+pub const TELA_CIAN: u8 = 29;
+pub const TELA_CAPRI: u8 = 30;
+pub const TELA_ULTRAMAR: u8 = 31;
+pub const TELA_VIOLETA: u8 = 32;
+pub const TELA_PURPURA: u8 = 33;
+pub const TELA_MAGENTA: u8 = 34;
+pub const TELA_ROSA: u8 = 35;
+pub const DENTELEON: u8 = 36;
+pub const ROSA: u8 = 37;
+pub const CHAMPINON_MARRON: u8 = 38;
+pub const CHAMPINON_ROJO: u8 = 39;
+
 /// 0.0.14a reordeno el atlas: bedrock, agua y lava dejaron de estar en 7/8/9
 /// y pasaron a 17, 13 y 30. El resto de bloques que ya existian conservan su
 /// tile (cesped 0/2/3, piedra 1, tierra 2, adoquin 16, tablones 4, arbusto 15).
@@ -82,7 +109,72 @@ pub fn textura_con(id: u8, cara: usize, atlas014: bool) -> u32 {
             _ => 20,
         },
         HOJAS => 22,
+        // 0.0.19a-0.0.20a: tiles propios en la cuarta y quinta fila del atlas.
+        CRISTAL => 64,
+        ESPONJA => 65,
+        ORO => 66,
+        TELA_BLANCA..=TELA_ROSA => 67 + (id - TELA_BLANCA) as u32,
+        DENTELEON => 83,
+        ROSA => 84,
+        CHAMPINON_MARRON => 85,
+        CHAMPINON_ROJO => 86,
         _ => 0,
+    }
+}
+
+/// Flores y setas: se colocan sobre un bloque, no frenan al jugador y dejan
+/// pasar la luz. En 0.0.20a se marchitan a oscuras; en 0.0.24 dejan de hacerlo.
+pub fn es_planta(id: u8) -> bool {
+    matches!(
+        id,
+        DENTELEON | ROSA | CHAMPINON_MARRON | CHAMPINON_ROJO
+    )
+}
+
+/// Nombre que usa el inventario y la barra rapida. Sin acentos: la fuente del
+/// jar y la de respaldo no siempre los tienen.
+pub fn nombre(id: u8) -> &'static str {
+    match id {
+        PIEDRA => "Piedra",
+        CESPED => "Cesped",
+        TIERRA => "Tierra",
+        LADRILLO => "Adoquin",
+        MADERA => "Madera",
+        ARBUSTO => "Arbusto",
+        BEDROCK => "Bedrock",
+        AGUA => "Agua",
+        LAVA => "Lava",
+        ARENA => "Arena",
+        GRAVA => "Grava",
+        MENA_ORO => "Mena de oro",
+        MENA_HIERRO => "Mena de hierro",
+        MENA_CARBON => "Mena de carbon",
+        TRONCO => "Tronco",
+        HOJAS => "Hojas",
+        CRISTAL => "Cristal",
+        ESPONJA => "Esponja",
+        ORO => "Bloque de oro",
+        TELA_BLANCA => "Tela blanca",
+        TELA_GRIS_CLARA => "Tela gris clara",
+        TELA_GRIS_OSCURA => "Tela gris osc.",
+        TELA_ROJA => "Tela roja",
+        TELA_NARANJA => "Tela naranja",
+        TELA_AMARILLA => "Tela amarilla",
+        TELA_CHARTREUSE => "Tela chart.",
+        TELA_VERDE => "Tela verde",
+        TELA_VERDE_PRIMAVERA => "Tela v. prim.",
+        TELA_CIAN => "Tela cian",
+        TELA_CAPRI => "Tela capri",
+        TELA_ULTRAMAR => "Tela ultramar",
+        TELA_VIOLETA => "Tela violeta",
+        TELA_PURPURA => "Tela purpura",
+        TELA_MAGENTA => "Tela magenta",
+        TELA_ROSA => "Tela rosa",
+        DENTELEON => "Diente de leon",
+        ROSA => "Rosa",
+        CHAMPINON_MARRON => "Seta marron",
+        CHAMPINON_ROJO => "Seta roja",
+        _ => "Bloque",
     }
 }
 
@@ -96,9 +188,10 @@ pub fn textura_particula(id: u8) -> u32 {
 }
 
 pub fn solido(id: u8) -> bool {
-    // Tile.isSolid() es true por defecto, pero Bush y Leaves lo sobrescriben a
-    // false: se atraviesan y no frenan al jugador.
-    id != AIRE && id != ARBUSTO && id != HOJAS && !es_liquido(id)
+    // Tile.isSolid() es true por defecto, pero Bush, Leaves y las plantas lo
+    // sobrescriben a false: se atraviesan y no frenan al jugador. El cristal si
+    // es solido: se choca con el aunque se vea a traves.
+    id != AIRE && id != ARBUSTO && id != HOJAS && !es_liquido(id) && !es_planta(id)
 }
 
 /// Arena y grava caen: en 0.0.14a se asientan de golpe en el fondo de la
@@ -115,10 +208,38 @@ pub fn pintable_014(id: u8) -> bool {
     )
 }
 
+/// Bloques que el jugador puede colocar desde 0.0.19a: la paleta vieja mas
+/// cristal, esponja, oro, telas, flores y setas. El agua, la lava y el bedrock
+/// no se eligen con las teclas (el bedrock se activa con /solid en 0.0.20a).
+pub fn pintable(id: u8) -> bool {
+    pintable_014(id)
+        || matches!(
+            id,
+            CRISTAL
+                | ESPONJA
+                | ORO
+                | TELA_BLANCA..=TELA_ROSA
+                | DENTELEON
+                | ROSA
+                | CHAMPINON_MARRON
+                | CHAMPINON_ROJO
+                | MENA_ORO
+                | MENA_HIERRO
+                | MENA_CARBON
+                | BEDROCK
+        )
+}
+
 pub fn bloquea_luz(id: u8) -> bool {
     // Bush y Leaves.blocksLight() devuelven false: dejan pasar la luz. En el
-    // Java las hojas son `solid=false` y `blocksLight=false` (clase a.b).
-    id != AIRE && id != ARBUSTO && id != HOJAS && !es_liquido(id)
+    // Java las hojas son `solid=false` y `blocksLight=false` (clase a.b). El
+    // cristal y las plantas tampoco bloquean la luz.
+    id != AIRE
+        && id != ARBUSTO
+        && id != HOJAS
+        && id != CRISTAL
+        && !es_planta(id)
+        && !es_liquido(id)
 }
 
 /// Factor de luz por cara, igual que Tile.render del original:
@@ -156,6 +277,29 @@ pub fn tick(nivel: &mut crate::legacy::level::Nivel, id: u8, x: i32, y: i32, z: 
                 nivel.set(x, y, z, AIRE);
             }
         }
+        // 0.0.19a: la esponja se seca y desaparece al cabo de un rato.
+        ESPONJA => {
+            if nivel.random.next_int(4000) == 0 {
+                nivel.set(x, y, z, AIRE);
+            }
+        }
+        // 0.0.20a: flores y setas necesitan suelo; a oscuras se marchitan.
+        // En 0.0.24 esa ultima regla desaparece (plantas_no_decauen).
+        DENTELEON | ROSA | CHAMPINON_MARRON | CHAMPINON_ROJO => {
+            let abajo = nivel.get(x, y, z - 1);
+            let soporte = match id {
+                DENTELEON | ROSA => abajo == CESPED || abajo == TIERRA,
+                _ => {
+                    abajo == TIERRA
+                        || abajo == CESPED
+                        || abajo == PIEDRA
+                        || abajo == GRAVA
+                }
+            };
+            if !soporte || (!nivel.plantas_no_decauen && !nivel.is_lit(x, y, z)) {
+                nivel.set(x, y, z, AIRE);
+            }
+        }
         _ => {}
     }
 }
@@ -186,6 +330,25 @@ mod tests {
         assert!(solido(PIEDRA));
         assert!(bloquea_luz(PIEDRA));
         assert!(solido(BEDROCK));
+    }
+
+    #[test]
+    fn los_bloques_de_019a_y_020a_tienen_sus_tiles_y_propiedades() {
+        assert_eq!(textura_con(CRISTAL, 1, true), 64);
+        assert_eq!(textura_con(ESPONJA, 1, true), 65);
+        assert_eq!(textura_con(ORO, 1, true), 66);
+        assert_eq!(textura_con(TELA_BLANCA, 1, true), 67);
+        assert_eq!(textura_con(TELA_ROSA, 1, true), 82);
+        assert_eq!(textura_con(DENTELEON, 1, true), 83);
+        assert_eq!(textura_con(ROSA, 1, true), 84);
+        assert_eq!(textura_con(CHAMPINON_MARRON, 1, true), 85);
+        assert_eq!(textura_con(CHAMPINON_ROJO, 1, true), 86);
+        // El cristal se choca pero deja pasar la luz; las plantas no frenan.
+        assert!(solido(CRISTAL));
+        assert!(!bloquea_luz(CRISTAL));
+        assert!(!solido(DENTELEON));
+        assert!(!bloquea_luz(ROSA));
+        assert!(pintable(CRISTAL) && pintable(TELA_ROSA) && pintable(CHAMPINON_ROJO));
     }
 
     #[test]

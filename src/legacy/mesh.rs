@@ -86,7 +86,12 @@ const CARAS: [(i32, i32, i32, usize, [[f32; 5]; 4]); 6] = [
 /// son horizontales (y = fondo) y `z` es la altura. El vertice se guarda como
 /// [x, z, y], igual que las caras de `construir`.
 pub fn arbusto(x: f32, y: f32, z: f32) -> [([f32; 3], [f32; 2]); 8] {
-    let tex = 15u32;
+    cruz(x, y, z, 15)
+}
+
+/// Misma cruz que el arbusto, pero con el tile que se le pase. La usan las
+/// flores y las setas de 0.0.20a, que tambien son dos planos con alfa.
+pub fn cruz(x: f32, y: f32, z: f32, tex: u32) -> [([f32; 3], [f32; 2]); 8] {
     let u0 = (tex % 16) as f32 / 16.0;
     let v0 = (tex / 16) as f32 / 16.0;
     let duv = 0.0624375f32;
@@ -140,17 +145,25 @@ fn construir_filtrado(
                 if id == tiles::AIRE {
                     continue;
                 }
-                // El pase opaco y el de liquidos se reparten las caras: si no,
-                // el agua/lava se dibujaria dos veces (una sin transparencia).
-                if tiles::es_liquido(id) != solo_liquidos {
+                // El pase opaco y el de liquidos/transparentes se reparten las
+                // caras: si no, el agua, la lava o el cristal se dibujarian dos
+                // veces (una sin transparencia).
+                let transparente = tiles::es_liquido(id) || id == tiles::CRISTAL;
+                if transparente != solo_liquidos {
                     continue;
                 }
-                if id == tiles::ARBUSTO {
+                if id == tiles::ARBUSTO || tiles::es_planta(id) {
                     // Bush.render elige capa con su propio isLit; sus dos planos van
                     // y vuelven (culling) y la textura tiene alfa que el shader corta.
+                    // Las flores y setas usan la misma cruz con su propio tile.
                     if nivel.is_lit(x as i32, y as i32, z as i32) == iluminada {
+                        let tex = if id == tiles::ARBUSTO {
+                            15
+                        } else {
+                            tiles::textura(id, 1)
+                        };
                         let base = verts.len() as u32;
-                        for (pos, uv) in arbusto(x as f32, y as f32, z as f32) {
+                        for (pos, uv) in cruz(x as f32, y as f32, z as f32, tex) {
                             verts.push(Vertex { pos, uv, shade: 1.0 });
                         }
                         for q in 0..2u32 {
@@ -172,7 +185,9 @@ fn construir_filtrado(
                     }
                     // Dos bloques del mismo liquido no dibujan la cara que los
                     // separa; si no, el oceano seria una pila de paredes azules.
-                    if tiles::es_liquido(id) && nivel.get(nx, ny, nz) == id {
+                    if (tiles::es_liquido(id) || id == tiles::CRISTAL)
+                        && nivel.get(nx, ny, nz) == id
+                    {
                         continue;
                     }
                     // shouldRenderFace del original: `!isSolid && isLit ^ layer == 1`.
@@ -215,6 +230,18 @@ fn construir_filtrado(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn el_cristal_va_en_la_malla_transparente_y_no_dibuja_caras_entre_cristales() {
+        let mut n = Nivel::nuevo_vacio(0, 256, 256, 64);
+        n.blocks[0] = tiles::CRISTAL;
+        n.light[0] = 0;
+        let (_, opacos) = construir(&n, 0, 0, 0);
+        let (_, transparentes) = construir_liquidos(&n, 0, 0, 0);
+        assert!(opacos.is_empty());
+        // Seis caras hacia el aire iluminado del borde del mapa.
+        assert_eq!(transparentes.len(), 36);
+    }
 
     #[test]
     fn los_liquidos_van_en_la_malla_de_liquidos() {

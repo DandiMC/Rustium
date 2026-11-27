@@ -19,6 +19,7 @@ struct Uniforms {
     fog_linear: f32,
     fog_start: f32,
     fog_end: f32,
+    time: f32,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -78,6 +79,7 @@ struct Uniforms {
     fog_linear: f32,
     fog_start: f32,
     fog_end: f32,
+    time: f32,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -113,7 +115,10 @@ fn fs_main(v: VOut) -> @location(0) vec4<f32> {
     if (u.fog_linear > 0.5) {
         fog = clamp((dist - u.fog_start) / max(u.fog_end - u.fog_start, 0.0001), 0.0, 1.0);
     }
-    let rgb = mix(c.rgb * v.shade, u.fog_color.rgb, clamp(fog, 0.0, 1.0));
+    // 0.0.19a: el agua y la lava ondulan. El brillo se mueve con una onda
+    // lenta; las UV no se tocan para no sangrar en los tiles vecinos.
+    let onda = 0.07 * sin(u.time * 2.2 + (v.uv.x + v.uv.y) * 90.0);
+    let rgb = mix(c.rgb * (v.shade + onda), u.fog_color.rgb, clamp(fog, 0.0, 1.0));
     return vec4<f32>(rgb, c.a);
 }
 "#;
@@ -935,7 +940,7 @@ fn cruz_quads(width: u32, height: u32) -> Vec<f32> {
 // profundidad por delante, el sentido que no toca queda tapado.
 const HUD_VERTS: usize = 6 * 12;
 
-fn hud_proyecta(p: [f32; 3], sw: f32, sh: f32) -> [f32; 3] {
+fn hud_proyecta_en(p: [f32; 3], sw: f32, sh: f32, tx: f32, ty: f32, escala: f32) -> [f32; 3] {
     // Misma cadena que el original: scale(-1,-1,1), translate(-1.5,0.5,-0.5),
     // rotacion 45 en Y, rotacion 30 en X, scale(16) y translate(sw-16, 16).
     let mut x = -p[0];
@@ -957,9 +962,9 @@ fn hud_proyecta(p: [f32; 3], sw: f32, sh: f32) -> [f32; 3] {
     let (ny, nz2) = (y * c30 - z * s30, y * s30 + z * c30);
     y = ny;
     z = nz2;
-    x = x * 16.0 + sw - 16.0;
-    y = y * 16.0 + 16.0;
-    z *= 16.0;
+    x = x * 16.0 * escala + tx;
+    y = y * 16.0 * escala + ty;
+    z *= 16.0 * escala;
     [
         2.0 * x / sw - 1.0,
         1.0 - 2.0 * y / sh,
@@ -996,6 +1001,15 @@ fn hud_textura(id: u8, cara: usize) -> u32 {
         15 if cara == 0 || cara == 1 => 21, // tronco: anillos
         15 => 20,            // tronco: corteza
         16 => 22,            // hojas
+        // 0.0.19a-0.0.20a: los tiles nuevos del atlas.
+        17 => 64,            // cristal
+        18 => 65,            // esponja
+        19 => 66,            // bloque de oro
+        20..=35 => 67 + (id as u32 - 20), // las dieciseis telas
+        36 => 83,            // diente de leon
+        37 => 84,            // rosa
+        38 => 85,            // seta marron
+        39 => 86,            // seta roja
         _ => 0,
     }
 }
@@ -1004,9 +1018,20 @@ fn hud_textura(id: u8, cara: usize) -> u32 {
 // techo. El drawGui del original llama al mismo render, asi que en la esquina
 // tiene que salir la planta y no una cara de bloque con textura de hojas.
 fn hud_arbusto_vertices(width: u32, height: u32) -> Vec<Vertex> {
+    hud_cruz_vertices(6, width, height, 0.0, 0.0, 1.0)
+}
+
+fn hud_cruz_vertices(
+    id: u8,
+    width: u32,
+    height: u32,
+    tx: f32,
+    ty: f32,
+    escala: f32,
+) -> Vec<Vertex> {
     let sh = 240.0f32;
     let sw = width as f32 * 240.0 / height.max(1) as f32;
-    let tex = 15u32;
+    let tex = hud_textura(id, 1);
     let u0 = (tex % 16) as f32 / 16.0;
     let v0 = (tex / 16) as f32 / 16.0;
     let duv = 0.0624375f32;
@@ -1029,7 +1054,7 @@ fn hud_arbusto_vertices(width: u32, height: u32) -> Vec<Vertex> {
         let mut p = [[0.0f32; 3]; 4];
         let mut uv = [[0.0f32; 2]; 4];
         for (i, (pos, t)) in quad.iter().enumerate() {
-            p[i] = hud_proyecta(*pos, sw, sh);
+            p[i] = hud_proyecta_en(*pos, sw, sh, tx, ty, escala);
             uv[i] = *t;
         }
         // El original emite cada plano dos veces, en los dos sentidos, porque el
@@ -1042,8 +1067,21 @@ fn hud_arbusto_vertices(width: u32, height: u32) -> Vec<Vertex> {
 }
 
 fn hud_cubo_vertices(id: u8, width: u32, height: u32) -> Vec<Vertex> {
-    if id == 6 {
-        return hud_arbusto_vertices(width, height);
+    hud_cubo_vertices_en(id, width, height, 0.0, 0.0, 1.0)
+}
+
+fn hud_cubo_vertices_en(
+    id: u8,
+    width: u32,
+    height: u32,
+    tx: f32,
+    ty: f32,
+    escala: f32,
+) -> Vec<Vertex> {
+    // El arbusto y las plantas no son cubos: se dibujan como dos planos
+    // cruzados, igual que en el mundo.
+    if id == 6 || matches!(id, 36..=39) {
+        return hud_cruz_vertices(id, width, height, tx, ty, escala);
     }
     let sh = 240.0f32;
     let sw = width as f32 * 240.0 / height.max(1) as f32;
@@ -1066,12 +1104,50 @@ fn hud_cubo_vertices(id: u8, width: u32, height: u32) -> Vec<Vertex> {
         let mut p = [[0.0f32; 3]; 4];
         let mut uv = [[0.0f32; 2]; 4];
         for (i, v) in vs.iter().enumerate() {
-            p[i] = hud_proyecta([v[0], v[1], v[2]], sw, sh);
+            p[i] = hud_proyecta_en([v[0], v[1], v[2]], sw, sh, tx, ty, escala);
             uv[i] = [u0 + v[3] * duv, v0 + v[4] * duv];
         }
         for e in [0usize, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2] {
             out.push(Vertex { pos: p[e], uv: uv[e], shade: *factor });
         }
+    }
+    out
+}
+
+/// Barra rapida de 0.0.19a: nueve cubos pequenos en la parte de abajo. La
+/// geometria va por el mismo pase que el cubo de la esquina, con la matriz
+/// identidad y la profundidad limpia.
+fn hud_hotbar_vertices(ids: &[u8], width: u32, height: u32) -> Vec<Vertex> {
+    let sh = 240.0f32;
+    let sw = width as f32 * 240.0 / height.max(1) as f32;
+    let mut out = Vec::with_capacity(ids.len().min(9) * HUD_VERTS);
+    for (i, id) in ids.iter().take(9).enumerate() {
+        let tx = sw / 2.0 + (i as f32 - 4.0) * 20.0 - 8.0;
+        let ty = sh - 31.0;
+        out.extend(hud_cubo_vertices_en(*id, width, height, tx, ty, 0.78));
+    }
+    out
+}
+
+// Rejilla del inventario de 0.0.20a: 9x4 casillas de 22 unidades de GUI.
+const INV_COLS: usize = 9;
+const INV_ROWS: usize = 4;
+const INV_PASO: f32 = 22.0;
+const INV_ANCHO: f32 = INV_COLS as f32 * INV_PASO;
+const INV_ALTO: f32 = INV_ROWS as f32 * INV_PASO;
+const INV_Y: f32 = 52.0;
+
+fn hud_inventario_vertices(ids: &[u8], width: u32, height: u32) -> Vec<Vertex> {
+    let sh = 240.0f32;
+    let sw = width as f32 * 240.0 / height.max(1) as f32;
+    let x0 = (sw - INV_ANCHO) / 2.0;
+    let mut out = Vec::with_capacity(ids.len().min(INV_COLS * INV_ROWS) * HUD_VERTS);
+    for (i, id) in ids.iter().take(INV_COLS * INV_ROWS).enumerate() {
+        let col = (i % INV_COLS) as f32;
+        let row = (i / INV_COLS) as f32;
+        let cx = x0 + 11.0 + col * INV_PASO;
+        let cy = INV_Y + 11.0 + row * INV_PASO;
+        out.extend(hud_cubo_vertices_en(*id, width, height, cx - 8.0, cy - 8.0, 0.72));
     }
     out
 }
@@ -1160,6 +1236,13 @@ pub struct Renderer {
     pub toast_pipeline: wgpu::RenderPipeline,
     // Cubo del bloque elegido en la esquina (RubyDung.drawGui)
     pub hud_bloque: Option<u8>,
+    // 0.0.19a: barra rapida de nueve bloques. Vacia en las versiones anteriores.
+    pub hotbar: Vec<u8>,
+    pub hotbar_sel: usize,
+    // 0.0.20a: inventario con todos los bloques, abierto con B.
+    pub inventario: Vec<u8>,
+    pub inventario_sel: usize,
+    pub inventario_visible: bool,
     pub hud_uniform: wgpu::Buffer,
     pub hud_bg: wgpu::BindGroup,
     pub hud_vbuf: wgpu::Buffer,
@@ -1194,7 +1277,8 @@ struct Uniforms {
     fog_linear: f32,
     fog_start: f32,
     fog_end: f32,
-    _pad: [f32; 3],
+    _pad: [f32; 2],
+    time: f32,
 }
 
 impl Renderer {
@@ -1318,6 +1402,14 @@ impl Renderer {
             if magenta {
                 parchear_atlas_014(&mut atlas_data);
             }
+        }
+        // 0.0.19a y 0.0.20a anaden bloques que ningun terrain.png de 2009 trae:
+        // se pintan siempre, aunque el jar de la version este instalado.
+        if matches!(
+            version_atlas.as_str(),
+            "c0.0.19a" | "c0.0.19a_06" | "c0.0.20a" | "c0.0.20a_02"
+        ) {
+            parchear_atlas_019(&mut atlas_data);
         }
         // RD_ATLAS_DUMP=1 escribe el atlas que se esta usando, para comprobarlo
         // contra el terrain.png del jar (careo de texturas).
@@ -1751,7 +1843,9 @@ impl Renderer {
         });
         let hud_vbuf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("hud vbuf"),
-            size: (HUD_VERTS * std::mem::size_of::<Vertex>()) as u64,
+            // Cubo de la esquina + nueve iconos de la barra rapida + 36 del
+        // inventario de 0.0.20a.
+        size: (HUD_VERTS * 48 * std::mem::size_of::<Vertex>()) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -2341,6 +2435,11 @@ impl Renderer {
             toast_verts: 0,
             toast_pipeline,
             hud_bloque: None,
+            hotbar: Vec::new(),
+            hotbar_sel: 0,
+            inventario: Vec::new(),
+            inventario_sel: 0,
+            inventario_visible: false,
             hud_uniform,
             hud_bg,
             hud_vbuf,
@@ -2548,6 +2647,23 @@ impl Renderer {
         self.chunks_liquidos_fog[k] = self.chunk_opcional(&capa1.0, &capa1.1);
     }
 
+    /// 0.0.19a: barra rapida. `ids` va en el orden de las teclas 1-9 y `sel`
+    /// marca la casilla activa.
+    pub fn set_hotbar(&mut self, ids: &[u8], sel: usize) {
+        self.hotbar.clear();
+        self.hotbar.extend_from_slice(&ids[..ids.len().min(9)]);
+        self.hotbar_sel = sel.min(8);
+    }
+
+    /// 0.0.20a: inventario de bloques. La rejilla es de 9x4 y se navega con
+    /// las flechas y Enter; B lo abre y lo cierra.
+    pub fn set_inventario(&mut self, ids: &[u8], sel: usize, visible: bool) {
+        self.inventario.clear();
+        self.inventario.extend_from_slice(&ids[..ids.len().min(36)]);
+        self.inventario_sel = sel.min(35);
+        self.inventario_visible = visible;
+    }
+
     // Particulas: reescribe el buffer persistente. Los indices ya estan
     // precalculados (12 por quad, doble cara).
     pub fn set_particulas(&mut self, lit: &[Vertex], fondo: &[Vertex]) {
@@ -2582,7 +2698,8 @@ impl Renderer {
             fog_linear: 0.0,
             fog_start: 0.0,
             fog_end: 0.0,
-            _pad: [0.0; 3],
+            _pad: [0.0; 2],
+            time: self.nubes_inicio.elapsed().as_secs_f32(),
         };
         self.queue.write_buffer(&self.fog_uniform, 0, unsafe {
             std::slice::from_raw_parts(&fu as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
@@ -2596,7 +2713,8 @@ impl Renderer {
             fog_linear: self.fog_linear_principal,
             fog_start: self.fog_start_principal,
             fog_end: self.fog_end_principal,
-            _pad: [0.0; 3],
+            _pad: [0.0; 2],
+            time: self.nubes_inicio.elapsed().as_secs_f32(),
         };
         self.queue.write_buffer(&self.uniform_buf, 0, unsafe {
             std::slice::from_raw_parts(&u as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
@@ -2672,6 +2790,48 @@ impl Renderer {
                 }
             }
         }
+        // Barra rapida de 0.0.19a: fondo y casillas. Los iconos son cubos 3D y
+        // van en el pase del HUD, encima de este fondo.
+        if !self.hotbar.is_empty() {
+            let esc = self.config.height as f32 / 240.0;
+            let sw_gui = self.config.width as f32 / esc;
+            let bw = 9.0 * 20.0;
+            let x0 = (sw_gui - bw) / 2.0;
+            let y0 = 216.0;
+            ui_rect(&mut ui_verts, x0 * esc, y0 * esc, bw * esc, 20.0 * esc, [0.0, 0.0, 0.0, 0.45], self.config.width, self.config.height);
+            for i in 0..9usize {
+                let sx = x0 + 1.0 + i as f32 * 20.0;
+                let borde = if i == self.hotbar_sel {
+                    [1.0, 1.0, 1.0, 0.95]
+                } else {
+                    [0.35, 0.35, 0.35, 0.85]
+                };
+                ui_rect(&mut ui_verts, sx * esc, (y0 + 1.0) * esc, 18.0 * esc, 18.0 * esc, borde, self.config.width, self.config.height);
+                ui_rect(&mut ui_verts, (sx + 1.0) * esc, (y0 + 2.0) * esc, 16.0 * esc, 16.0 * esc, [0.08, 0.08, 0.08, 0.80], self.config.width, self.config.height);
+            }
+        }
+        // Inventario de 0.0.20a: velo oscuro y rejilla de 9x4. Los iconos son
+        // cubos del pase del HUD, como los de la barra rapida.
+        if self.inventario_visible {
+            let esc = self.config.height as f32 / 240.0;
+            let sw_gui = self.config.width as f32 / esc;
+            let x0 = (sw_gui - INV_ANCHO) / 2.0;
+            ui_rect(&mut ui_verts, 0.0, 0.0, self.config.width as f32, self.config.height as f32, [0.0, 0.0, 0.0, 0.55], self.config.width, self.config.height);
+            ui_rect(&mut ui_verts, (x0 - 4.0) * esc, (INV_Y - 4.0) * esc, (INV_ANCHO + 8.0) * esc, (INV_ALTO + 8.0) * esc, [0.10, 0.10, 0.12, 0.96], self.config.width, self.config.height);
+            for i in 0..INV_COLS * INV_ROWS {
+                let col = (i % INV_COLS) as f32;
+                let row = (i / INV_COLS) as f32;
+                let sx = x0 + col * INV_PASO;
+                let sy = INV_Y + row * INV_PASO;
+                let borde = if i == self.inventario_sel {
+                    [1.0, 1.0, 1.0, 0.95]
+                } else {
+                    [0.35, 0.35, 0.38, 0.85]
+                };
+                ui_rect(&mut ui_verts, sx * esc, sy * esc, 22.0 * esc, 22.0 * esc, borde, self.config.width, self.config.height);
+                ui_rect(&mut ui_verts, (sx + 1.0) * esc, (sy + 1.0) * esc, 20.0 * esc, 20.0 * esc, [0.16, 0.16, 0.18, 0.90], self.config.width, self.config.height);
+            }
+        }
         if !ui_verts.is_empty() {
             let n = (ui_verts.len() / 3) as u32;
             if (n as usize) <= UI_MAX_VERTS {
@@ -2705,19 +2865,28 @@ impl Renderer {
                 }
             }
         }
-        // HUD: cubo del bloque elegido (el drawGui del original)
-        let hud_count = match self.hud_bloque {
-            Some(id) => {
-                let verts = hud_cubo_vertices(id, self.config.width, self.config.height);
-                self.queue.write_buffer(&self.hud_vbuf, 0, unsafe {
-                    std::slice::from_raw_parts(
-                        verts.as_ptr() as *const u8,
-                        verts.len() * std::mem::size_of::<Vertex>(),
-                    )
-                });
-                verts.len() as u32
-            }
-            None => 0,
+        // HUD: cubo del bloque elegido (el drawGui del original) y, desde
+        // 0.0.19a, los nueve iconos de la barra rapida.
+        let mut hud_verts = Vec::new();
+        if let Some(id) = self.hud_bloque {
+            hud_verts.extend(hud_cubo_vertices(id, self.config.width, self.config.height));
+        }
+        if !self.hotbar.is_empty() {
+            hud_verts.extend(hud_hotbar_vertices(&self.hotbar, self.config.width, self.config.height));
+        }
+        if self.inventario_visible && !self.inventario.is_empty() {
+            hud_verts.extend(hud_inventario_vertices(&self.inventario, self.config.width, self.config.height));
+        }
+        let hud_count = if !hud_verts.is_empty() && hud_verts.len() <= HUD_VERTS * 48 {
+            self.queue.write_buffer(&self.hud_vbuf, 0, unsafe {
+                std::slice::from_raw_parts(
+                    hud_verts.as_ptr() as *const u8,
+                    hud_verts.len() * std::mem::size_of::<Vertex>(),
+                )
+            });
+            hud_verts.len() as u32
+        } else {
+            0
         };
         // Modelos: los claros van antes de la capa 1 y los oscuros dentro de
         // ella, como el bucle de zombis del original. Los dos comparten buffer
@@ -2745,7 +2914,8 @@ impl Renderer {
                 fog_linear: 0.0,
                 fog_start: 0.0,
                 fog_end: 0.0,
-                _pad: [0.0; 3],
+                _pad: [0.0; 2],
+                time: 0.0,
             };
             self.queue.write_buffer(&self.model_uniform, 0, unsafe {
                 std::slice::from_raw_parts(&mu as *const Uniforms as *const u8, std::mem::size_of::<Uniforms>())
@@ -2963,7 +3133,8 @@ impl Renderer {
                 fog_linear: 0.0,
                 fog_start: 0.0,
                 fog_end: 0.0,
-                _pad: [0.0; 3],
+                _pad: [0.0; 2],
+                time: 0.0,
             };
             self.queue.write_buffer(&self.hud_uniform, 0, unsafe {
                 std::slice::from_raw_parts(
@@ -3683,6 +3854,179 @@ pub fn parchear_atlas_014(data: &mut [u8]) {
                 data[i + 1] = (bg + h).clamp(0, 255) as u8;
                 data[i + 2] = (bb + h).clamp(0, 255) as u8;
                 data[i + 3] = 255;
+            }
+        }
+    }
+}
+
+/// Tiles propios de 0.0.19a y 0.0.20a. El terrain.png de 0.0.14a_08 termina en
+/// las hojas (tile 22), asi que cristal, esponja, oro, telas, flores y setas se
+/// pintan aqui. No son texturas de Mojang: son pixel art del port.
+pub fn parchear_atlas_019(data: &mut [u8]) {
+    if data.len() < ATLAS_SIZE * ATLAS_SIZE * 4 {
+        return;
+    }
+    let mut set = |tile: usize, px: usize, py: usize, r: i32, g: i32, b: i32, a: i32| {
+        let tx = tile % TILES_PER_ROW;
+        let ty = tile / TILES_PER_ROW;
+        let x = tx * TILE + px;
+        let y = ty * TILE + py;
+        let i = (y * ATLAS_SIZE + x) * 4;
+        data[i] = r.clamp(0, 255) as u8;
+        data[i + 1] = g.clamp(0, 255) as u8;
+        data[i + 2] = b.clamp(0, 255) as u8;
+        data[i + 3] = a.clamp(0, 255) as u8;
+    };
+    // Cristal (64): interior casi transparente, marco claro y un reflejo.
+    for py in 0..16 {
+        for px in 0..16 {
+            let borde = px < 2 || py < 2 || px > 13 || py > 13;
+            let brillo = (px + py) % 7 == 0 || (px + py) % 7 == 1;
+            let (r, g, b, a) = if borde {
+                (210, 235, 245, 190)
+            } else if brillo {
+                (235, 250, 255, 120)
+            } else {
+                (170, 215, 235, 45)
+            };
+            set(64, px, py, r, g, b, a);
+        }
+    }
+    // Esponja (65): amarilla con agujeros oscuros.
+    for py in 0..16 {
+        for px in 0..16 {
+            let h = (hash2(px, py, 0x019A_5EED) % 29) as i32 - 14;
+            let agujero = hash2(px / 2, py / 2, 0x5A0B_6E) % 9 == 0;
+            let (r, g, b) = if agujero {
+                (120, 110, 45)
+            } else {
+                (190 + h, 180 + h, 85 + h / 2)
+            };
+            set(65, px, py, r, g, b, 255);
+        }
+    }
+    // Bloque de oro (66): amarillo con vetas y brillo.
+    for py in 0..16 {
+        for px in 0..16 {
+            let h = (hash2(px, py, 0x60D0_0019) % 25) as i32 - 12;
+            let veta = (px + py) % 5 == 0;
+            let (r, g, b) = if veta {
+                (255, 235, 90)
+            } else {
+                (235 + h, 195 + h, 45 + h / 3)
+            };
+            set(66, px, py, r, g, b, 255);
+        }
+    }
+    // Las dieciseis telas (67..82): color plano con trama de tejido.
+    let telas: [(i32, i32, i32); 16] = [
+        (235, 235, 235),
+        (190, 190, 190),
+        (80, 80, 80),
+        (180, 50, 50),
+        (220, 130, 40),
+        (230, 220, 60),
+        (150, 200, 60),
+        (60, 140, 60),
+        (90, 200, 120),
+        (60, 180, 200),
+        (50, 130, 220),
+        (50, 70, 180),
+        (120, 70, 180),
+        (90, 40, 140),
+        (190, 60, 190),
+        (230, 140, 170),
+    ];
+    for (n, (r, g, b)) in telas.iter().enumerate() {
+        for py in 0..16 {
+            for px in 0..16 {
+                let trama = if px % 4 == 0 || py % 4 == 0 { -18 } else { 0 };
+                set(67 + n, px, py, r + trama, g + trama, b + trama, 255);
+            }
+        }
+    }
+    // Fondo transparente para las plantas.
+    for tile in 83..=86 {
+        for py in 0..16 {
+            for px in 0..16 {
+                set(tile, px, py, 0, 0, 0, 0);
+            }
+        }
+    }
+    // Diente de leon (83): tallo verde y flor amarilla.
+    for py in 8..16 {
+        set(83, 7, py, 60, 130, 45, 255);
+        set(83, 8, py, 80, 160, 55, 255);
+    }
+    for py in 12..14 {
+        set(83, 5, py, 60, 130, 45, 255);
+        set(83, 10, py, 60, 130, 45, 255);
+    }
+    for py in 4..9 {
+        for px in 5..11 {
+            let centro = px >= 7 && px <= 8 && py >= 6 && py <= 7;
+            if centro {
+                set(83, px, py, 245, 170, 30, 255);
+            } else if px == 5 || px == 10 || py == 4 || py == 8 {
+                set(83, px, py, 235, 210, 45, 255);
+            } else {
+                set(83, px, py, 255, 235, 70, 255);
+            }
+        }
+    }
+    // Rosa (84): tallo, hojas y petalos rojos.
+    for py in 8..16 {
+        set(84, 7, py, 55, 120, 40, 255);
+        set(84, 8, py, 75, 150, 50, 255);
+    }
+    for px in 4..7 {
+        set(84, px, 12, 55, 130, 45, 255);
+    }
+    for px in 9..12 {
+        set(84, px, 13, 55, 130, 45, 255);
+    }
+    for py in 3..8 {
+        for px in 4..12 {
+            let d = (px as i32 - 8).abs() + (py as i32 - 5).abs();
+            if d <= 3 {
+                let (r, g, b) = if d <= 1 { (180, 25, 35) } else { (220, 55, 65) };
+                set(84, px, py, r, g, b, 255);
+            }
+        }
+    }
+    // Setas: sombrero y pie.
+    for py in 9..16 {
+        set(85, 7, py, 210, 195, 165, 255);
+        set(85, 8, py, 225, 210, 180, 255);
+        set(86, 7, py, 215, 200, 170, 255);
+        set(86, 8, py, 230, 215, 185, 255);
+    }
+    for py in 4..10 {
+        for px in 3..13 {
+            let d = (px as i32 - 8).abs();
+            if (py as i32 - 7).abs() + d / 2 <= 3 {
+                let (r, g, b) = if py >= 8 {
+                    (125, 90, 55)
+                } else {
+                    (155, 115, 70)
+                };
+                set(85, px, py, r, g, b, 255);
+            }
+        }
+    }
+    for py in 4..10 {
+        for px in 3..13 {
+            let d = (px as i32 - 8).abs();
+            if (py as i32 - 7).abs() + d / 2 <= 3 {
+                let mancha = (px + py) % 5 == 0;
+                let (r, g, b) = if py >= 8 {
+                    (140, 25, 25)
+                } else if mancha {
+                    (245, 240, 230)
+                } else {
+                    (205, 45, 45)
+                };
+                set(86, px, py, r, g, b, 255);
             }
         }
     }

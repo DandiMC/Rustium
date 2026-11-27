@@ -68,6 +68,8 @@ pub struct Nivel {
     pub liquidos: Vec<(i32, i32, i32)>,
     /// 0.0.15a: la lava espera un tick de cada dos antes de extenderse.
     pub lava_lenta: bool,
+    /// 0.0.20a: las flores y setas se marchitan a oscuras. 0.0.24 lo quita.
+    pub plantas_no_decauen: bool,
     /// Ticks transcurridos, para el flujo lento de la lava.
     pub ticks: u64,
     pub formato: Formato,
@@ -96,6 +98,7 @@ impl Nivel {
             dirty: Vec::new(),
             liquidos: Vec::new(),
             lava_lenta: false,
+            plantas_no_decauen: false,
             ticks: 0,
             formato,
             nombre: "A Nice World".to_string(),
@@ -169,6 +172,28 @@ impl Nivel {
     /// mas despacio.
     pub fn new_clasico_015(seed: i64) -> Self {
         Self::new_clasico_014_con(seed, Copa::Roble, true, true)
+    }
+
+    /// 0.0.19a: el mundo es el mismo de 0.0.15a; lo nuevo son los bloques
+    /// (cristal, esponja) y la barra rapida.
+    pub fn new_clasico_019(seed: i64) -> Self {
+        Self::new_clasico_015(seed)
+    }
+
+    /// 0.0.20a: sobre el mundo de 0.0.15a crecen dienteleones y rosas en la
+    /// hierba y setas en las cuevas. Las plantas se marchitan a oscuras hasta
+    /// 0.0.24.
+    pub fn new_clasico_020(seed: i64) -> Self {
+        // Si ya hay un level.dat no se vuelven a sembrar flores y setas: si no,
+        // cada arranque anadiria plantas nuevas al mismo mundo.
+        let existente = Path::new("level.dat").exists();
+        let mut n = Self::new_clasico_015(seed);
+        n.plantas_no_decauen = false;
+        if !existente {
+            n.sembrar_plantas(seed);
+            n.volcar_si_toca();
+        }
+        n
     }
 
     fn new_clasico_014_con(
@@ -294,6 +319,72 @@ impl Nivel {
         self.sembrar_playas(seed, grava_sumergida);
         self.sembrar_menas(seed);
         self.sembrar_arboles(seed, copa);
+    }
+
+    /// Flores y setas de 0.0.20a. Las flores buscan una columna de hierba con
+    /// aire encima; las setas prefieren cuevas y zonas sin cielo, que es donde
+    /// el original las deja crecer. Usa un Random propio para no alterar el
+    /// orden de las menas ni de los arboles.
+    fn sembrar_plantas(&mut self, seed: i64) {
+        let mut random = perlin::JavaRandom::new(seed ^ 0x5EED_2020);
+        let (w, h, d) = (self.ancho as i32, self.alto as i32, self.fondo as i32);
+        // Dienteleones y rosas: una de cada seis columnas de hierba con aire.
+        for _ in 0..(w * h / 6).max(1) {
+            let x = random.next_int(w);
+            let y = random.next_int(h);
+            let Some(superficie) = self.altura_superficie(x, y) else {
+                continue;
+            };
+            if self.get(x, y, superficie) == tiles::CESPED
+                && self.get(x, y, superficie + 1) == tiles::AIRE
+            {
+                let flor = if random.next_int(2) == 0 {
+                    tiles::DENTELEON
+                } else {
+                    tiles::ROSA
+                };
+                self.set(x, y, superficie + 1, flor);
+            }
+        }
+        // Setas: buscan un hueco a oscuras con suelo solido debajo.
+        for _ in 0..(w * h / 8).max(1) {
+            let x = random.next_int(w);
+            let y = random.next_int(h);
+            let z = 1 + random.next_int((d - 2).max(1));
+            let abajo = self.get(x, y, z - 1);
+            let suelo = matches!(
+                abajo,
+                tiles::TIERRA | tiles::CESPED | tiles::PIEDRA | tiles::GRAVA
+            );
+            if suelo && self.get(x, y, z) == tiles::AIRE && !self.is_lit(x, y, z) {
+                let seta = if random.next_int(4) == 0 {
+                    tiles::CHAMPINON_ROJO
+                } else {
+                    tiles::CHAMPINON_MARRON
+                };
+                self.set(x, y, z, seta);
+            }
+        }
+    }
+
+    /// 0.0.19a: la esponja chupa el agua de un cubo de 5x5x5 y desaparece. Si
+    /// no habia agua se queda colocada hasta que el tick la seque.
+    pub fn absorber_esponja(&mut self, x: i32, y: i32, z: i32) -> usize {
+        let mut absorbidos = 0usize;
+        for dx in -2..=2 {
+            for dy in -2..=2 {
+                for dz in -2..=2 {
+                    if self.get(x + dx, y + dy, z + dz) == tiles::AGUA {
+                        self.set(x + dx, y + dy, z + dz, tiles::AIRE);
+                        absorbidos += 1;
+                    }
+                }
+            }
+        }
+        if absorbidos > 0 {
+            self.set(x, y, z, tiles::AIRE);
+        }
+        absorbidos
     }
 
     fn altura_superficie(&self, x: i32, y: i32) -> Option<i32> {
@@ -1146,6 +1237,7 @@ mod tests_012 {
     fn generar(seed: i64) -> Nivel {
         let mut n = Nivel::nuevo_vacio(seed, WIDTH, HEIGHT, DEPTH);
         n.generar_clasico_012(seed);
+
         n
     }
 
@@ -1165,6 +1257,39 @@ mod tests_012 {
             .filter(|(x, y)| n.get(*x, *y, 11) == tiles::AGUA)
             .count();
         assert!(agua >= 2, "el agua no se extendio: {agua}");
+    }
+
+    #[test]
+    fn la_020_siembra_flores_y_la_esponja_absorbe_agua() {
+        // Flores sobre una pradera plana de hierba.
+        let mut n = Nivel::nuevo_vacio(7, 64, 64, 32);
+        for x in 0..64 {
+            for y in 0..64 {
+                n.set(x, y, 10, tiles::CESPED);
+            }
+        }
+        n.sembrar_plantas(7);
+        let flores = n
+            .blocks
+            .iter()
+            .filter(|id| matches!(**id, tiles::DENTELEON | tiles::ROSA))
+            .count();
+        assert!(flores > 0, "la 0.0.20a no sembro ninguna flor");
+
+        // Esponja: un cubo de agua de 5x5x5 desaparece con ella.
+        let mut n = Nivel::nuevo_vacio(1, 16, 16, 16);
+        for x in 5..10 {
+            for y in 5..10 {
+                for z in 5..10 {
+                    n.set(x, y, z, tiles::AGUA);
+                }
+            }
+        }
+        n.set(7, 7, 7, tiles::ESPONJA);
+        let absorbidos = n.absorber_esponja(7, 7, 7);
+        assert!(absorbidos > 0);
+        assert_eq!(n.get(7, 7, 7), tiles::AIRE);
+        assert_eq!(n.get(5, 5, 5), tiles::AIRE);
     }
 
     #[test]

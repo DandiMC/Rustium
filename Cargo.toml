@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -138,6 +138,26 @@ path = "src/bin/classic018a.rs"
 [[bin]]
 name = "classic018a02"
 path = "src/bin/classic018a02.rs"
+
+# 0.0.19a: cristal, esponja, barra rapida y animacion de liquidos
+[[bin]]
+name = "classic019a"
+path = "src/bin/classic019a.rs"
+
+# 0.0.19a_06: correccion del temporizador
+[[bin]]
+name = "classic019a06"
+path = "src/bin/classic019a06.rs"
+
+# 0.0.20a: inventario, oro, telas, flores, setas y /solid
+[[bin]]
+name = "classic020a"
+path = "src/bin/classic020a.rs"
+
+# 0.0.20a_02: transparencia del agua
+[[bin]]
+name = "classic020a02"
+path = "src/bin/classic020a02.rs"
 
 [dependencies]
 winit = "0.30"
