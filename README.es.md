@@ -10,6 +10,8 @@ y, si no hay ninguna, dibuja las suyas.
 
 *[Read in English](README.md)*
 
+> **Aviso: port experimental y beta.** Las 39 builds están en fase beta. No son reproducciones 1:1 de Minecraft: las marcadas **REC** se reconstruyeron desde la wiki y todas usan el motor del port, así que hay texturas, geometría, física, IA, sonido e interfaz inventados o simplificados. Sirven para probar y comparar, no como referencia del original. La auditoría honesta, build por build, está en **[docs/COMPARACION.md](docs/COMPARACION.md)**.
+
 ## Cómo es
 
 ![El launcher de Rustium](docs/screenshots/launcher.png)
@@ -24,7 +26,7 @@ y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.3.8-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.3.9-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -36,7 +38,7 @@ Solo hace falta **el instalador**: `Rustium-0.3.8-setup.exe`.
 ## Las versiones
 
 El selector encima de «Jugar» arranca cualquiera de las treinta y nueve versiones (las seis
-pre-clásicas, las cuatro alpha privadas y las veinte primeras Classic):
+pre-clásicas, las cuatro alpha privadas y las veinte primeras Classic). **Todas están en beta** y el launcher las marca así; las que no conservan su jar original llevan además **REC**:
 
 | versión | qué trae |
 |---|---|
@@ -174,7 +176,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-El perfil `pequeno` quita símbolos y optimiza por tamaño para que el instalador no pase del límite de 64 MB de los launchers antiguos. Escribe `dist/Rustium-0.3.8-setup.exe`, que es el archivo que se adjunta a un release.
+El perfil `pequeno` quita símbolos y optimiza por tamaño para que el instalador no pase del límite de 64 MB de los launchers antiguos. Escribe `dist/Rustium-0.3.9-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 

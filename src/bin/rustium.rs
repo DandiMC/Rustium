@@ -390,10 +390,23 @@ impl GameVersion {
 /// Visible label for a build. `REC` is only presentation: `GameVersion::id()`
 /// remains the exact 2009 name used by folders, saves and command lines.
 fn version_display(v: GameVersion) -> String {
+    let mut label = v.id().to_string();
     if v.reconstructed() {
-        format!("{}  ·  REC", v.id())
-    } else {
-        v.id().to_string()
+        label.push_str("  ·  REC");
+    }
+    label.push_str("  ·  BETA");
+    label
+}
+
+/// Every build is a beta of the port, including the ones whose 2009 jar is
+/// archived: the jar is the reference, not a byte-for-byte reimplementation.
+fn beta_note(l: Lang) -> &'static str {
+    match l {
+        Lang::En => "EXPERIMENTAL BETA · None of these builds is a 1:1 reproduction. Reconstructed builds come from the wiki; every build uses the port's engine, so textures, physics, AI, sound and UI can differ from 2009.",
+        Lang::Es => "BETA EXPERIMENTAL · Ninguna build reproduce el original al 100 %. Las REC están reconstruidas desde la wiki y todas usan el motor del port: puede haber texturas, físicas, IA, sonido e interfaz distintos.",
+        Lang::Pt => "BETA EXPERIMENTAL · Nenhuma build reproduz o original a 100 %. As REC são reconstruídas a partir da wiki e todas usam o motor do port: texturas, física, IA, som e interface podem ser diferentes.",
+        Lang::Fr => "BÊTA EXPÉRIMENTALE · Aucune version ne reproduit l'original à 100 %. Les REC sont reconstruites depuis le wiki et toutes utilisent le moteur du port : textures, physique, IA, son et interface peuvent différer.",
+        Lang::De => "EXPERIMENTELLE BETA · Kein Build bildet das Original zu 100 % nach. REC-Builds stammen aus dem Wiki, und alle nutzen die Engine des Ports: Texturen, Physik, KI, Sound und UI können abweichen.",
     }
 }
 
@@ -1550,6 +1563,204 @@ fn version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static
                 "26. Nov. 2026",
                 "Bis 0.3.1 konntest du Bedrock, Wasser und Lava mit 7, 8 und 9 setzen. Ab 0.3.2 geht das nicht mehr.",
                 "Das originale Classic hatte nie Tasten für diese Blöcke: nur 1/2/3/4/6, und Wasser, Lava und Bedrock erzeugte die Welt. Die Tasten 7/8/9 waren eine Eigenheit unseres Ports, und 0.3.2 entfernt sie, um originalgetreu zu bleiben. Wenn du sie noch nutzen willst, gibt es die 0.3.1 weiterhin: Baue ein Haus aus Bedrock, fülle die Welt mit Lava oder flute sie mit Wasser. Diese Blöcke lassen sich im normalen Spiel nicht setzen.",
+            ),
+        ],
+    }
+}
+
+/// Novedades de las ultimas tandas del launcher. Van aparte de `version_news`
+/// para no romper los indices de tipos, etiquetas e ilustraciones de las
+/// tarjetas antiguas. Todas dicen BETA: son aproximaciones, no el original.
+fn recent_version_news(l: Lang) -> [(&'static str, &'static str, &'static str, &'static str); 6] {
+    match l {
+        Lang::En => [
+            (
+                "0.24 and 0.25: Survival Test, in beta",
+                "27 Nov 2026",
+                "Health, arrows, creepers, pigs, skeletons and a score. A port approximation, not the original.",
+                "The two Survival Test builds are in the launcher, marked BETA. Models, drops, AI, damage and scoring are the port's own, and several textures and behaviours are simplified. This is the least faithful family; do not use it as a reference.",
+            ),
+            (
+                "Classic 0.0.21a to 0.0.23a",
+                "27 Nov 2026",
+                "Gray inventory, synthesized sound and an options menu.",
+                "Three reconstructed builds close the creative Classic phase. The inventory, sounds and menu are rebuilt by the port; they do not reproduce the original UI or assets exactly.",
+            ),
+            (
+                "Classic 0.0.19a to 0.0.20a",
+                "27 Nov 2026",
+                "Glass, sponge, gold, a hotbar, an inventory and sixteen wools.",
+                "Four reconstructed builds add the late Classic blocks. The new tiles are drawn by the port and the inventory is an approximation, so colours and layouts can differ from 2009.",
+            ),
+            (
+                "Classic 0.0.16a to 0.0.18a",
+                "27 Nov 2026",
+                "Chat, /broadcast, /setspawn, /spawn and /teleport.",
+                "The server commands were adapted to a single player. There is no multiplayer, no other players and no real server, so this family is a limited reconstruction of the originals.",
+            ),
+            (
+                "The 0.0.15a family",
+                "27 Nov 2026",
+                "0.0.14a_08, 0.0.15a and its two reuploads.",
+                "Cross canopy, white fog, gravel underwater and slower lava. The 0.0.15a textures were never archived, so the port falls back to the 0.0.14a atlas; those colours are not the original ones.",
+            ),
+            (
+                "Classic 0.0.14a",
+                "27 Nov 2026",
+                "Sand, gravel, ores, trees and falling blocks.",
+                "Reconstructed from 0.0.11a and the wiki; the new tiles come from the archived 0.0.14a_08 jar. The terrain generator and the trees are approximations, not a recovered build.",
+            ),
+        ],
+        Lang::Es => [
+            (
+                "0.24 y 0.25: Survival Test, en beta",
+                "27 nov 2026",
+                "Salud, flechas, creepers, cerdos, esqueletos y puntuación. Aproximación del port, no el original.",
+                "Las dos Survival Test ya están en el launcher, marcadas BETA. Los modelos, drops, IA, daño y puntuación son propios del port, y varias texturas y comportamientos están simplificados. Es la familia menos fiel: no la tomes como referencia.",
+            ),
+            (
+                "Classic 0.0.21a a 0.0.23a",
+                "27 nov 2026",
+                "Inventario gris, sonido sintetizado y menú de opciones.",
+                "Tres builds reconstruidas cierran la fase creativa de Classic. El inventario, los sonidos y el menú los rehace el port; no reproducen la interfaz ni los assets originales al detalle.",
+            ),
+            (
+                "Classic 0.0.19a a 0.0.20a",
+                "27 nov 2026",
+                "Cristal, esponja, oro, barra rápida, inventario y dieciséis telas.",
+                "Cuatro builds reconstruidas añaden los bloques del final de Classic. Los tiles nuevos los dibuja el port y el inventario es una aproximación, así que los colores y la disposición pueden no coincidir con 2009.",
+            ),
+            (
+                "Classic 0.0.16a a 0.0.18a",
+                "27 nov 2026",
+                "Chat, /broadcast, /setspawn, /spawn y /teleport.",
+                "Los comandos de servidor se adaptaron a un solo jugador. No hay multijugador, ni otros jugadores, ni un servidor real: esta familia es una reconstrucción limitada de las originales.",
+            ),
+            (
+                "La familia 0.0.15a",
+                "27 nov 2026",
+                "0.0.14a_08, 0.0.15a y sus dos reuploads.",
+                "Copa en cruz, niebla blanca, grava bajo el agua y lava más lenta. Las texturas de 0.0.15a no se conservan, así que el port usa el atlas de 0.0.14a como respaldo; esos colores no son los originales.",
+            ),
+            (
+                "Classic 0.0.14a",
+                "27 nov 2026",
+                "Arena, grava, menas, árboles y bloques que caen.",
+                "Reconstruida desde 0.0.11a y la wiki; los tiles nuevos salen del jar archivado de 0.0.14a_08. El generador del mundo y los árboles son aproximaciones, no una build recuperada.",
+            ),
+        ],
+        Lang::Pt => [
+            (
+                "0.24 e 0.25: Survival Test, em beta",
+                "27 nov 2026",
+                "Saúde, flechas, creepers, porcos, esqueletos e pontuação. Aproximação do port, não o original.",
+                "As duas Survival Test estão no launcher, marcadas BETA. Modelos, drops, IA, dano e pontuação são do port, e várias texturas e comportamentos estão simplificados. É a família menos fiel; não a uses como referência.",
+            ),
+            (
+                "Classic 0.0.21a a 0.0.23a",
+                "27 nov 2026",
+                "Inventário cinzento, som sintetizado e menu de opções.",
+                "Três builds reconstruídas fecham a fase criativa de Classic. O inventário, os sons e o menu são refeitos pelo port; não reproduzem a interface nem os assets originais ao detalhe.",
+            ),
+            (
+                "Classic 0.0.19a a 0.0.20a",
+                "27 nov 2026",
+                "Vidro, esponja, ouro, barra rápida, inventário e dezasseis lãs.",
+                "Quatro builds reconstruídas acrescentam os blocos do fim de Classic. Os tiles novos são desenhados pelo port e o inventário é uma aproximação, por isso as cores e a disposição podem não coincidir com 2009.",
+            ),
+            (
+                "Classic 0.0.16a a 0.0.18a",
+                "27 nov 2026",
+                "Chat, /broadcast, /setspawn, /spawn e /teleport.",
+                "Os comandos de servidor foram adaptados a um só jogador. Não há multijogador, nem outros jogadores, nem servidor real: esta família é uma reconstrução limitada das originais.",
+            ),
+            (
+                "A família 0.0.15a",
+                "27 nov 2026",
+                "0.0.14a_08, 0.0.15a e os seus dois reuploads.",
+                "Copa em cruz, névoa branca, cascalho debaixo de água e lava mais lenta. As texturas de 0.0.15a não se conservam, por isso o port usa o atlas de 0.0.14a como recurso; essas cores não são as originais.",
+            ),
+            (
+                "Classic 0.0.14a",
+                "27 nov 2026",
+                "Areia, cascalho, minérios, árvores e blocos que caem.",
+                "Reconstruída a partir de 0.0.11a e da wiki; os tiles novos vêm do jar arquivado de 0.0.14a_08. O gerador do mundo e as árvores são aproximações, não uma build recuperada.",
+            ),
+        ],
+        Lang::Fr => [
+            (
+                "0.24 et 0.25 : Survival Test, en bêta",
+                "27 nov. 2026",
+                "Santé, flèches, creepers, cochons, squelettes et score. Une approximation du port, pas l'original.",
+                "Les deux Survival Test sont dans le launcher, marquées BETA. Modèles, drops, IA, dégâts et score sont ceux du port, et plusieurs textures et comportements sont simplifiés. C'est la famille la moins fidèle ; ne la prends pas comme référence.",
+            ),
+            (
+                "Classic 0.0.21a à 0.0.23a",
+                "27 nov. 2026",
+                "Inventaire gris, son synthétisé et menu d'options.",
+                "Trois versions reconstruites ferment la phase créative de Classic. L'inventaire, les sons et le menu sont refaits par le port ; ils ne reproduisent pas l'interface ni les assets d'origine au détail.",
+            ),
+            (
+                "Classic 0.0.19a à 0.0.20a",
+                "27 nov. 2026",
+                "Verre, éponge, or, barre rapide, inventaire et seize laines.",
+                "Quatre versions reconstruites ajoutent les blocs de la fin de Classic. Les nouveaux tiles sont dessinés par le port et l'inventaire est une approximation : les couleurs et la disposition peuvent différer de 2009.",
+            ),
+            (
+                "Classic 0.0.16a à 0.0.18a",
+                "27 nov. 2026",
+                "Chat, /broadcast, /setspawn, /spawn et /teleport.",
+                "Les commandes serveur ont été adaptées à un seul joueur. Pas de multijoueur, pas d'autres joueurs, pas de vrai serveur : cette famille est une reconstruction limitée des originales.",
+            ),
+            (
+                "La famille 0.0.15a",
+                "27 nov. 2026",
+                "0.0.14a_08, 0.0.15a et ses deux reuploads.",
+                "Cime en croix, brouillard blanc, gravier sous l'eau et lave plus lente. Les textures de 0.0.15a n'ont jamais été archivées : le port utilise l'atlas de 0.0.14a, donc ces couleurs ne sont pas les originales.",
+            ),
+            (
+                "Classic 0.0.14a",
+                "27 nov. 2026",
+                "Sable, gravier, minerais, arbres et blocs qui tombent.",
+                "Reconstruite depuis 0.0.11a et le wiki ; les nouveaux tiles viennent du jar archivé de 0.0.14a_08. Le générateur de monde et les arbres sont des approximations, pas une version récupérée.",
+            ),
+        ],
+        Lang::De => [
+            (
+                "0.24 und 0.25: Survival Test, als Beta",
+                "27. Nov. 2026",
+                "Gesundheit, Pfeile, Creeper, Schweine, Skelette und Punkte. Eine Port-Näherung, nicht das Original.",
+                "Die beiden Survival-Test-Builds sind im Launcher und als BETA markiert. Modelle, Drops, KI, Schaden und Punkte stammen vom Port, mehrere Texturen und Verhaltensweisen sind vereinfacht. Diese Familie ist am wenigsten originalgetreu; nutze sie nicht als Referenz.",
+            ),
+            (
+                "Classic 0.0.21a bis 0.0.23a",
+                "27. Nov. 2026",
+                "Graues Inventar, synthetischer Sound und Optionsmenü.",
+                "Drei rekonstruierte Builds schließen die kreative Classic-Phase. Inventar, Sounds und Menü wurden vom Port neu gebaut; sie bilden UI und Original-Assets nicht exakt nach.",
+            ),
+            (
+                "Classic 0.0.19a bis 0.0.20a",
+                "27. Nov. 2026",
+                "Glas, Schwamm, Gold, Schnellleiste, Inventar und sechzehn Wolle.",
+                "Vier rekonstruierte Builds bringen die späten Classic-Blöcke. Die neuen Tiles zeichnet der Port, das Inventar ist eine Näherung; Farben und Anordnung können von 2009 abweichen.",
+            ),
+            (
+                "Classic 0.0.16a bis 0.0.18a",
+                "27. Nov. 2026",
+                "Chat, /broadcast, /setspawn, /spawn und /teleport.",
+                "Die Serverbefehle wurden auf einen Spieler angepasst. Es gibt keinen Mehrspieler, keine anderen Spieler und keinen echten Server; diese Familie ist nur eine begrenzte Rekonstruktion.",
+            ),
+            (
+                "Die 0.0.15a-Familie",
+                "27. Nov. 2026",
+                "0.0.14a_08, 0.0.15a und die beiden Reuploads.",
+                "Kreuzkrone, weißer Nebel, Kies unter Wasser und langsamere Lava. Die 0.0.15a-Texturen sind nicht archiviert, daher nutzt der Port den 0.0.14a-Atlas; diese Farben sind nicht die Originale.",
+            ),
+            (
+                "Classic 0.0.14a",
+                "27. Nov. 2026",
+                "Sand, Kies, Erze, Bäume und fallende Blöcke.",
+                "Rekonstruiert aus 0.0.11a und dem Wiki; die neuen Tiles kommen aus dem archivierten 0.0.14a_08-Jar. Weltgenerator und Bäume sind Näherungen, kein wiederhergestellter Build.",
             ),
         ],
     }
@@ -4917,6 +5128,11 @@ mod ui {
                             .size(10.0)
                             .color(MUTED),
                     );
+                    ui.label(
+                        RichText::new(beta_note(self.lang))
+                            .size(10.0)
+                            .color(AMBER),
+                    );
 
                     ui.add_space(14.0);
                     field_label(ui, u.instance_game_dir);
@@ -5073,6 +5289,11 @@ mod ui {
                         RichText::new(reconstructed_note(self.lang))
                             .size(10.0)
                             .color(MUTED),
+                    );
+                    ui.label(
+                        RichText::new(beta_note(self.lang))
+                            .size(10.0)
+                            .color(AMBER),
                     );
                     ui.add_space(10.0);
                     ui.label(RichText::new(u.instance_name).size(10.5).color(MUTED).strong());
@@ -6129,6 +6350,32 @@ mod ui {
                                     );
                                 }
                             });
+                            if matches!(tab, Tab::Home | Tab::News) {
+                                ui.add_space(6.0);
+                                egui::Frame::NONE
+                                    .fill(Color32::from_rgba_unmultiplied(255, 176, 64, 16))
+                                    .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 176, 64, 90)))
+                                    .corner_radius(10)
+                                    .inner_margin(egui::Margin::symmetric(12, 8))
+                                    .show(ui, |ui| {
+                                        ui.set_width(ui.available_width());
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label(
+                                                RichText::new("BETA")
+                                                    .size(10.5)
+                                                    .strong()
+                                                    .color(AMBER),
+                                            );
+                                            ui.add_space(4.0);
+                                            ui.label(
+                                                RichText::new(beta_note(self.lang))
+                                                    .size(11.0)
+                                                    .color(SOFT),
+                                            );
+                                        });
+                                    });
+                                ui.add_space(4.0);
+                            }
                             if tab == Tab::Home {
                                 if let Some(inst) = self.instances.get(self.sel) {
                                     let ready = if have {
@@ -6498,6 +6745,38 @@ mod ui {
                                                     13 => Some(Art::World),
                                                     _ => Some(Art::Inobtenibles),
                                                 },
+                                            ));
+                                        }
+                                        // Las tandas 0.3.3-0.3.8 no estaban en el
+                                        // historial del launcher. Se añaden aparte
+                                        // para no tocar los índices de las 15
+                                        // tarjetas anteriores.
+                                        let recent_tags = [
+                                            "Rustium 0.3.8 · BETA",
+                                            "Rustium 0.3.7 · BETA",
+                                            "Rustium 0.3.6 · BETA",
+                                            "Rustium 0.3.5 · BETA",
+                                            "Rustium 0.3.4 · BETA",
+                                            "Rustium 0.3.3 · BETA",
+                                        ];
+                                        for (i, item) in recent_version_news(self.lang).iter().enumerate() {
+                                            cards.push((
+                                                date_key(item.1),
+                                                NewsKind::Play,
+                                                item.0.to_string(),
+                                                item.1.to_string(),
+                                                item.2.to_string(),
+                                                item.3.to_string(),
+                                                recent_tags.get(i).copied().unwrap_or("").to_string(),
+                                                Some(Tab::Home),
+                                                Some(match i {
+                                                    0 => Art::Zombies,
+                                                    1 => Art::ClassicBuild,
+                                                    2 => Art::ClassicBuild,
+                                                    3 => Art::ClassicBuild,
+                                                    4 => Art::Bush,
+                                                    _ => Art::World,
+                                                }),
                                             ));
                                         }
                                         // Newest first, whatever order they were added in.
@@ -7382,13 +7661,30 @@ mod tests {
         // The marker must never leak into ids or world folders.
         assert_eq!(GameVersion::C0013a.id(), "c0.0.13a");
         assert!(GameVersion::C0013a.reconstructed());
-        assert_eq!(version_display(GameVersion::C0013a), "c0.0.13a  ·  REC");
+        assert_eq!(version_display(GameVersion::C0013a), "c0.0.13a  ·  REC  ·  BETA");
         assert!(!GameVersion::C0013a03.reconstructed());
-        assert_eq!(version_display(GameVersion::C0013a03), "c0.0.13a_03");
+        assert_eq!(version_display(GameVersion::C0013a03), "c0.0.13a_03  ·  BETA");
         assert!(!GameVersion::C0012a03.reconstructed());
         assert!(GameVersion::C0012a01.reconstructed());
         assert!(GameVersion::C0012a02.reconstructed());
         assert_eq!(GameVersion::C0012a01.id(), "c0.0.12a_01");
+    }
+
+    #[test]
+    fn every_build_is_labelled_beta_and_new_releases_have_news() {
+        for v in GameVersion::ALL {
+            assert!(
+                version_display(v).ends_with("BETA"),
+                "{} is missing the BETA label",
+                v.id()
+            );
+        }
+        for l in [Lang::En, Lang::Es, Lang::Pt, Lang::Fr, Lang::De] {
+            let news = recent_version_news(l);
+            assert_eq!(news.len(), 6);
+            assert!(news.iter().all(|n| !n.0.is_empty() && !n.3.is_empty()));
+            assert!(!beta_note(l).is_empty());
+        }
     }
 
     #[test]

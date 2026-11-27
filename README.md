@@ -10,6 +10,8 @@ and, if there is none, draws its own.
 
 *[Leer en español](README.es.md)*
 
+> **Warning: experimental port, beta quality.** All 39 builds are beta. They are not 1:1 reproductions of Minecraft: the **REC** builds were reconstructed from the wiki, and every build runs on the port's engine, so textures, geometry, physics, AI, sound and UI include invented or simplified behaviour. Use them to test and compare, not as a reference for the original. The honest, build-by-build audit is in **[docs/COMPARACION.md](docs/COMPARACION.md)**.
+
 ## How it looks
 
 ![The Rustium launcher](docs/screenshots/launcher.png)
@@ -24,7 +26,7 @@ and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.3.8-setup.exe`.
+You only need **the installer**: `Rustium-0.3.9-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -36,7 +38,7 @@ You only need **the installer**: `Rustium-0.3.8-setup.exe`.
 ## The versions
 
 The picker above the Play button starts any of the thirty-nine builds (the six
-pre-classics, the four private alphas and the first twenty Classics):
+pre-classics, the four private alphas and the first twenty Classics). **Every build is beta** and the launcher labels it so; builds without their original jar also carry **REC**:
 
 | build | what it brings |
 |---|---|
@@ -171,7 +173,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-The `pequeno` profile strips symbols and optimises for size so the installer stays under the 64 MB update limit of older launchers. It writes `dist/Rustium-0.3.8-setup.exe`, the file to attach to a release. The launcher
+The `pequeno` profile strips symbols and optimises for size so the installer stays under the 64 MB update limit of older launchers. It writes `dist/Rustium-0.3.9-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 
