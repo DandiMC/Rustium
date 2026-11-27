@@ -24,7 +24,7 @@ y, si no hay ninguna, dibuja las suyas.
 
 ## Para jugar
 
-Solo hace falta **el instalador**: `Rustium-0.3.3-setup.exe`.
+Solo hace falta **el instalador**: `Rustium-0.3.4-setup.exe`.
 
 - Nada más. No hay que instalar Rust, ni Java, ni el launcher oficial, ni una cuenta.
 - Se instala por usuario en `%LOCALAPPDATA%\Rustium`, sin permisos de administrador.
@@ -35,8 +35,8 @@ Solo hace falta **el instalador**: `Rustium-0.3.3-setup.exe`.
 
 ## Las versiones
 
-El selector encima de «Jugar» arranca cualquiera de las veintiuna versiones (las seis
-pre-clásicas, las cuatro alpha privadas y las once primeras Classic):
+El selector encima de «Jugar» arranca cualquiera de las veinticinco versiones (las seis
+pre-clásicas, las cuatro alpha privadas y las quince primeras Classic):
 
 | versión | qué trae |
 |---|---|
@@ -61,9 +61,13 @@ pre-clásicas, las cuatro alpha privadas y las once primeras Classic):
 | c0.0.13a | reconstruida a partir de la build de desarrollo archivada: 854×480, salto de 0.0.11a, física de agua/lava, niebla azul/roja y el mundo plano de 32×512×64 con cuevas y lava subterránea |
 | c0.0.13a_03 | oficial y archivada: 854×480, sin lagos de lava sobre el nivel del mar y sin mobs naturales |
 | c0.0.14a | reconstruida: arena, grava y las tres menas, árboles de tronco y hojas, arena y grava que caen, nubes, niebla lineal azul, paleta de nueve bloques y el atlas de 0.0.14a |
+| c0.0.14a_08 | desarrollo: copa en cruz, niebla blanca y sombras en agua y lava |
+| c0.0.15a | primer test multijugador: grava solo bajo el agua, árboles de roble pequeño y lava más lenta y brillante |
+| c0.0.15a_01 | reupload: mejor interpolación del cliente, sin cambios de juego en el port |
+| c0.0.15a_02 | reupload: animaciones corregidas, sin cambios de juego en el port |
 
 Las cuatro mc-, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02,
-c0.0.13a y c0.0.14a son **reconstrucciones**: sus jars nunca se archivaron. Salen del código de
+c0.0.13a, c0.0.14a, c0.0.15a, c0.0.15a_01 y c0.0.15a_02 son **reconstrucciones**: sus jars nunca se archivaron. Salen del código de
 c0.0.11a y de lo que documenta la Minecraft Wiki de cada una, y llevan las texturas y
 la fuente de c0.0.11a cuando no hay un jar propio. El launcher las marca con **REC**
 en el selector y en la lista de instancias; el id y la carpeta del mundo no cambian.
@@ -73,10 +77,12 @@ a partir de la Minecraft Wiki y usa las mismas texturas de RubyDung que rd-13221
 
 `c0.0.14a` también está perdida: sus tiles nuevos salen del jar archivado de
 0.0.14a_08 y su generador sigue lo que documenta la wiki: playas, menas de 10-30
-bloques y árboles. La reconstrucción sigue el comportamiento de la **0.0.14a
-base**, no el de `_08`: la copa de los árboles es la cuadrada y no se copian los
-cambios exclusivos de `_08` (copa en cruz, niebla blanca y sombras en agua/lava).
-Del jar de `_08` solo se toman las texturas que la release perdida no conserva.
+bloques y árboles. La reconstrucción de **0.0.14a** sigue el comportamiento de la
+base: copa cuadrada y niebla azul lineal. `c0.0.14a_08` es una build aparte, con
+lo que la wiki documenta para el desarrollo: copa en cruz, niebla blanca y sombras
+en agua y lava. Del jar de `_08` se toman las texturas que la release perdida no
+conserva. `c0.0.15a` cambia la grava a solo bajo el agua, estrena la copa de
+roble pequeño y hace que la lava fluya más despacio y salga más brillante.
 
 `c0.0.13a` sigue el jar que el launcher oficial archiva con ese nombre: la build de
 desarrollo para probar el tamaño del mundo, no la release perdida. Genera el mundo
@@ -153,7 +159,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.3.3-setup.exe`, que es el archivo que se adjunta a un release.
+Escribe `dist/Rustium-0.3.4-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 

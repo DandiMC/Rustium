@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -95,6 +95,24 @@ path = "src/bin/classic013a03.rs"
 [[bin]]
 name = "classic014a"
 path = "src/bin/classic014a.rs"
+
+# Ultima build de desarrollo de 0.0.14a: copa en cruz, niebla blanca
+[[bin]]
+name = "classic014a08"
+path = "src/bin/classic014a08.rs"
+
+# Primer test multijugador: grava sumergida, arboles nuevos y lava lenta
+[[bin]]
+name = "classic015a"
+path = "src/bin/classic015a.rs"
+
+[[bin]]
+name = "classic015a01"
+path = "src/bin/classic015a01.rs"
+
+[[bin]]
+name = "classic015a02"
+path = "src/bin/classic015a02.rs"
 
 [dependencies]
 winit = "0.30"

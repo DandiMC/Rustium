@@ -115,10 +115,14 @@ enum GameVersion {
     C0013a,
     C0013a03,
     C0014a,
+    C0014a08,
+    C0015a,
+    C0015a01,
+    C0015a02,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 21] = [
+    const ALL: [GameVersion; 25] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
@@ -140,6 +144,10 @@ impl GameVersion {
         GameVersion::C0013a,
         GameVersion::C0013a03,
         GameVersion::C0014a,
+        GameVersion::C0014a08,
+        GameVersion::C0015a,
+        GameVersion::C0015a01,
+        GameVersion::C0015a02,
     ];
 
     /// The build name, as the original version is called everywhere else.
@@ -166,6 +174,10 @@ impl GameVersion {
             GameVersion::C0013a => "c0.0.13a",
             GameVersion::C0013a03 => "c0.0.13a_03",
             GameVersion::C0014a => "c0.0.14a",
+            GameVersion::C0014a08 => "c0.0.14a_08",
+            GameVersion::C0015a => "c0.0.15a",
+            GameVersion::C0015a01 => "c0.0.15a_01",
+            GameVersion::C0015a02 => "c0.0.15a_02",
         }
     }
 
@@ -187,6 +199,9 @@ impl GameVersion {
                 | GameVersion::C0012a02
                 | GameVersion::C0013a
                 | GameVersion::C0014a
+                | GameVersion::C0015a
+                | GameVersion::C0015a01
+                | GameVersion::C0015a02
         )
     }
 
@@ -256,6 +271,18 @@ impl GameVersion {
             }
             GameVersion::C0014a => {
                 if win { "classic014a.exe" } else { "classic014a" }
+            }
+            GameVersion::C0014a08 => {
+                if win { "classic014a08.exe" } else { "classic014a08" }
+            }
+            GameVersion::C0015a => {
+                if win { "classic015a.exe" } else { "classic015a" }
+            }
+            GameVersion::C0015a01 => {
+                if win { "classic015a01.exe" } else { "classic015a01" }
+            }
+            GameVersion::C0015a02 => {
+                if win { "classic015a02.exe" } else { "classic015a02" }
             }
         }
     }

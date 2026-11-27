@@ -31,6 +31,17 @@ pub enum Formato {
     Cabecera13a,
 }
 
+/// Forma de la copa de los arboles segun la build.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Copa {
+    /// 0.0.14a base: 5x5 con las esquinas recortadas y remate 3x3.
+    Cuadrada,
+    /// 0.0.14a_08: el remate pasa a forma de cruz.
+    Cruz,
+    /// 0.0.15a: roble pequeno, con dos capas de 5x5 y remate 3x3 con cruz.
+    Roble,
+}
+
 // LevelIO: MAGIC_NUMBER = 656127880, CURRENT_VERSION = 1.
 const MAGIC_LEVEL: i32 = 656_127_880;
 const VERSION_LEVEL: u8 = 1;
@@ -55,6 +66,10 @@ pub struct Nivel {
     // jugador coloca un liquido, no con el oceano generado, para que el mundo
     // no se inunde entero nada mas empezar.
     pub liquidos: Vec<(i32, i32, i32)>,
+    /// 0.0.15a: la lava espera un tick de cada dos antes de extenderse.
+    pub lava_lenta: bool,
+    /// Ticks transcurridos, para el flujo lento de la lava.
+    pub ticks: u64,
     pub formato: Formato,
     pub nombre: String,
     pub creador: String,
@@ -80,6 +95,8 @@ impl Nivel {
             unprocessed: 0,
             dirty: Vec::new(),
             liquidos: Vec::new(),
+            lava_lenta: false,
+            ticks: 0,
             formato,
             nombre: "A Nice World".to_string(),
             creador: "noname".to_string(),
@@ -137,9 +154,33 @@ impl Nivel {
     /// pero el generador anade playas de arena y grava, menas de carbon,
     /// hierro y oro, y arboles de tronco y hojas. La arena y la grava caen.
     pub fn new_clasico_014(seed: i64) -> Self {
+        Self::new_clasico_014_con(seed, Copa::Cuadrada, false, false)
+    }
+
+    /// c0.0.14a_08: ultima build de desarrollo de la familia, anterior al
+    /// test multijugador. La copa de los arboles pasa a forma de cruz; el
+    /// resto del mundo es el de 0.0.14a.
+    pub fn new_clasico_014a08(seed: i64) -> Self {
+        Self::new_clasico_014_con(seed, Copa::Cruz, false, false)
+    }
+
+    /// 0.0.15a: primer test multijugador. La grava ya solo aparece bajo el
+    /// agua, los arboles cambian a la copa de roble pequeno y la lava fluye
+    /// mas despacio.
+    pub fn new_clasico_015(seed: i64) -> Self {
+        Self::new_clasico_014_con(seed, Copa::Roble, true, true)
+    }
+
+    fn new_clasico_014_con(
+        seed: i64,
+        copa: Copa,
+        grava_sumergida: bool,
+        lava_lenta: bool,
+    ) -> Self {
         let mut n = Self::vacio(seed, WIDTH, HEIGHT, DEPTH, Formato::Cabecera13a);
+        n.lava_lenta = lava_lenta;
         if n.load().is_none() {
-            n.generar_clasico_014(seed);
+            n.generar_clasico_014_con(seed, copa, grava_sumergida);
         }
         n.liquidos.clear();
         n.calc_light(0, 0, n.ancho, n.alto);
@@ -248,11 +289,11 @@ impl Nivel {
     /// Generador de 0.0.14a. La wiki documenta el terreno nuevo con playas,
     /// menas y arboles, pero no su algoritmo exacto (el jar esta perdido), asi
     /// que se parte del relieve y las cuevas de 0.0.12a y se decoran encima.
-    fn generar_clasico_014(&mut self, seed: i64) {
+    fn generar_clasico_014_con(&mut self, seed: i64, copa: Copa, grava_sumergida: bool) {
         self.generar_clasico_012_con(seed, false);
-        self.sembrar_playas(seed);
+        self.sembrar_playas(seed, grava_sumergida);
         self.sembrar_menas(seed);
-        self.sembrar_arboles(seed);
+        self.sembrar_arboles(seed, copa);
     }
 
     fn altura_superficie(&self, x: i32, y: i32) -> Option<i32> {
@@ -269,7 +310,7 @@ impl Nivel {
 
     /// Playas: la arena aparece en la orilla, a la altura del mar. La grava
     /// forma algunos bancos sueltos, como en las capturas de la version.
-    fn sembrar_playas(&mut self, seed: i64) {
+    fn sembrar_playas(&mut self, seed: i64, grava_sumergida: bool) {
         let (w, h) = (self.ancho as i32, self.alto as i32);
         for x in 0..w {
             for y in 0..h {
@@ -300,6 +341,11 @@ impl Nivel {
                     let (x, y) = (cx + dx, cy + dy);
                     let Some(z) = self.altura_superficie(x, y) else { continue };
                     if self.get(x, y, z) == tiles::CESPED {
+                        // 0.0.15a: la grava de superficie desaparece; solo se
+                        // queda la que el mar cubre.
+                        if grava_sumergida && z > SEA_LEVEL {
+                            continue;
+                        }
                         let i = self.idx(x as usize, y as usize, z as usize);
                         self.blocks[i] = tiles::GRAVA;
                     }
@@ -339,7 +385,7 @@ impl Nivel {
 
     /// Arboles de roble: tronco de 4-6 y copa de hojas, sobre cesped por
     /// encima del nivel del mar. No se plantan si no caben en el mundo.
-    fn sembrar_arboles(&mut self, seed: i64) {
+    fn sembrar_arboles(&mut self, seed: i64, copa: Copa) {
         let mut rnd = perlin::JavaRandom::new(seed ^ 0x00A7_7E55);
         let (w, h, d) = (self.ancho as i32, self.alto as i32, self.fondo as i32);
         for _ in 0..150 {
@@ -360,18 +406,43 @@ impl Nivel {
                     self.blocks[j] = tiles::TRONCO;
                 }
             }
-            let copa = z + alto;
-            for dz in -1..=1 {
-                let r: i32 = if dz == 1 { 1 } else { 2 };
+            let cima = z + alto;
+            let (dz_min, dz_max) = match copa {
+                Copa::Roble => (-1, 2),
+                _ => (-1, 1),
+            };
+            for dz in dz_min..=dz_max {
+                let r: i32 = match (copa, dz) {
+                    (Copa::Roble, 2) => 1,
+                    (Copa::Roble, 1) => 1,
+                    (Copa::Roble, _) => 2,
+                    (_, 1) => 1,
+                    _ => 2,
+                };
                 for dx in -r..=r {
                     for dy in -r..=r {
-                        // 0.0.14a base: la capa de arriba es un 3x3 completo. La
-                        // 0.0.14a_08 la cambio a forma de cruz recortando las
-                        // esquinas; esa variante no se usa aqui.
-                        if dz != 1 && dx.abs() == r && dy.abs() == r {
-                            continue;
+                        match copa {
+                            Copa::Cuadrada => {
+                                if dz != 1 && dx.abs() == r && dy.abs() == r {
+                                    continue;
+                                }
+                            }
+                            Copa::Cruz => {
+                                if dz == 1 {
+                                    if dx != 0 && dy != 0 {
+                                        continue;
+                                    }
+                                } else if dx.abs() == r && dy.abs() == r {
+                                    continue;
+                                }
+                            }
+                            Copa::Roble => {
+                                if dz == 2 && dx != 0 && dy != 0 {
+                                    continue;
+                                }
+                            }
                         }
-                        let (lx, ly, lz) = (x + dx, y + dy, copa + dz);
+                        let (lx, ly, lz) = (x + dx, y + dy, cima + dz);
                         if lx < 0 || ly < 0 || lz < 0 || lx >= w || ly >= h || lz >= d {
                             continue;
                         }
@@ -820,6 +891,7 @@ impl Nivel {
     // Level.tick: acumula todos los bloques del mundo y procesa un tile al azar
     // por cada 400 acumulados (con 256x256x64 son ~10.000 por tick).
     pub fn tick(&mut self) {
+        self.ticks = self.ticks.wrapping_add(1);
         self.unprocessed += (self.ancho * self.alto * self.fondo) as i32;
         let mut ticks = self.unprocessed / 400;
         self.unprocessed -= ticks * 400;
@@ -840,11 +912,18 @@ impl Nivel {
     fn fluir_liquidos(&mut self, max: usize) {
         let mut hechos = 0usize;
         let mut i = 0usize;
+        let mut diferidos = Vec::new();
         while i < self.liquidos.len() && hechos < max {
             let (x, y, z) = self.liquidos[i];
             i += 1;
             let id = self.get(x, y, z);
             if !tiles::es_liquido(id) {
+                continue;
+            }
+            // 0.0.15a: la lava se expande a la mitad de velocidad. Se guarda
+            // para el tick siguiente en vez de perder el frente de flujo.
+            if id == tiles::LAVA && self.lava_lenta && self.ticks % 2 == 0 {
+                diferidos.push((x, y, z));
                 continue;
             }
             let mut destino = None;
@@ -874,6 +953,7 @@ impl Nivel {
         if i > 0 {
             self.liquidos.drain(0..i.min(self.liquidos.len()));
         }
+        self.liquidos.extend(diferidos);
         // Si el jugador vacia un oceano entero, no dejamos una cola sin fin.
         if self.liquidos.len() > 8192 {
             self.liquidos.truncate(8192);
@@ -1236,7 +1316,7 @@ mod tests_012 {
         // Generar sin pasar por load(): en el directorio del proyecto puede
         // haber un level.dat de pruebas que taparia el mundo nuevo.
         let mut n = Nivel::vacio(12_345, WIDTH, HEIGHT, DEPTH, Formato::Cabecera13a);
-        n.generar_clasico_014(12_345);
+        n.generar_clasico_014_con(12_345, Copa::Cuadrada, false);
         let mut arena = 0;
         let mut menas = 0;
         let mut troncos = 0;
@@ -1275,7 +1355,7 @@ mod tests_012 {
     #[test]
     fn la_copa_de_los_arboles_de_014a_es_cuadrada() {
         let mut n = Nivel::vacio(12_345, WIDTH, HEIGHT, DEPTH, Formato::Cabecera13a);
-        n.generar_clasico_014(12_345);
+        n.generar_clasico_014_con(12_345, Copa::Cuadrada, false);
         let mut copas = 0;
         for x in 1..(n.ancho - 1) {
             for y in 1..(n.alto - 1) {

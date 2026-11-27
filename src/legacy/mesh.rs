@@ -13,8 +13,23 @@
 use super::level::Nivel;
 use super::tiles;
 use crate::render::Vertex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const CHUNK: usize = 16;
+
+// 0.0.15a ilumino la lava: sus caras se dibujan mas claras.
+static LAVA_BRIGHT: AtomicBool = AtomicBool::new(false);
+// Hasta 0.0.14a las superficies de agua/lava no recibian sombra; 0.0.14a_08
+// las estreno. El pase oscuro se salta cuando esta desactivado.
+static LIQUID_SHADOWS: AtomicBool = AtomicBool::new(true);
+
+pub fn usar_lava_brillante(v: bool) {
+    LAVA_BRIGHT.store(v, Ordering::Relaxed);
+}
+
+pub fn usar_sombras_liquidos(v: bool) {
+    LIQUID_SHADOWS.store(v, Ordering::Relaxed);
+}
 
 // (vecino dx, dy=profundidad, dz=vertical, cara, esquinas [(x, z, y, u, v)])
 const CARAS: [(i32, i32, i32, usize, [[f32; 5]; 4]); 6] = [
@@ -161,7 +176,14 @@ fn construir_filtrado(
                         continue;
                     }
                     // shouldRenderFace del original: `!isSolid && isLit ^ layer == 1`.
-                    if nivel.is_lit(nx, ny, nz) != iluminada {
+                    // En 0.0.14a base los liquidos se dibujan siempre iluminados;
+                    // 0.0.14a_08 estreno la sombra sobre el agua y la lava.
+                    let lit = if tiles::es_liquido(id) && !LIQUID_SHADOWS.load(Ordering::Relaxed) {
+                        true
+                    } else {
+                        nivel.is_lit(nx, ny, nz)
+                    };
+                    if lit != iluminada {
                         continue;
                     }
                     let tex = tiles::textura(id, *cara);
@@ -169,6 +191,11 @@ fn construir_filtrado(
                     let v0 = (tex / 16) as f32 / 16.0;
                     let duv = 0.0624375f32;
                     let factor = tiles::factor_cara(*cara);
+                    let factor = if id == tiles::LAVA && LAVA_BRIGHT.load(Ordering::Relaxed) {
+                        factor * 1.25
+                    } else {
+                        factor
+                    };
                     let base = verts.len() as u32;
                     for e in esquinas.iter() {
                         verts.push(Vertex {

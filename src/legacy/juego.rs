@@ -60,7 +60,7 @@ fn bloque_para_tecla(version: &str, tecla: &str) -> Option<u8> {
     // 0.0.14a es la primera con las nueve teclas y con menas, arena, grava y
     // madera. La wiki no detalla el orden de la paleta; se sigue el de los ids
     // de Java, que es el que usa el selector de bloque del raton.
-    if version == "c0.0.14a" {
+    if es_familia_014(version) {
         return match tecla {
             "1" => Some(tiles::PIEDRA),
             "2" => Some(tiles::CESPED),
@@ -98,8 +98,14 @@ pub fn correr_clasico(version: &'static str) {
 /// c0.0.14a: misma ventana que 0.0.13a (854x480), pero con el atlas nuevo,
 /// las nueve teclas de bloque y los bloques que caen.
 pub fn correr_clasico_014() {
+    correr_clasico_014_familia("c0.0.14a");
+}
+
+/// 0.0.14a y sus continuaciones (0.0.14a_08 y la familia 0.0.15a): misma
+/// ventana que 0.0.13a, atlas de 0.0.14a y selector de nueve bloques.
+pub fn correr_clasico_014_familia(version: &'static str) {
     tiles::usar_atlas_014();
-    correr_clasico_con("c0.0.14a", 854, 480, true);
+    correr_clasico_con(version, 854, 480, true);
 }
 
 /// Reconstruidas sin jar propio (mc-161607 a mc-161648 y c0.0.3a): comparten
@@ -142,6 +148,10 @@ fn es_reconstruida(version: &str) -> bool {
             | "c0.0.12a_01"
             | "c0.0.12a_02"
             | "c0.0.13a"
+            | "c0.0.14a_08"
+            | "c0.0.15a"
+            | "c0.0.15a_01"
+            | "c0.0.15a_02"
     )
 }
 
@@ -164,6 +174,15 @@ fn es_clasico_con_liquidos(version: &str) -> bool {
 /// alterar las variantes de 0.0.12a.
 fn es_13a(version: &str) -> bool {
     matches!(version, "c0.0.13a" | "c0.0.13a_03")
+}
+
+/// 0.0.14a y sus continuaciones comparten la paleta de nueve bloques, las
+/// nubes, la niebla lineal y el clic repetido.
+fn es_familia_014(version: &str) -> bool {
+    matches!(
+        version,
+        "c0.0.14a" | "c0.0.14a_08" | "c0.0.15a" | "c0.0.15a_01" | "c0.0.15a_02"
+    )
 }
 
 /// Reconstrucciones (sus jars no se conservan): 0.0.9a y 0.0.10a se montan
@@ -528,6 +547,14 @@ struct App {
 
 impl App {
     fn new(version: &'static str, modo: Modo) -> Self {
+        if es_familia_014(version) {
+            tiles::usar_atlas_014();
+            mesh::usar_sombras_liquidos(version != "c0.0.14a");
+            mesh::usar_lava_brillante(matches!(
+                version,
+                "c0.0.15a" | "c0.0.15a_01" | "c0.0.15a_02"
+            ));
+        }
         // El original crea sus Random con la hora: el mundo cambia en cada
         // arranque. RD_SEEDS fija los cuatro filtros para el careo y
         // RD_SEED_FIJO conserva la semilla historica del port.
@@ -543,6 +570,12 @@ impl App {
         };
         let mut nivel = match modo {
             Modo::Clasico if version == "c0.0.14a" => Nivel::new_clasico_014(seed),
+            Modo::Clasico if version == "c0.0.14a_08" => Nivel::new_clasico_014a08(seed),
+            Modo::Clasico
+                if matches!(version, "c0.0.15a" | "c0.0.15a_01" | "c0.0.15a_02") =>
+            {
+                Nivel::new_clasico_015(seed)
+            }
             Modo::Clasico if version == "c0.0.13a" => Nivel::new_013a_dev(seed),
             Modo::Clasico if version == "c0.0.13a_03" => Nivel::new_clasico_013a03(seed),
             Modo::Clasico if es_clasico_con_liquidos(version) => Nivel::new_clasico_012(seed),
@@ -567,7 +600,7 @@ impl App {
         // La wiki de 0.0.13a_03 documenta que los mobs ya no aparecen de forma
         // natural. El arnes de humo puede seguir pidiendo uno con RD_SMOKE.
         let sin_zombis = std::env::var_os("RD_SMOKE_SIN_ZOMBIS").is_some()
-            || (matches!(version, "c0.0.13a_03" | "c0.0.14a")
+            || ((version == "c0.0.13a_03" || es_familia_014(version))
                 && std::env::var_os("RD_SMOKE").is_none());
         let mut zombis = Vec::new();
         if !sin_zombis {
@@ -1068,7 +1101,7 @@ impl ApplicationHandler for App {
                         }
                     }
                     if self.modo == Modo::Clasico
-                        && self.version == "c0.0.14a"
+                        && es_familia_014(self.version)
                         && button == MouseButton::Left
                     {
                         self.mouse_repeat = Some(button);
@@ -1175,7 +1208,7 @@ impl ApplicationHandler for App {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32().min(1.0);
         self.last = now;
-        if self.version == "c0.0.14a" {
+        if es_familia_014(self.version) {
             if self.mouse_repeat.is_some() {
                 self.repeat_acc += dt;
                 if self.repeat_acc >= 0.25 {
@@ -1352,7 +1385,7 @@ impl ApplicationHandler for App {
             // 0.0.14a base: plano de nubes a nivel.alto+2 (Level.depth+2 en el
             // original, donde depth es la altura). La extension del plano usa
             // el fondo del mundo. _08 no cambio las nubes.
-            r.nubes = self.version == "c0.0.14a";
+            r.nubes = es_familia_014(self.version);
             r.nubes_dim = [
                 self.nivel.ancho as f32,
                 self.nivel.fondo as f32,
@@ -1366,7 +1399,11 @@ impl ApplicationHandler for App {
             // (K por defecto del original, c=0) y exponencial 0.01 con
             // (14,11,10) en el oscuro. Bajo agua/lava usa los mismos
             // colores/densidades que 0.0.13a, como setupFog del original.
-            let es_014 = self.version == "c0.0.14a";
+            let es_014 = es_familia_014(self.version);
+            let niebla_blanca = matches!(
+                self.version,
+                "c0.0.14a_08" | "c0.0.15a" | "c0.0.15a_01" | "c0.0.15a_02"
+            );
             if es_13a(self.version) || es_014 {
                 match self.jugador.liquido(&self.nivel) {
                     Some(tiles::AGUA) => {
@@ -1390,7 +1427,11 @@ impl ApplicationHandler for App {
                         r.fog_densidad = if es_014 { 0.01 } else { 0.06 };
                         r.fog_densidad_principal = 0.0;
                         if es_014 {
-                            r.fog_color_principal = [0.5, 0.8, 1.0, 1.0];
+                            r.fog_color_principal = if niebla_blanca {
+                                [1.0, 1.0, 1.0, 1.0]
+                            } else {
+                                [0.5, 0.8, 1.0, 1.0]
+                            };
                             r.fog_exp_principal = 0.0;
                             r.fog_linear_principal = 1.0;
                             r.fog_start_principal = 0.0;
