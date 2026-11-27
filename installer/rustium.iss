@@ -55,55 +55,55 @@ Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Keep the release build in target\x86_64-pc-windows-gnu\release\ before compiling.
-Source: "..\target\x86_64-pc-windows-gnu\release\rustium.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\rubydung-rs.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Keep the `pequeno` profile build in target\x86_64-pc-windows-gnu\pequeno\ before compiling.
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\rustium.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\rubydung-rs.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; One exe per pre-classic build, so the picker can start any of them.
-Source: "..\target\x86_64-pc-windows-gnu\release\rd131655.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\rd132328.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\rd20090515.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\rd160052.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\rd161348.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\rd131655.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\rd132328.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\rd20090515.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\rd160052.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\rd161348.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Classic private alpha: las cuatro reconstruidas, sin jar propio.
-Source: "..\target\x86_64-pc-windows-gnu\release\mc161607.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\mc161616.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\mc161625.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\mc161648.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\mc161607.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\mc161616.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\mc161625.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\mc161648.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Classic: reconstruidas, conservadas y las continuaciones con liquidos.
-Source: "..\target\x86_64-pc-windows-gnu\release\classic003a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic009a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic010a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic011a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic012a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic012a01.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic012a02.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic012a03.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic013a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic013a03.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic014a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic003a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic009a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic010a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic011a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic012a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic012a01.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic012a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic012a03.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic013a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic013a03.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic014a.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Familia 0.0.15a: desarrollo, test multijugador y sus dos reuploads.
-Source: "..\target\x86_64-pc-windows-gnu\release\classic014a08.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic015a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic015a01.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic015a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic014a08.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic015a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic015a01.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic015a02.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Familia 0.0.16a-0.0.18a: consola, /setspawn, /teleport y niebla indigo.
-Source: "..\target\x86_64-pc-windows-gnu\release\classic016a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic016a02.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic017a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic018a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic018a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic016a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic016a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic017a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic018a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic018a02.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Familia 0.0.19a-0.0.20a: cristal, esponja, barra rapida, inventario y plantas.
-Source: "..\target\x86_64-pc-windows-gnu\release\classic019a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic019a06.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic020a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic020a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic019a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic019a06.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic020a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic020a02.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Familia 0.0.21a-0.0.23a: inventario gris, sonido y menu de opciones.
-Source: "..\target\x86_64-pc-windows-gnu\release\classic021a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic022a.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic023a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic021a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic022a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic023a.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Survival Test: salud, flechas, mobs, puntos y guardado.
-Source: "..\target\x86_64-pc-windows-gnu\release\classic024.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\x86_64-pc-windows-gnu\release\classic025.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic024.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\pequeno\classic025.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Apache 2.0 asks for the licence and the attribution notice to be handed to
 ; every recipient, so they are installed next to the executables.

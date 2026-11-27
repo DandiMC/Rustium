@@ -330,6 +330,8 @@ pub struct Zombie {
     pub escala: f32,
     pub golpe_t: f32,
     pub disparo_t: f32,
+    // Piezas extra para los modelos de creeper y cerdo (patas).
+    pub extra: Vec<Cube>,
     pub head: Cube,
     pub body: Cube,
     pub arm0: Cube,
@@ -340,6 +342,12 @@ pub struct Zombie {
     pub time_offs: f32,
     pub speed: f32,
     pub rot_a: f32,
+}
+
+fn caja(x: f32, y: f32, z: f32, w: i32, h: i32, d: i32, tx: f32, ty: f32) -> Cube {
+    let mut c = Cube::new(tx, ty);
+    c.add_box(x, y, z, w, h, d, tx, ty);
+    c
 }
 
 impl Zombie {
@@ -377,6 +385,7 @@ impl Zombie {
             escala: 1.0,
             golpe_t: 0.0,
             disparo_t: 1.0,
+            extra: Vec::new(),
             head,
             body,
             arm0,
@@ -398,9 +407,53 @@ impl Zombie {
             TipoMob::Creeper => 1.05,
             TipoMob::Cerdo => 0.7,
         };
-        if tipo == TipoMob::Creeper {
-            z.arm0.visible = false;
-            z.arm1.visible = false;
+        z.extra.clear();
+        match tipo {
+            TipoMob::Zombi => {}
+            TipoMob::Esqueleto => {
+                // Esqueleto: mismo esqueleto humanoide, pero brazos y piernas
+                // de 2x2 en vez de 4x4.
+                z.head = caja(-4.0, -8.0, -4.0, 8, 8, 8, 0.0, 0.0);
+                z.body = caja(-4.0, 0.0, -2.0, 8, 12, 4, 16.0, 16.0);
+                z.arm0 = caja(-2.0, -2.0, -1.0, 2, 12, 2, 40.0, 16.0);
+                z.arm0.set_pos(-5.0, 2.0, 0.0);
+                z.arm1 = caja(-1.0, -2.0, -1.0, 2, 12, 2, 40.0, 16.0);
+                z.arm1.set_pos(5.0, 2.0, 0.0);
+                z.leg0 = caja(-1.0, 0.0, -1.0, 2, 12, 2, 0.0, 16.0);
+                z.leg0.set_pos(-2.0, 12.0, 0.0);
+                z.leg1 = caja(-1.0, 0.0, -1.0, 2, 12, 2, 0.0, 16.0);
+                z.leg1.set_pos(2.0, 12.0, 0.0);
+            }
+            TipoMob::Creeper => {
+                // Creeper: cuerpo alto, cabeza grande y cuatro patas cortas.
+                z.head = caja(-4.0, -2.0, -4.0, 8, 8, 8, 0.0, 0.0);
+                z.body = caja(-4.0, 6.0, -2.0, 8, 12, 4, 16.0, 16.0);
+                z.arm0.visible = false;
+                z.arm1.visible = false;
+                z.leg0.visible = false;
+                z.leg1.visible = false;
+                for (x, zz) in [(-3.0, -3.0), (3.0, -3.0), (-3.0, 3.0), (3.0, 3.0)] {
+                    let mut pata = caja(-2.0, 0.0, -2.0, 4, 6, 4, 0.0, 16.0);
+                    pata.set_pos(x, 18.0, zz);
+                    z.extra.push(pata);
+                }
+            }
+            TipoMob::Cerdo => {
+                // Cerdo: cuerpo tumbado, hocico delante y cuatro patas.
+                z.head = caja(-4.0, -4.0, -4.0, 8, 8, 8, 0.0, 0.0);
+                z.head.set_pos(0.0, 10.0, -8.0);
+                z.body = caja(-5.0, -4.0, -8.0, 10, 8, 16, 16.0, 16.0);
+                z.body.set_pos(0.0, 14.0, 0.0);
+                z.arm0.visible = false;
+                z.arm1.visible = false;
+                z.leg0.visible = false;
+                z.leg1.visible = false;
+                for (x, zz) in [(-3.0, -6.0), (3.0, -6.0), (-3.0, 6.0), (3.0, 6.0)] {
+                    let mut pata = caja(-2.0, 0.0, -2.0, 4, 6, 4, 0.0, 16.0);
+                    pata.set_pos(x, 18.0, zz);
+                    z.extra.push(pata);
+                }
+            }
         }
         z
     }
@@ -476,7 +529,7 @@ impl Zombie {
         let rot_y = (self.rot.to_degrees() + 180.0).to_radians();
         let (sr, cr) = rot_y.sin_cos();
 
-        let piezas: [(&Cube, (f32, f32, f32)); 6] = [
+        let mut piezas: Vec<(&Cube, (f32, f32, f32))> = vec![
             (&self.head, (head_xr, head_yr, 0.0)),
             (&self.body, (0.0, 0.0, 0.0)),
             (&self.arm0, (arm0_xr, 0.0, arm0_zr)),
@@ -484,6 +537,9 @@ impl Zombie {
             (&self.leg0, (leg0_xr, 0.0, 0.0)),
             (&self.leg1, (leg1_xr, 0.0, 0.0)),
         ];
+        for cubo in &self.extra {
+            piezas.push((cubo, (0.0, 0.0, 0.0)));
+        }
 
         for (cube, (xr, yr, zr)) in piezas.iter() {
             if !cube.visible {

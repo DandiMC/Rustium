@@ -151,14 +151,14 @@ Point cargo at the good GCC with an environment variable, no repo changes needed
 
 ```bash
 CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="C:/mingw64/bin/x86_64-w64-mingw32-gcc.exe" \
-cargo build --release --target x86_64-pc-windows-gnu --bins
+cargo build --profile pequeno --target x86_64-pc-windows-gnu --bins
 ```
 
 Change that path to your own MinGW-W64 (on the development PC it lives at
 `C:\m\bin\x86_64-w64-mingw32-gcc.exe`). A local `.cargo/config.toml` with the same
 path works too; it is not committed because it belongs to each machine.
 
-The executables land in `target/x86_64-pc-windows-gnu/release/`, and all of them must
+The executables land in `target/x86_64-pc-windows-gnu/pequeno/`, and all of them must
 end up in the same folder, because the launcher looks for the exe of the selected
 build next to itself.
 
@@ -171,7 +171,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.3.8-setup.exe`, the file to attach to a release. The launcher
+The `pequeno` profile strips symbols and optimises for size so the installer stays under the 64 MB update limit of older launchers. It writes `dist/Rustium-0.3.8-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 

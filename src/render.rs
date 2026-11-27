@@ -1225,6 +1225,8 @@ pub struct Renderer {
     /// Classic: lineas del HUD en coordenadas de la GUI (alto 240), como
     /// Minecraft.drawGui (version arriba y "N fps, N chunk updates").
     pub hud_lineas: Vec<(String, f32, f32)>,
+    /// 0.25: puntuacion alineada al borde derecho de la GUI.
+    pub hud_derecha: Vec<String>,
     /// Coordenadas del extra F3 en las versiones sin HUD propio.
     pub coords: Option<String>,
     /// F2: copia el frame actual a PNG al terminar de dibujarlo.
@@ -2438,6 +2440,7 @@ impl Renderer {
             hit_preview: None,
             mostrar_cruz: false,
             hud_lineas: Vec::new(),
+            hud_derecha: Vec::new(),
             coords: None,
             pedir_captura: false,
             toast_inicio: None,
@@ -2778,6 +2781,15 @@ impl Renderer {
                 for sombra in [true, false] {
                     for (texto, x, y) in &self.hud_lineas {
                         fuente_quads(texto, *x, *y, w, h, *fw, *fh, anchos, sombra, &mut tv);
+                    }
+                    let sw = w as f32 * 240.0 / h.max(1) as f32;
+                    for texto in &self.hud_derecha {
+                        let tw: f32 = texto
+                            .chars()
+                            .map(|c| anchos[(c as usize).min(127)] as f32)
+                            .sum();
+                        let x = (sw - tw - 2.0).max(2.0);
+                        fuente_quads(texto, x, 2.0, w, h, *fw, *fh, anchos, sombra, &mut tv);
                     }
                 }
                 if tv.len() <= 20000 {

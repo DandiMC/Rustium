@@ -3,7 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File installer\build.ps1
 #
 # Antes de ejecutarlo, compila los binarios:
-#   cargo +stable-x86_64-pc-windows-gnu build --release --target x86_64-pc-windows-gnu
+#   cargo +stable-x86_64-pc-windows-gnu build --profile pequeno --target x86_64-pc-windows-gnu
 #
 # El resultado queda en dist\Rustium-<version>-setup.exe
 
@@ -24,7 +24,7 @@ if (-not $iscc) {
 }
 
 foreach ($exe in @("rustium.exe", "rubydung-rs.exe")) {
-    $p = Join-Path $raiz "target\x86_64-pc-windows-gnu\release\$exe"
+    $p = Join-Path $raiz "target\x86_64-pc-windows-gnu\pequeno\$exe"
     if (-not (Test-Path $p)) {
         Write-Host "Falta $p. Compila antes con cargo." -ForegroundColor Red
         exit 1

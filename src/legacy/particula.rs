@@ -32,6 +32,8 @@ pub struct Particula {
     pub dano: i32,
     pub de_jugador: bool,
     pub es_flecha: bool,
+    // 0.24/0.25: bloque que suelta un bloque roto; se recoge al acercarse.
+    pub bloque: Option<u8>,
     gravedad: f32,
 }
 
@@ -53,6 +55,7 @@ impl Particula {
             dano: 0,
             de_jugador: false,
             es_flecha: false,
+            bloque: None,
             gravedad: 0.04,
         };
         // setSize(0.2, 0.2) + heightOffset = bbHeight/2 + setPos
@@ -99,6 +102,21 @@ impl Particula {
         p.size = 1.0;
         p.uo = 0.0;
         p.vo = 0.0;
+        p
+    }
+
+    /// Bloque roto en Survival Test: entidad visible que cae y se recoge.
+    pub fn nuevo_bloque(x: f32, y: f32, z: f32, id: u8, tex: u32) -> Self {
+        let mut p = Particula::new(x, y, z, 0.0, 0.0, 0.0, tex);
+        p.full_tile = true;
+        p.bloque = Some(id);
+        p.lifetime = 6000;
+        p.size = 1.0;
+        p.uo = 0.0;
+        p.vo = 0.0;
+        p.xd = (randf() - 0.5) * 0.06;
+        p.yd = (randf() - 0.5) * 0.06;
+        p.zd = 0.18;
         p
     }
 

@@ -154,14 +154,14 @@ Apunta cargo al GCC bueno con una variable de entorno, sin tocar el repo:
 
 ```bash
 CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="C:/mingw64/bin/x86_64-w64-mingw32-gcc.exe" \
-cargo build --release --target x86_64-pc-windows-gnu --bins
+cargo build --profile pequeno --target x86_64-pc-windows-gnu --bins
 ```
 
 Cambia esa ruta por la de tu MinGW-W64 (en el PC de desarrollo está en
 `C:\m\bin\x86_64-w64-mingw32-gcc.exe`). También vale un `.cargo/config.toml` local con
 la misma ruta; no se versiona porque es de cada máquina.
 
-Los ejecutables quedan en `target/x86_64-pc-windows-gnu/release/` y todos tienen que
+Los ejecutables quedan en `target/x86_64-pc-windows-gnu/pequeno/` y todos tienen que
 estar en la misma carpeta, porque el launcher busca el .exe de la versión elegida al
 lado.
 
@@ -174,7 +174,7 @@ instalado:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Escribe `dist/Rustium-0.3.8-setup.exe`, que es el archivo que se adjunta a un release.
+El perfil `pequeno` quita símbolos y optimiza por tamaño para que el instalador no pase del límite de 64 MB de los launchers antiguos. Escribe `dist/Rustium-0.3.8-setup.exe`, que es el archivo que se adjunta a un release.
 El launcher busca ahí el asset `.exe` con su `size` y su `digest: sha256:…`, así que un
 release sin SHA-256 publicado no se descarga ni se ejecuta.
 

@@ -200,3 +200,13 @@ rfd = { version = "0.18", default-features = false }
 
 [profile.release]
 opt-level = 3
+
+# Perfil del instalador: los 39 ejecutables pesan la mitad, para que el setup
+# quede por debajo del limite de 64 MB que tenia el launcher 0.3.2.
+[profile.pequeno]
+inherits = "release"
+opt-level = "z"
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"

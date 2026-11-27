@@ -2318,9 +2318,11 @@ fn detect_lang() -> Lang {
 
 // ------------------------------------------------------------------- updates
 
-/// Biggest installer the launcher will download: a release asset is about 11 MB,
-/// so anything past this is not the file we published.
-const MAX_SETUP_BYTES: u64 = 64 * 1024 * 1024;
+/// Biggest installer the launcher will download. The 0.3.2 launcher had a hard
+/// 64 MB cap, which blocked the 123 MB survival installer. New builds are much
+/// smaller (separate `pequeno` profile), but the cap is raised so a future
+/// release can never break automatic updates just by growing.
+const MAX_SETUP_BYTES: u64 = 256 * 1024 * 1024;
 
 #[derive(Clone)]
 struct Update {

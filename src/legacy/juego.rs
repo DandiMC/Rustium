@@ -821,6 +821,7 @@ struct App {
     golpe_t: f32,
     mob_respawn_t: f32,
     setas_marrons: i32,
+    bloques: [u32; 256],
     // 0.0.19a limita el bucle a 100 fps.
     ultimo_frame: Instant,
 }
@@ -1008,6 +1009,7 @@ impl App {
             golpe_t: 0.0,
             mob_respawn_t: 5.0,
             setas_marrons: 0,
+            bloques: [0; 256],
             ultimo_frame: Instant::now(),
         }
     }
@@ -1056,12 +1058,23 @@ impl App {
                 2.0,
                 52.0,
             ));
-            // 0.24 solo enseñaba los puntos al morir; 0.25 los fija arriba.
-            if es_025(self.version) || self.muerto {
-                lineas.push((format!("Puntos: {}", self.puntuacion), 2.0, 62.0));
+            let total_bloques: u32 = self.bloques.iter().sum();
+            lineas.push((
+                format!(
+                    "Bloques: {} ({})",
+                    total_bloques,
+                    tiles::nombre(self.pintura)
+                ),
+                2.0,
+                62.0,
+            ));
+            // 0.24 solo enseñaba los puntos al morir; 0.25 los fija arriba a la
+            // derecha con `hud_derecha`.
+            if es_024(self.version) && self.muerto {
+                lineas.push((format!("Puntos: {}", self.puntuacion), 2.0, 74.0));
             }
             if self.muerto {
-                lineas.push(("Has muerto. R para reiniciar.".to_string(), 2.0, 74.0));
+                lineas.push(("Has muerto. R para reiniciar.".to_string(), 2.0, 84.0));
             }
         }
         // 0.0.17a: la lista de jugadores aparece mientras se mantiene Tab.
@@ -1141,6 +1154,11 @@ impl App {
         }
         if let Some(r) = &mut self.renderer {
             r.hud_lineas = lineas;
+            r.hud_derecha = if es_025(self.version) && self.hud_visible {
+                vec![format!("Puntos: {}", self.puntuacion)]
+            } else {
+                Vec::new()
+            };
         }
     }
 
@@ -1430,6 +1448,23 @@ impl App {
         self.sembrar_mobs();
     }
 
+    fn recoger_bloques(&mut self) {
+        if !es_supervivencia(self.version) || self.muerto {
+            return;
+        }
+        let (px, py, pz) = (self.jugador.x, self.jugador.y, self.jugador.z);
+        for p in self.particulas.iter_mut() {
+            if let Some(id) = p.bloque {
+                let d2 = (p.x - px).powi(2) + (p.y - py).powi(2) + (p.z - pz).powi(2);
+                if d2 < 1.4 * 1.4 {
+                    self.bloques[id as usize] = self.bloques[id as usize].saturating_add(1);
+                    self.pintura = id;
+                    p.borrada = true;
+                }
+            }
+        }
+    }
+
     fn sembrar_mobs(&mut self) {
         let tipos = [
             TipoMob::Zombi,
@@ -1507,13 +1542,24 @@ impl App {
         let (sy, cy) = yaw.sin_cos();
         let (sp, cp) = pitch.sin_cos();
         let d = [sy * cp, -cy * cp, sp];
+        // 0.25: no se puede pegar a un mob detras de una pared. El primer
+        // bloque del rayo marca la distancia maxima util.
+        let pared_t = self
+            .raycast(cam)
+            .map(|((bx, by, bz), _)| {
+                let dx = bx as f32 + 0.5 - cam[0];
+                let dy = by as f32 + 0.5 - cam[1];
+                let dz = bz as f32 + 0.5 - cam[2];
+                (dx * d[0] + dy * d[1] + dz * d[2]).max(0.0)
+            })
+            .unwrap_or(f32::INFINITY);
         let mut mejor: Option<(usize, f32)> = None;
         for (i, z) in self.zombis.iter().enumerate() {
             let dx = z.e.x - cam[0];
             let dy = z.e.y - cam[1];
             let dz = z.e.z + 0.9 - cam[2];
             let t = dx * d[0] + dy * d[1] + dz * d[2];
-            if t < 0.0 || t > 4.5 {
+            if t < 0.0 || t > 4.5 || t > pared_t - 0.05 {
                 continue;
             }
             let px = dx - d[0] * t;
@@ -1598,16 +1644,31 @@ impl App {
     /// Coloca el bloque elegido. La esponja de 0.0.19a chupa el agua de un
     /// cubo de 5x5x5 y desaparece; si no hay agua, se queda puesta.
     fn colocar(&mut self, x: i32, y: i32, z: i32) -> bool {
+        if es_supervivencia(self.version) && self.bloques[self.pintura as usize] == 0 {
+            self.chat(format!(
+                "No tienes {}.",
+                tiles::nombre(self.pintura)
+            ));
+            return false;
+        }
         if self.pintura == tiles::ESPONJA {
             let n = self.nivel.absorber_esponja(x, y, z);
             if n > 0 {
                 self.chat(format!("La esponja absorbe {n} bloques de agua."));
+                if es_supervivencia(self.version) {
+                    self.bloques[self.pintura as usize] =
+                        self.bloques[self.pintura as usize].saturating_sub(1);
+                }
                 sonar_colocar(self.sonido);
                 return true;
             }
         }
         let puesto = self.nivel.set(x, y, z, self.pintura);
         if puesto {
+            if es_supervivencia(self.version) {
+                self.bloques[self.pintura as usize] =
+                    self.bloques[self.pintura as usize].saturating_sub(1);
+            }
             sonar_colocar(self.sonido);
         }
         puesto
@@ -1623,6 +1684,15 @@ impl App {
         }
         if self.nivel.set(x, y, z, tiles::AIRE) {
             particula::destruir(tiles::textura_particula(id), x, y, z, &mut self.particulas);
+            if es_supervivencia(self.version) && id != tiles::AIRE {
+                self.particulas.push(Particula::nuevo_bloque(
+                    x as f32 + 0.5,
+                    y as f32 + 0.5,
+                    z as f32 + 0.5,
+                    id,
+                    tiles::textura_particula(id),
+                ));
+            }
             sonar_romper(self.sonido);
             true
         } else {
@@ -2284,6 +2354,8 @@ impl ApplicationHandler for App {
                 p.tick(&self.nivel);
             }
             self.particulas.retain(|p| !p.borrada);
+            // 0.24/0.25: los bloques rotos se recogen al pasar cerca.
+            self.recoger_bloques();
             // zombis y mobs de Survival Test
             self.golpe_t = (self.golpe_t - 1.0 / TPS).max(0.0);
             let mut i = 0;
@@ -2761,6 +2833,58 @@ mod tests {
         // 0.0.13a_03: zd = 0.42 y despues 0.91 de roce menos 0.08 de gravedad.
         j.tick_con(&nivel, 0.0, 0.0, true, false, false, true);
         assert!(j.zd > 0.0 && j.zd < 0.35, "salto 13a inesperado: {}", j.zd);
+    }
+
+    #[test]
+    fn los_mobs_tienen_modelos_distintos() {
+        let app = App::new("0.25_SURVIVAL_TEST", Modo::Clasico);
+        let creeper = app.zombis.iter().find(|z| z.tipo == TipoMob::Creeper).unwrap();
+        let cerdo = app.zombis.iter().find(|z| z.tipo == TipoMob::Cerdo).unwrap();
+        let esqueleto = app.zombis.iter().find(|z| z.tipo == TipoMob::Esqueleto).unwrap();
+        assert_eq!(creeper.extra.len(), 4);
+        assert!(!creeper.arm0.visible && !creeper.arm1.visible);
+        assert_eq!(cerdo.extra.len(), 4);
+        assert!(cerdo.escala < 1.0);
+        // El esqueleto conserva brazos y piernas visibles, pero mas finos.
+        assert!(esqueleto.arm0.visible && esqueleto.leg0.visible);
+    }
+
+    #[test]
+    fn no_se_golpea_a_un_mob_detras_de_una_pared() {
+        let mut app = App::new("0.25_SURVIVAL_TEST", Modo::Clasico);
+        app.jugador.set_pos(100.5, 100.5, 60.0);
+        app.jugador.y_rot = 0.0;
+        app.jugador.x_rot = 0.0;
+        for z in app.zombis.iter_mut() {
+            z.e.set_pos(40.0, 40.0, 60.0);
+        }
+        app.zombis[0].e.set_pos(100.5, 96.5, 59.1);
+        app.nivel.set(100, 98, 60, tiles::PIEDRA);
+        assert!(app.mob_apuntado().is_none());
+        app.nivel.set(100, 98, 60, tiles::AIRE);
+        assert_eq!(app.mob_apuntado(), Some(0));
+    }
+
+    #[test]
+    fn el_bloque_roto_se_recoge() {
+        let mut app = App::new("0.25_SURVIVAL_TEST", Modo::Clasico);
+        let (x, y, z) = (
+            app.jugador.x.floor() as i32 + 1,
+            app.jugador.y.floor() as i32,
+            (app.jugador.z.floor() as i32 - 1).clamp(1, 62),
+        );
+        app.nivel.set(x, y, z, tiles::PIEDRA);
+        assert_eq!(app.nivel.get(x, y, z), tiles::PIEDRA);
+        assert!(app.romper(x, y, z));
+        assert!(app.particulas.iter().any(|p| p.bloque == Some(tiles::PIEDRA)));
+        if let Some(p) = app.particulas.iter_mut().find(|p| p.bloque == Some(tiles::PIEDRA)) {
+            p.x = app.jugador.x;
+            p.y = app.jugador.y;
+            p.z = app.jugador.z;
+        }
+        app.recoger_bloques();
+        assert_eq!(app.bloques[tiles::PIEDRA as usize], 1);
+        assert_eq!(app.pintura, tiles::PIEDRA);
     }
 
     #[test]
