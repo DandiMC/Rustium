@@ -11,7 +11,7 @@
 ; also where the launcher keeps its config (lang=...) and downloaded updates.
 
 #define MyAppName "Rustium"
-#define MyAppVersion "0.3.4"
+#define MyAppVersion "0.3.5"
 #define MyAppPublisher "DandiMC"
 #define MyAppExeName "Rustium.exe"
 
@@ -86,6 +86,12 @@ Source: "..\target\x86_64-pc-windows-gnu\release\classic014a08.exe"; DestDir: "{
 Source: "..\target\x86_64-pc-windows-gnu\release\classic015a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic015a01.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic015a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Familia 0.0.16a-0.0.18a: consola, /setspawn, /teleport y niebla indigo.
+Source: "..\target\x86_64-pc-windows-gnu\release\classic016a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic016a02.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic017a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic018a.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic018a02.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Apache 2.0 asks for the licence and the attribution notice to be handed to
 ; every recipient, so they are installed next to the executables.

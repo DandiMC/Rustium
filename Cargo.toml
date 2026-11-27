@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -113,6 +113,31 @@ path = "src/bin/classic015a01.rs"
 [[bin]]
 name = "classic015a02"
 path = "src/bin/classic015a02.rs"
+
+# 0.0.16a: comandos de servidor adaptados a un solo jugador y consola de chat
+[[bin]]
+name = "classic016a"
+path = "src/bin/classic016a.rs"
+
+# 0.0.16a_02: niebla indigo bajo el agua
+[[bin]]
+name = "classic016a02"
+path = "src/bin/classic016a02.rs"
+
+# 0.0.17a: /setspawn, lista de jugadores con Tab y registro de chat
+[[bin]]
+name = "classic017a"
+path = "src/bin/classic017a.rs"
+
+# 0.0.18a: /teleport
+[[bin]]
+name = "classic018a"
+path = "src/bin/classic018a.rs"
+
+# 0.0.18a_02: fuente con \, |, @ y $
+[[bin]]
+name = "classic018a02"
+path = "src/bin/classic018a02.rs"
 
 [dependencies]
 winit = "0.30"

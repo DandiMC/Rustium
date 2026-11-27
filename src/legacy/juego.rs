@@ -152,6 +152,11 @@ fn es_reconstruida(version: &str) -> bool {
             | "c0.0.15a"
             | "c0.0.15a_01"
             | "c0.0.15a_02"
+            | "c0.0.16a"
+            | "c0.0.16a_02"
+            | "c0.0.17a"
+            | "c0.0.18a"
+            | "c0.0.18a_02"
     )
 }
 
@@ -181,8 +186,40 @@ fn es_13a(version: &str) -> bool {
 fn es_familia_014(version: &str) -> bool {
     matches!(
         version,
-        "c0.0.14a" | "c0.0.14a_08" | "c0.0.15a" | "c0.0.15a_01" | "c0.0.15a_02"
+        "c0.0.14a"
+            | "c0.0.14a_08"
+            | "c0.0.15a"
+            | "c0.0.15a_01"
+            | "c0.0.15a_02"
+            | "c0.0.16a"
+            | "c0.0.16a_02"
+            | "c0.0.17a"
+            | "c0.0.18a"
+            | "c0.0.18a_02"
     )
+}
+
+/// 0.0.16a estreno la consola de chat y los comandos de servidor. En el port
+/// se conserva como consola de un solo jugador.
+fn es_chat(version: &str) -> bool {
+    matches!(
+        version,
+        "c0.0.16a" | "c0.0.16a_02" | "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02"
+    )
+}
+
+/// 0.0.17a: /setspawn y la lista de jugadores con Tab.
+fn es_017a(version: &str) -> bool {
+    matches!(version, "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02")
+}
+
+/// 0.0.18a: /teleport.
+fn es_018a(version: &str) -> bool {
+    matches!(version, "c0.0.18a" | "c0.0.18a_02")
+}
+
+fn es_lista_jugadores(version: &str) -> bool {
+    es_017a(version)
 }
 
 /// Reconstrucciones (sus jars no se conservan): 0.0.9a y 0.0.10a se montan
@@ -543,6 +580,15 @@ struct App {
     // 0.0.14a: mantener el boton repite la accion cada 0,25 s.
     mouse_repeat: Option<winit::event::MouseButton>,
     repeat_acc: f32,
+    // 0.0.16a: consola de chat y comandos adaptados a un solo jugador.
+    chat_abierto: bool,
+    chat_texto: String,
+    chat_log: Vec<String>,
+    chat_hasta: Option<Instant>,
+    // 0.0.17a: lista de jugadores con Tab (en solitario, el jugador local).
+    tab_lista: bool,
+    // Punto de aparicion para /setspawn y /spawn.
+    spawn: (f32, f32, f32),
 }
 
 impl App {
@@ -550,10 +596,12 @@ impl App {
         if es_familia_014(version) {
             tiles::usar_atlas_014();
             mesh::usar_sombras_liquidos(version != "c0.0.14a");
-            mesh::usar_lava_brillante(matches!(
-                version,
-                "c0.0.15a" | "c0.0.15a_01" | "c0.0.15a_02"
-            ));
+            // 0.0.15a estreno la lava mas brillante; las builds siguientes la
+            // conservan. 0.0.14a y su _08 mantienen la lava original.
+            mesh::usar_lava_brillante(
+                es_familia_014(version)
+                    && !matches!(version, "c0.0.14a" | "c0.0.14a_08"),
+            );
         }
         // El original crea sus Random con la hora: el mundo cambia en cada
         // arranque. RD_SEEDS fija los cuatro filtros para el careo y
@@ -576,6 +624,9 @@ impl App {
             {
                 Nivel::new_clasico_015(seed)
             }
+            // 0.0.16a-0.0.18a no cambian el mundo: siguen sobre el de 0.0.15a
+            // (grava sumergida, roble pequeno y lava lenta).
+            Modo::Clasico if es_familia_014(version) => Nivel::new_clasico_015(seed),
             Modo::Clasico if version == "c0.0.13a" => Nivel::new_013a_dev(seed),
             Modo::Clasico if version == "c0.0.13a_03" => Nivel::new_clasico_013a03(seed),
             Modo::Clasico if es_clasico_con_liquidos(version) => Nivel::new_clasico_012(seed),
@@ -621,6 +672,8 @@ impl App {
             }
         }
         let (ancho_mundo, alto_mundo, fondo_mundo) = (nivel.ancho, nivel.alto, nivel.fondo);
+        let jugador = Jugador::new(ancho_mundo, alto_mundo, fondo_mundo);
+        let spawn = (jugador.x, jugador.y, jugador.z);
         App {
             version,
             modo,
@@ -638,7 +691,8 @@ impl App {
             window: None,
             renderer: None,
             nivel,
-            jugador: Jugador::new(ancho_mundo, alto_mundo, fondo_mundo),
+            jugador,
+            spawn,
             zombis,
             particulas: Vec::new(),
             keys: HashSet::new(),
@@ -663,6 +717,11 @@ impl App {
             smoke_frames: 0,
             mouse_repeat: None,
             repeat_acc: 0.0,
+            chat_abierto: false,
+            chat_texto: String::new(),
+            chat_log: Vec::new(),
+            chat_hasta: None,
+            tab_lista: false,
         }
     }
 
@@ -695,8 +754,119 @@ impl App {
                 22.0,
             ));
         }
+        // 0.0.17a: la lista de jugadores aparece mientras se mantiene Tab.
+        if self.tab_lista && es_lista_jugadores(self.version) {
+            lineas.push(("Jugadores (1): Jugador".to_string(), 2.0, 32.0));
+        }
+        // 0.0.16a: consola de chat. El registro se ve al escribir y unos
+        // segundos despues de un comando; la linea de entrada va abajo.
+        if es_chat(self.version)
+            && (self.chat_abierto
+                || self
+                    .chat_hasta
+                    .map(|t| t.elapsed().as_secs_f32() < 8.0)
+                    .unwrap_or(false))
+        {
+            let visibles = if self.chat_abierto { 6 } else { 3 };
+            let inicio = self.chat_log.len().saturating_sub(visibles);
+            for (i, l) in self.chat_log[inicio..].iter().enumerate() {
+                lineas.push((l.clone(), 2.0, 160.0 + i as f32 * 10.0));
+            }
+            if self.chat_abierto {
+                lineas.push((format!("> {}_", self.chat_texto), 2.0, 228.0));
+            }
+        }
         if let Some(r) = &mut self.renderer {
             r.hud_lineas = lineas;
+        }
+    }
+
+    fn chat(&mut self, texto: String) {
+        self.chat_log.push(texto);
+        if self.chat_log.len() > 40 {
+            self.chat_log.remove(0);
+        }
+        self.chat_hasta = Some(Instant::now());
+    }
+
+    /// Comandos de 0.0.16a-0.0.18a adaptados a un solo jugador. Los de
+    /// servidor (/broadcast, /kick) se quedan como mensajes del registro; los
+    /// de mundo (/setspawn, /spawn, /teleport) si cambian la partida.
+    fn ejecutar_comando(&mut self, linea: &str) {
+        let linea = linea.trim();
+        if linea.is_empty() {
+            return;
+        }
+        let (cmd, resto) = match linea.split_once(char::is_whitespace) {
+            Some((c, r)) => (c, r.trim()),
+            None => (linea, ""),
+        };
+        let cmd = cmd.trim_start_matches('/').to_ascii_lowercase();
+        match cmd.as_str() {
+            "help" => {
+                self.chat("Comandos: /help, /broadcast <texto>, /kick".to_string());
+                if es_017a(self.version) {
+                    self.chat("/setspawn, /spawn".to_string());
+                }
+                if es_018a(self.version) {
+                    self.chat("/teleport <x> <y> <z>  (o /tp)".to_string());
+                }
+                self.chat("/clear".to_string());
+            }
+            "broadcast" => {
+                if resto.is_empty() {
+                    self.chat("Uso: /broadcast <texto>".to_string());
+                } else {
+                    self.chat(format!("[Servidor] {resto}"));
+                }
+            }
+            "kick" => self.chat(
+                "En solitario no hay otros jugadores a los que expulsar.".to_string(),
+            ),
+            "setspawn" if es_017a(self.version) => {
+                self.spawn = (self.jugador.x, self.jugador.y, self.jugador.z);
+                self.chat(format!(
+                    "Aparicion fijada en {:.1}, {:.1}, {:.1}.",
+                    self.spawn.0, self.spawn.1, self.spawn.2
+                ));
+            }
+            "spawn" if es_017a(self.version) => {
+                let (x, y, z) = self.spawn;
+                self.jugador.set_pos(x, y, z);
+                self.jugador.xo = x;
+                self.jugador.yo = y;
+                self.jugador.zo = z;
+                self.jugador.xd = 0.0;
+                self.jugador.yd = 0.0;
+                self.jugador.zd = 0.0;
+                self.chat("De vuelta al punto de aparicion.".to_string());
+            }
+            "teleport" | "tp" if es_018a(self.version) => {
+                let n: Vec<f32> = resto
+                    .split_whitespace()
+                    .filter_map(|t| t.parse().ok())
+                    .collect();
+                if n.len() != 3 {
+                    self.chat("Uso: /teleport <x> <y> <z>".to_string());
+                } else {
+                    let x = n[0].clamp(0.0, self.nivel.ancho as f32 - 0.1);
+                    let y = n[1].clamp(0.0, self.nivel.alto as f32 - 0.1);
+                    let z = n[2].clamp(0.0, self.nivel.fondo as f32 + 20.0);
+                    self.jugador.set_pos(x, y, z);
+                    self.jugador.xo = x;
+                    self.jugador.yo = y;
+                    self.jugador.zo = z;
+                    self.jugador.xd = 0.0;
+                    self.jugador.yd = 0.0;
+                    self.jugador.zd = 0.0;
+                    self.chat(format!("Teleportado a {x:.1}, {y:.1}, {z:.1}."));
+                }
+            }
+            "clear" => {
+                self.chat_log.clear();
+                self.chat("Chat vaciado.".to_string());
+            }
+            _ => self.chat(format!("Comando desconocido: /{cmd}. Prueba /help.")),
         }
     }
 
@@ -972,6 +1142,57 @@ impl ApplicationHandler for App {
                         Key::Named(NamedKey::ArrowRight) => { self.keys.remove("arrowright"); }
                         _ => {}
                     }
+                    if matches!(&logical_key, Key::Named(NamedKey::Tab)) {
+                        self.tab_lista = false;
+                    }
+                    return;
+                }
+                // 0.0.16a: con la consola abierta, el teclado escribe en ella.
+                if state == ElementState::Pressed && !repeat && self.chat_abierto {
+                    match &logical_key {
+                        Key::Named(NamedKey::Escape) => self.chat_abierto = false,
+                        Key::Named(NamedKey::Enter) => {
+                            let linea = std::mem::take(&mut self.chat_texto);
+                            self.chat_abierto = false;
+                            self.ejecutar_comando(&linea);
+                        }
+                        Key::Named(NamedKey::Backspace) => {
+                            self.chat_texto.pop();
+                        }
+                        Key::Named(NamedKey::Space) => {
+                            if self.chat_texto.chars().count() < 100 {
+                                self.chat_texto.push(' ');
+                            }
+                        }
+                        Key::Character(c) => {
+                            if self.chat_texto.chars().count() < 100 {
+                                self.chat_texto.push_str(c);
+                            }
+                        }
+                        _ => {}
+                    }
+                    return;
+                }
+                // 0.0.16a: T abre la consola de chat.
+                if state == ElementState::Pressed
+                    && !repeat
+                    && es_chat(self.version)
+                    && matches!(&logical_key, Key::Character(c) if c.eq_ignore_ascii_case("t"))
+                {
+                    self.chat_abierto = true;
+                    self.chat_texto.clear();
+                    let _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                    window.set_cursor_visible(true);
+                    self.grabbed = false;
+                    return;
+                }
+                // 0.0.17a: Tab muestra la lista de jugadores mientras se pulsa.
+                if state == ElementState::Pressed
+                    && !repeat
+                    && es_lista_jugadores(self.version)
+                    && matches!(&logical_key, Key::Named(NamedKey::Tab))
+                {
+                    self.tab_lista = true;
                     return;
                 }
                 let g_repite = self.g_repeat
@@ -1074,6 +1295,9 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                if self.chat_abierto {
+                    return;
+                }
                 if state == ElementState::Released && self.mouse_repeat == Some(button) {
                     self.mouse_repeat = None;
                 }
@@ -1195,7 +1419,7 @@ impl ApplicationHandler for App {
 
     fn device_event(&mut self, _e: &ActiveEventLoop, _d: winit::event::DeviceId, event: DeviceEvent) {
         if let DeviceEvent::MouseMotion { delta } = event {
-            if self.grabbed {
+            if self.grabbed && !self.chat_abierto {
                 self.jugador.y_rot += delta.0 as f32 * 0.15;
                 let dy = delta.1 as f32 * 0.15;
                 self.jugador.x_rot -= if self.invertir_y { -dy } else { dy };
@@ -1220,11 +1444,17 @@ impl ApplicationHandler for App {
             }
         }
 
-        let f: f32 = if self.keys.contains("w") || self.keys.contains("arrowup") { 1.0 } else { 0.0 }
-            - if self.keys.contains("s") || self.keys.contains("arrowdown") { 1.0 } else { 0.0 };
-        let s: f32 = if self.keys.contains("d") || self.keys.contains("arrowright") { 1.0 } else { 0.0 }
-            - if self.keys.contains("a") || self.keys.contains("arrowleft") { 1.0 } else { 0.0 };
-        let jump = self.keys.contains(" ");
+        // Con la consola abierta el jugador no se mueve: las teclas son texto.
+        let bloqueado = self.chat_abierto;
+        let f: f32 = if bloqueado { 0.0 } else {
+            (if self.keys.contains("w") || self.keys.contains("arrowup") { 1.0 } else { 0.0 })
+                - (if self.keys.contains("s") || self.keys.contains("arrowdown") { 1.0 } else { 0.0 })
+        };
+        let s: f32 = if bloqueado { 0.0 } else {
+            (if self.keys.contains("d") || self.keys.contains("arrowright") { 1.0 } else { 0.0 })
+                - (if self.keys.contains("a") || self.keys.contains("arrowleft") { 1.0 } else { 0.0 })
+        };
+        let jump = !bloqueado && self.keys.contains(" ");
         let reset_mantenido = self.keys.contains("r") || self.keys.contains("R");
         let version_13a = es_13a(self.version);
         self.tick_acc += dt;
@@ -1400,14 +1630,22 @@ impl ApplicationHandler for App {
             // (14,11,10) en el oscuro. Bajo agua/lava usa los mismos
             // colores/densidades que 0.0.13a, como setupFog del original.
             let es_014 = es_familia_014(self.version);
-            let niebla_blanca = matches!(
-                self.version,
-                "c0.0.14a_08" | "c0.0.15a" | "c0.0.15a_01" | "c0.0.15a_02"
-            );
+            let niebla_blanca =
+                es_familia_014(self.version) && self.version != "c0.0.14a";
             if es_13a(self.version) || es_014 {
                 match self.jugador.liquido(&self.nivel) {
                     Some(tiles::AGUA) => {
-                        r.fog_color = [0.02, 0.02, 0.2, 1.0];
+                        // 0.0.16a_02 cambio la niebla submarina de blanca a
+                        // indigo; las builds anteriores conservan el azul oscuro.
+                        let indigo = matches!(
+                            self.version,
+                            "c0.0.16a_02" | "c0.0.17a" | "c0.0.18a" | "c0.0.18a_02"
+                        );
+                        r.fog_color = if indigo {
+                            [0.18, 0.08, 0.42, 1.0]
+                        } else {
+                            [0.02, 0.02, 0.2, 1.0]
+                        };
                         r.fog_densidad = 0.1;
                         r.fog_densidad_principal = 0.1;
                         r.fog_color_principal = r.fog_color;
@@ -1589,6 +1827,26 @@ mod tests {
         // La superficie plana está en z=32; el jugador debe quedar encima, no
         // atravesarla ni caer fuera del mundo.
         assert!(j.z >= 33.0 && j.z < 35.0, "z inesperado en mundo largo: {}", j.z);
+    }
+
+    #[test]
+    fn los_comandos_de_mundo_mueven_al_jugador() {
+        let mut app = App::new("c0.0.18a", Modo::Clasico);
+        app.ejecutar_comando("/teleport 10 20 30");
+        assert!((app.jugador.x - 10.0).abs() < 0.01);
+        assert!((app.jugador.y - 20.0).abs() < 0.01);
+        assert!((app.jugador.z - 30.0).abs() < 0.01);
+        assert!(app.chat_log.iter().any(|l| l.contains("Teleportado")));
+        app.ejecutar_comando("/setspawn");
+        app.ejecutar_comando("/teleport 1 2 3");
+        app.ejecutar_comando("/spawn");
+        assert!((app.jugador.x - 10.0).abs() < 0.01);
+        assert!((app.jugador.y - 20.0).abs() < 0.01);
+        assert!((app.jugador.z - 30.0).abs() < 0.01);
+        app.ejecutar_comando("/broadcast hola");
+        assert!(app.chat_log.iter().any(|l| l.contains("[Servidor] hola")));
+        app.ejecutar_comando("/kick");
+        assert!(app.chat_log.iter().any(|l| l.contains("solitario")));
     }
 
     #[test]

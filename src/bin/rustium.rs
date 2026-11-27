@@ -119,10 +119,15 @@ enum GameVersion {
     C0015a,
     C0015a01,
     C0015a02,
+    C0016a,
+    C0016a02,
+    C0017a,
+    C0018a,
+    C0018a02,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 25] = [
+    const ALL: [GameVersion; 30] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
@@ -148,6 +153,11 @@ impl GameVersion {
         GameVersion::C0015a,
         GameVersion::C0015a01,
         GameVersion::C0015a02,
+        GameVersion::C0016a,
+        GameVersion::C0016a02,
+        GameVersion::C0017a,
+        GameVersion::C0018a,
+        GameVersion::C0018a02,
     ];
 
     /// The build name, as the original version is called everywhere else.
@@ -178,6 +188,11 @@ impl GameVersion {
             GameVersion::C0015a => "c0.0.15a",
             GameVersion::C0015a01 => "c0.0.15a_01",
             GameVersion::C0015a02 => "c0.0.15a_02",
+            GameVersion::C0016a => "c0.0.16a",
+            GameVersion::C0016a02 => "c0.0.16a_02",
+            GameVersion::C0017a => "c0.0.17a",
+            GameVersion::C0018a => "c0.0.18a",
+            GameVersion::C0018a02 => "c0.0.18a_02",
         }
     }
 
@@ -202,6 +217,11 @@ impl GameVersion {
                 | GameVersion::C0015a
                 | GameVersion::C0015a01
                 | GameVersion::C0015a02
+                | GameVersion::C0016a
+                | GameVersion::C0016a02
+                | GameVersion::C0017a
+                | GameVersion::C0018a
+                | GameVersion::C0018a02
         )
     }
 
@@ -283,6 +303,21 @@ impl GameVersion {
             }
             GameVersion::C0015a02 => {
                 if win { "classic015a02.exe" } else { "classic015a02" }
+            }
+            GameVersion::C0016a => {
+                if win { "classic016a.exe" } else { "classic016a" }
+            }
+            GameVersion::C0016a02 => {
+                if win { "classic016a02.exe" } else { "classic016a02" }
+            }
+            GameVersion::C0017a => {
+                if win { "classic017a.exe" } else { "classic017a" }
+            }
+            GameVersion::C0018a => {
+                if win { "classic018a.exe" } else { "classic018a" }
+            }
+            GameVersion::C0018a02 => {
+                if win { "classic018a02.exe" } else { "classic018a02" }
             }
         }
     }

@@ -24,7 +24,7 @@ and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.3.4-setup.exe`.
+You only need **the installer**: `Rustium-0.3.5-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -35,8 +35,8 @@ You only need **the installer**: `Rustium-0.3.4-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the twenty-five builds (the six
-pre-classics, the four private alphas and the first fifteen Classics):
+The picker above the Play button starts any of the thirty builds (the six
+pre-classics, the four private alphas and the first twenty Classics):
 
 | build | what it brings |
 |---|---|
@@ -65,9 +65,15 @@ pre-classics, the four private alphas and the first fifteen Classics):
 | c0.0.15a | first multiplayer test: gravel only underwater, small oak trees and slower, brighter lava |
 | c0.0.15a_01 | reupload: better client interpolation, with no gameplay changes in the port |
 | c0.0.15a_02 | reupload: fixed animations, with no gameplay changes in the port |
+| c0.0.16a | server commands adapted to single player: T opens the chat console, `/broadcast` writes to the log and `/kick` explains there is nobody else |
+| c0.0.16a_02 | the last multiplayer test: indigo underwater fog instead of white |
+| c0.0.17a | `/setspawn`, `/spawn` and the player list with Tab; the chat log appears while typing |
+| c0.0.18a | `/teleport <x> <y> <z>` (or `/tp`), adapted from the admin command to coordinates |
+| c0.0.18a_02 | the font accepts `\`, `|`, `@` and `$`; the chat console passes them through |
 
 The four mc- builds, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02,
-c0.0.13a, c0.0.14a, c0.0.15a, c0.0.15a_01 and c0.0.15a_02 are **reconstructions**: their jars were never archived. They are built
+c0.0.13a, c0.0.14a, c0.0.15a, c0.0.15a_01, c0.0.15a_02, c0.0.16a, c0.0.16a_02,
+c0.0.17a, c0.0.18a and c0.0.18a_02 are **reconstructions**: their jars were never archived. They are built
 from c0.0.11a's code plus what the Minecraft Wiki documents for each, and use
 c0.0.11a's textures and font when there is no jar of their own. The launcher marks
 them with **REC** in the picker and the instance list; the id and world folder do not
@@ -156,7 +162,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.3.4-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.3.5-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 
