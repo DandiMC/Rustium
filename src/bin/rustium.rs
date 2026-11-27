@@ -131,10 +131,12 @@ enum GameVersion {
     C0021a,
     C0022a,
     C0023a,
+    C0024,
+    C0025,
 }
 
 impl GameVersion {
-    const ALL: [GameVersion; 37] = [
+    const ALL: [GameVersion; 39] = [
         GameVersion::Rd131655,
         GameVersion::Rd132211,
         GameVersion::Rd132328,
@@ -172,6 +174,8 @@ impl GameVersion {
         GameVersion::C0021a,
         GameVersion::C0022a,
         GameVersion::C0023a,
+        GameVersion::C0024,
+        GameVersion::C0025,
     ];
 
     /// The build name, as the original version is called everywhere else.
@@ -214,6 +218,8 @@ impl GameVersion {
             GameVersion::C0021a => "c0.0.21a",
             GameVersion::C0022a => "c0.0.22a",
             GameVersion::C0023a => "c0.0.23a",
+            GameVersion::C0024 => "0.24_SURVIVAL_TEST",
+            GameVersion::C0025 => "0.25_SURVIVAL_TEST",
         }
     }
 
@@ -248,6 +254,7 @@ impl GameVersion {
                 | GameVersion::C0021a
                 | GameVersion::C0022a
                 | GameVersion::C0023a
+                | GameVersion::C0024
         )
     }
 
@@ -365,6 +372,12 @@ impl GameVersion {
             }
             GameVersion::C0023a => {
                 if win { "classic023a.exe" } else { "classic023a" }
+            }
+            GameVersion::C0024 => {
+                if win { "classic024.exe" } else { "classic024" }
+            }
+            GameVersion::C0025 => {
+                if win { "classic025.exe" } else { "classic025" }
             }
         }
     }

@@ -27,6 +27,12 @@ pub struct Particula {
     lifetime: i32,
     size: f32,
     pub borrada: bool,
+    // 0.24/0.25: flechas como quads de tile completo con dano propio.
+    full_tile: bool,
+    pub dano: i32,
+    pub de_jugador: bool,
+    pub es_flecha: bool,
+    gravedad: f32,
 }
 
 impl Particula {
@@ -43,6 +49,11 @@ impl Particula {
             lifetime: 0,
             size: 1.0,
             borrada: false,
+            full_tile: false,
+            dano: 0,
+            de_jugador: false,
+            es_flecha: false,
+            gravedad: 0.04,
         };
         // setSize(0.2, 0.2) + heightOffset = bbHeight/2 + setPos
         p.set_pos(x, y, z);
@@ -59,6 +70,35 @@ impl Particula {
         p.vo = randf() * 3.0;
         p.size = randf() * 0.5 + 0.5;
         p.lifetime = (4.0 / (randf() * 0.9 + 0.1)) as i32;
+        p
+    }
+
+    /// Flecha de 0.24/0.25: viaja recta, cae poco y hace 3 de dano. El tile 87
+    /// es pixel art propio del port, no una textura de Mojang.
+    pub fn nueva_flecha(
+        x: f32,
+        y: f32,
+        z: f32,
+        xd: f32,
+        yd: f32,
+        zd: f32,
+        de_jugador: bool,
+    ) -> Self {
+        // 87 = flecha normal; 88 = flecha morada de los esqueletos en 0.25.
+        let tex = if de_jugador { 87 } else { 88 };
+        let mut p = Particula::new(x, y, z, 0.0, 0.0, 0.0, tex);
+        p.xd = xd;
+        p.yd = yd;
+        p.zd = zd;
+        p.gravedad = 0.02;
+        p.full_tile = true;
+        p.es_flecha = true;
+        p.dano = 3;
+        p.de_jugador = de_jugador;
+        p.lifetime = 120;
+        p.size = 1.0;
+        p.uo = 0.0;
+        p.vo = 0.0;
         p
     }
 
@@ -84,7 +124,7 @@ impl Particula {
             self.borrada = true;
         }
         self.age += 1;
-        self.zd -= 0.04;
+        self.zd -= self.gravedad;
         let (xa, ya, za) = (self.xd, self.yd, self.zd);
         // Entity.move con la caja de 0.2x0.2
         let area = self.bb.expanded(xa, ya, za);
@@ -104,6 +144,9 @@ impl Particula {
         bb.move_by(0.0, dy, 0.0);
 
         self.on_ground = za != dz && za < 0.0;
+        if self.es_flecha && (xa != dx || ya != dy || za != dz) {
+            self.borrada = true;
+        }
         if xa != dx { self.xd = 0.0; }
         if za != dz { self.zd = 0.0; }
         if ya != dy { self.yd = 0.0; }
@@ -125,10 +168,10 @@ impl Particula {
     // camara; se anade a la malla dinamica con la textura del tile (y el trozo
     // aleatorio de 1/4 de tile que usa el original).
     pub fn vertices(&self, a: f32, der: [f32; 3], arr: [f32; 3], verts: &mut Vec<Vertex>, idx: &mut Vec<u32>) {
-        let u0 = ((self.tex % 16) as f32 + self.uo / 4.0) / 16.0;
-        let u1 = u0 + 0.015609375;
-        let v0 = ((self.tex / 16) as f32 + self.vo / 4.0) / 16.0;
-        let v1 = v0 + 0.015609375;
+        let u0 = ((self.tex % 16) as f32 + if self.full_tile { 0.0 } else { self.uo / 4.0 }) / 16.0;
+        let u1 = u0 + if self.full_tile { 0.0625 } else { 0.015609375 };
+        let v0 = ((self.tex / 16) as f32 + if self.full_tile { 0.0 } else { self.vo / 4.0 }) / 16.0;
+        let v1 = v0 + if self.full_tile { 0.0625 } else { 0.015609375 };
         let r = 0.1 * self.size;
         let cx = self.xo + (self.x - self.xo) * a;
         let cy = self.yo + (self.y - self.yo) * a;

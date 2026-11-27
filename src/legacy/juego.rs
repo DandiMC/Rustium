@@ -12,7 +12,7 @@ use super::level::Nivel;
 use super::mesh;
 use super::particula::{self, Particula};
 use super::tiles;
-use crate::entity::{randf, Fisica, Zombie};
+use crate::entity::{randf, Fisica, TipoMob, Zombie};
 use crate::render::{tamano_inicial, Renderer, Vertex};
 use crate::world::BlockBox;
 use std::collections::HashSet;
@@ -105,6 +105,9 @@ pub fn correr_clasico_014() {
 /// ventana que 0.0.13a, atlas de 0.0.14a y selector de nueve bloques.
 pub fn correr_clasico_014_familia(version: &'static str) {
     tiles::usar_atlas_014();
+    // Los binarios sueltos tambien tienen que cargar el atlas de su version;
+    // el launcher ya lo fija, pero al abrir classic021a.exe directamente no.
+    std::env::set_var("RD_ATLAS_VERSION", version);
     correr_clasico_con(version, 854, 480, true);
 }
 
@@ -208,6 +211,8 @@ fn es_familia_014(version: &str) -> bool {
             | "c0.0.21a"
             | "c0.0.22a"
             | "c0.0.23a"
+            | "0.24_SURVIVAL_TEST"
+            | "0.25_SURVIVAL_TEST"
     )
 }
 
@@ -220,12 +225,31 @@ fn es_021a(version: &str) -> bool {
 /// 0.0.22a: sonido, musica y mute con M. La lava de 0.0.22a_05 baja a un tick
 /// de cada tres.
 fn es_022a(version: &str) -> bool {
-    matches!(version, "c0.0.22a" | "c0.0.23a")
+    matches!(
+        version,
+        "c0.0.22a" | "c0.0.23a" | "0.24_SURVIVAL_TEST" | "0.25_SURVIVAL_TEST"
+    )
 }
 
 /// 0.0.23a: menu de opciones con Escape y controles configurables.
 fn es_023a(version: &str) -> bool {
-    version == "c0.0.23a"
+    matches!(
+        version,
+        "c0.0.23a" | "0.24_SURVIVAL_TEST" | "0.25_SURVIVAL_TEST"
+    )
+}
+
+/// 0.24 y 0.25 Survival Test: salud, flechas, mobs hostiles, muerte y puntos.
+fn es_supervivencia(version: &str) -> bool {
+    matches!(version, "0.24_SURVIVAL_TEST" | "0.25_SURVIVAL_TEST")
+}
+
+fn es_024(version: &str) -> bool {
+    version == "0.24_SURVIVAL_TEST"
+}
+
+fn es_025(version: &str) -> bool {
+    version == "0.25_SURVIVAL_TEST"
 }
 
 /// 0.0.19a: cristal, esponja, barra rapida y animacion de liquidos.
@@ -789,6 +813,14 @@ struct App {
     pausa: bool,
     pausa_sel: usize,
     distancia_corta: bool,
+    // 0.24/0.25 Survival Test.
+    salud: i32,
+    flechas: i32,
+    puntuacion: i32,
+    muerto: bool,
+    golpe_t: f32,
+    mob_respawn_t: f32,
+    setas_marrons: i32,
     // 0.0.19a limita el bucle a 100 fps.
     ultimo_frame: Instant,
 }
@@ -857,11 +889,13 @@ impl App {
         let cerca = std::env::var("RD_ZOMBIS_CERCA").is_ok();
         // La wiki de 0.0.13a_03 documenta que los mobs ya no aparecen de forma
         // natural. El arnes de humo puede seguir pidiendo uno con RD_SMOKE.
+        let supervivencia = es_supervivencia(version);
         let sin_zombis = std::env::var_os("RD_SMOKE_SIN_ZOMBIS").is_some()
-            || ((version == "c0.0.13a_03" || es_familia_014(version))
+            || (!supervivencia
+                && (version == "c0.0.13a_03" || es_familia_014(version))
                 && std::env::var_os("RD_SMOKE").is_none());
         let mut zombis = Vec::new();
-        if !sin_zombis {
+        if !sin_zombis && !supervivencia {
             let cx = (nivel.ancho / 2) as f32;
             let cy = (nivel.alto / 2) as f32;
             for i in 0..10 {
@@ -881,6 +915,32 @@ impl App {
         let (ancho_mundo, alto_mundo, fondo_mundo) = (nivel.ancho, nivel.alto, nivel.fondo);
         let jugador = Jugador::new(ancho_mundo, alto_mundo, fondo_mundo);
         let spawn = (jugador.x, jugador.y, jugador.z);
+        if supervivencia {
+            let tipos = [
+                TipoMob::Zombi,
+                TipoMob::Esqueleto,
+                TipoMob::Creeper,
+                TipoMob::Cerdo,
+                TipoMob::Zombi,
+                TipoMob::Esqueleto,
+            ];
+            for (i, tipo) in tipos.iter().enumerate() {
+                let ang = i as f32 * 1.05;
+                let mut z = Zombie::new_tipo(
+                    &nivel,
+                    jugador.x + ang.cos() * 9.0,
+                    jugador.y + ang.sin() * 9.0,
+                    jugador.z + 2.0,
+                    *tipo,
+                );
+                z.e.set_pos(
+                    jugador.x + ang.cos() * 9.0,
+                    jugador.y + ang.sin() * 9.0,
+                    jugador.z + 2.0,
+                );
+                zombis.push(z);
+            }
+        }
         let hotbar = if es_019a(version) { hotbar_019() } else { [0u8; 9] };
         let inventario_ids = if es_020a(version) { paleta_020() } else { Vec::new() };
         App {
@@ -941,6 +1001,13 @@ impl App {
             pausa: false,
             pausa_sel: 0,
             distancia_corta: false,
+            salud: 20,
+            flechas: 20,
+            puntuacion: 0,
+            muerto: false,
+            golpe_t: 0.0,
+            mob_respawn_t: 5.0,
+            setas_marrons: 0,
             ultimo_frame: Instant::now(),
         }
     }
@@ -973,6 +1040,29 @@ impl App {
                 2.0,
                 22.0,
             ));
+        }
+        if es_supervivencia(self.version) {
+            let corazones = (self.salud + 1) / 2;
+            let barra: String = (0..10)
+                .map(|i| if i < corazones { '#' } else { '.' })
+                .collect();
+            lineas.push((
+                format!("Salud [{barra}] {}/20", self.salud),
+                2.0,
+                42.0,
+            ));
+            lineas.push((
+                format!("Flechas: {}  Setas: {}", self.flechas, self.setas_marrons),
+                2.0,
+                52.0,
+            ));
+            // 0.24 solo enseñaba los puntos al morir; 0.25 los fija arriba.
+            if es_025(self.version) || self.muerto {
+                lineas.push((format!("Puntos: {}", self.puntuacion), 2.0, 62.0));
+            }
+            if self.muerto {
+                lineas.push(("Has muerto. R para reiniciar.".to_string(), 2.0, 74.0));
+            }
         }
         // 0.0.17a: la lista de jugadores aparece mientras se mantiene Tab.
         if self.tab_lista && es_lista_jugadores(self.version) {
@@ -1313,6 +1403,198 @@ impl App {
 }
 
 impl App {
+    fn dano_jugador(&mut self, n: i32) {
+        if self.muerto || n <= 0 {
+            return;
+        }
+        self.salud -= n;
+        if self.salud <= 0 {
+            self.salud = 0;
+            self.muerto = true;
+            self.keys.clear();
+        }
+    }
+
+    fn reiniciar_supervivencia(&mut self) {
+        self.salud = 20;
+        self.flechas = 20;
+        self.puntuacion = 0;
+        self.setas_marrons = 0;
+        self.muerto = false;
+        self.golpe_t = 0.0;
+        self.mob_respawn_t = 5.0;
+        self.zombis.clear();
+        let (sx, sy, sz) = self.spawn;
+        self.jugador.set_pos(sx, sy, sz + 2.0);
+        self.particulas.clear();
+        self.sembrar_mobs();
+    }
+
+    fn sembrar_mobs(&mut self) {
+        let tipos = [
+            TipoMob::Zombi,
+            TipoMob::Esqueleto,
+            TipoMob::Creeper,
+            TipoMob::Cerdo,
+            TipoMob::Zombi,
+            TipoMob::Esqueleto,
+        ];
+        let (px, py, pz) = (self.jugador.x, self.jugador.y, self.jugador.z);
+        for (i, tipo) in tipos.iter().enumerate() {
+            let ang = i as f32 * 1.05;
+            let x = px + ang.cos() * 9.0;
+            let y = py + ang.sin() * 9.0;
+            let mut z = Zombie::new_tipo(&self.nivel, x, y, pz + 2.0, *tipo);
+            z.e.set_pos(x, y, pz + 2.0);
+            self.zombis.push(z);
+        }
+    }
+
+    fn disparar_jugador(&mut self) {
+        if self.muerto {
+            return;
+        }
+        if self.flechas <= 0 {
+            self.chat("No te quedan flechas. Los esqueletos sueltan 4-9.".to_string());
+            return;
+        }
+        let cam = self.jugador.camara(1.0);
+        let yaw = self.jugador.y_rot.to_radians();
+        let pitch = self.jugador.x_rot.to_radians();
+        let (sy, cy) = yaw.sin_cos();
+        let (sp, cp) = pitch.sin_cos();
+        let d = [sy * cp, -cy * cp, sp];
+        self.flechas -= 1;
+        self.particulas.push(Particula::nueva_flecha(
+            cam[0] + d[0] * 0.6,
+            cam[1] + d[1] * 0.6,
+            cam[2] + d[2] * 0.6,
+            d[0] * 1.1,
+            d[1] * 1.1,
+            d[2] * 1.1,
+            true,
+        ));
+        sonar_colocar(self.sonido);
+    }
+
+    fn disparar_mob(&mut self, i: usize) {
+        let cam = self.jugador.camara(1.0);
+        let (mx, my, mz) = (
+            self.zombis[i].e.x,
+            self.zombis[i].e.y,
+            self.zombis[i].e.z + 1.2,
+        );
+        let (dx, dy, dz) = (cam[0] - mx, cam[1] - my, cam[2] - mz);
+        let l = (dx * dx + dy * dy + dz * dz).sqrt().max(0.001);
+        let s = 0.75;
+        self.particulas.push(Particula::nueva_flecha(
+            mx,
+            my,
+            mz,
+            dx / l * s,
+            dy / l * s,
+            dz / l * s,
+            false,
+        ));
+    }
+
+    /// Devuelve el mob mas cercano que corta el rayo de la mirada (sin contar
+    /// bloques: el llamante compara con el raycast del mundo).
+    fn mob_apuntado(&self) -> Option<usize> {
+        let cam = self.jugador.camara(1.0);
+        let yaw = self.jugador.y_rot.to_radians();
+        let pitch = self.jugador.x_rot.to_radians();
+        let (sy, cy) = yaw.sin_cos();
+        let (sp, cp) = pitch.sin_cos();
+        let d = [sy * cp, -cy * cp, sp];
+        let mut mejor: Option<(usize, f32)> = None;
+        for (i, z) in self.zombis.iter().enumerate() {
+            let dx = z.e.x - cam[0];
+            let dy = z.e.y - cam[1];
+            let dz = z.e.z + 0.9 - cam[2];
+            let t = dx * d[0] + dy * d[1] + dz * d[2];
+            if t < 0.0 || t > 4.5 {
+                continue;
+            }
+            let px = dx - d[0] * t;
+            let py = dy - d[1] * t;
+            let pz = dz - d[2] * t;
+            let dist2 = px * px + py * py + pz * pz;
+            if dist2 < 0.8 * 0.8 && mejor.map_or(true, |(_, bt)| t < bt) {
+                mejor = Some((i, t));
+            }
+        }
+        mejor.map(|(i, _)| i)
+    }
+
+    fn golpear_mob(&mut self, i: usize) {
+        if i >= self.zombis.len() {
+            return;
+        }
+        self.zombis[i].salud -= 4;
+        self.zombis[i].golpe_t = 0.4;
+        self.zombis[i].rot = (self.jugador.x - self.zombis[i].e.x)
+            .atan2(self.jugador.y - self.zombis[i].e.y);
+        sonar_romper(self.sonido);
+        if self.zombis[i].salud <= 0 {
+            self.matar_mob(i);
+        }
+    }
+
+    fn matar_mob(&mut self, i: usize) {
+        if i >= self.zombis.len() {
+            return;
+        }
+        let tipo = self.zombis[i].tipo;
+        let (mx, my, mz) = (self.zombis[i].e.x, self.zombis[i].e.y, self.zombis[i].e.z);
+        self.puntuacion += match tipo {
+            TipoMob::Zombi | TipoMob::Esqueleto => 100,
+            TipoMob::Creeper => 250,
+            TipoMob::Cerdo => 10,
+        };
+        match tipo {
+            TipoMob::Esqueleto => self.flechas += 4 + (randf() * 6.0) as i32,
+            TipoMob::Cerdo => self.setas_marrons += (randf() * 3.0) as i32,
+            TipoMob::Creeper => self.explotar(mx, my, mz),
+            TipoMob::Zombi => {}
+        }
+        self.zombis.swap_remove(i);
+    }
+
+    fn explotar(&mut self, x: f32, y: f32, z: f32) {
+        let r = 3i32;
+        let (cx, cy, cz) = (x.floor() as i32, y.floor() as i32, z.floor() as i32);
+        for dx in -r..=r {
+            for dy in -r..=r {
+                for dz in -r..=r {
+                    if dx * dx + dy * dy + dz * dz > r * r {
+                        continue;
+                    }
+                    let (bx, by, bz) = (cx + dx, cy + dy, cz + dz);
+                    if self.nivel.get(bx, by, bz) != tiles::BEDROCK {
+                        self.nivel.set(bx, by, bz, tiles::AIRE);
+                    }
+                }
+            }
+        }
+        let (px, py, pz) = (self.jugador.x, self.jugador.y, self.jugador.z);
+        let d = ((px - x).powi(2) + (py - y).powi(2) + (pz - z).powi(2)).sqrt();
+        if d < 4.0 {
+            self.dano_jugador((13.0 * (1.0 - d / 4.0)).ceil() as i32);
+        }
+        for _ in 0..40 {
+            self.particulas.push(Particula::new(
+                x,
+                y,
+                z + 0.5,
+                (randf() - 0.5) * 0.4,
+                (randf() - 0.5) * 0.4,
+                (randf() - 0.5) * 0.4,
+                tiles::textura_particula(tiles::PIEDRA),
+            ));
+        }
+    }
+
     /// Coloca el bloque elegido. La esponja de 0.0.19a chupa el agua de un
     /// cubo de 5x5x5 y desaparece; si no hay agua, se queda puesta.
     fn colocar(&mut self, x: i32, y: i32, z: i32) -> bool {
@@ -1647,6 +1929,15 @@ impl ApplicationHandler for App {
                     self.grabbed = false;
                     return;
                 }
+                // 0.24/0.25: Tab dispara una flecha (20 al empezar).
+                if state == ElementState::Pressed
+                    && !repeat
+                    && es_supervivencia(self.version)
+                    && matches!(&logical_key, Key::Named(NamedKey::Tab))
+                {
+                    self.disparar_jugador();
+                    return;
+                }
                 // 0.0.17a: Tab muestra la lista de jugadores mientras se pulsa.
                 if state == ElementState::Pressed
                     && !repeat
@@ -1706,6 +1997,16 @@ impl ApplicationHandler for App {
                             if c.eq_ignore_ascii_case("r") && es_13a(self.version) {
                                 self.reinicio_presionado = true;
                             }
+                            // Survival Test: H come una seta marron y cura 3.
+                            if c.eq_ignore_ascii_case("h") && es_supervivencia(self.version) {
+                                if self.setas_marrons > 0 && self.salud < 20 {
+                                    self.setas_marrons -= 1;
+                                    self.salud = (self.salud + 3).min(20);
+                                } else if self.setas_marrons == 0 {
+                                    self.chat("No tienes setas. Los cerdos sueltan 0-2.".to_string());
+                                }
+                                return;
+                            }
                             // 0.0.22a: M silencia el sonido (no hay musica en el
                             // port, pero el ajuste se conserva).
                             if c.eq_ignore_ascii_case("m") && es_022a(self.version) {
@@ -1731,7 +2032,10 @@ impl ApplicationHandler for App {
                             } else if c.eq_ignore_ascii_case("y") && self.eje_y {
                                 // mc-161616: Y invierte el eje del raton.
                                 self.invertir_y = !self.invertir_y;
-                            } else if c.eq_ignore_ascii_case("g") && self.version != "rd-160052" {
+                            } else if c.eq_ignore_ascii_case("g")
+                                && self.version != "rd-160052"
+                                && !es_supervivencia(self.version)
+                            {
                                 // RubyDung: G suelta un zombi en la posicion del jugador
                                 // (sin resetPos, a diferencia de los 10 iniciales).
                                 // La wiki data la tecla en rd-20090515, asi que
@@ -1827,6 +2131,29 @@ impl ApplicationHandler for App {
                                 }
                                 _ => {}
                             }
+                        }
+                        self.reconstruir_cambios();
+                    } else if self.modo == Modo::Clasico && es_supervivencia(self.version) {
+                        match button {
+                            MouseButton::Left => {
+                                if let Some(i) = self.mob_apuntado() {
+                                    self.golpear_mob(i);
+                                } else if let Some(((bx, by, bz), _)) =
+                                    self.raycast(self.jugador.camara(a))
+                                {
+                                    self.romper(bx, by, bz);
+                                }
+                            }
+                            MouseButton::Right => {
+                                if let Some(((bx, by, bz), normal)) =
+                                    self.raycast(self.jugador.camara(a))
+                                {
+                                    let (nx, ny, nz) =
+                                        (bx + normal.0, by + normal.1, bz + normal.2);
+                                    self.colocar(nx, ny, nz);
+                                }
+                            }
+                            _ => {}
                         }
                         self.reconstruir_cambios();
                     } else if self.modo == Modo::Clasico {
@@ -1957,17 +2284,169 @@ impl ApplicationHandler for App {
                 p.tick(&self.nivel);
             }
             self.particulas.retain(|p| !p.borrada);
-            // zombis
+            // zombis y mobs de Survival Test
+            self.golpe_t = (self.golpe_t - 1.0 / TPS).max(0.0);
             let mut i = 0;
             while i < self.zombis.len() {
+                if es_supervivencia(self.version) && !self.muerto {
+                    let (px, py, pz) = (self.jugador.x, self.jugador.y, self.jugador.z);
+                    let (tipo, mx, my, mz, dx, dy, dz) = {
+                        let z = &mut self.zombis[i];
+                        z.golpe_t = (z.golpe_t - 1.0 / TPS).max(0.0);
+                        z.disparo_t = (z.disparo_t - 1.0 / TPS).max(0.0);
+                        (
+                            z.tipo,
+                            z.e.x,
+                            z.e.y,
+                            z.e.z,
+                            px - z.e.x,
+                            py - z.e.y,
+                            pz - z.e.z,
+                        )
+                    };
+                    let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+                    let ve = if es_025(self.version) { 20.0 } else { 14.0 };
+                    if tipo != TipoMob::Cerdo && dist < ve {
+                        self.zombis[i].rot = dx.atan2(dz);
+                        if tipo == TipoMob::Esqueleto && dist > 3.0 {
+                            if self.zombis[i].disparo_t <= 0.0 {
+                                self.disparar_mob(i);
+                                self.zombis[i].disparo_t = if es_025(self.version) { 1.1 } else { 1.8 };
+                            }
+                        } else if dist < 2.2 && self.zombis[i].golpe_t <= 0.0 {
+                            let dano = 1 + (randf() * 6.0) as i32;
+                            self.dano_jugador(dano);
+                            self.zombis[i].golpe_t = 1.0;
+                            sonar_romper(self.sonido);
+                        }
+                    }
+                    // 0.25: un monstruo solitario pierde salud con el tiempo.
+                    if es_025(self.version)
+                        && tipo != TipoMob::Cerdo
+                        && dist > 20.0
+                        && randf() < 0.002
+                    {
+                        self.zombis[i].salud -= 1;
+                    }
+                    let _ = (mx, my, mz);
+                }
                 self.zombis[i].tick_con(&self.nivel, Fisica::ZOMBI_LEGACY);
+                if es_025(self.version) {
+                    self.zombis[i].e.xd *= 1.25;
+                    self.zombis[i].e.zd *= 1.25;
+                }
+                if es_supervivencia(self.version) && self.zombis[i].salud <= 0 {
+                    self.matar_mob(i);
+                    continue;
+                }
                 if self.zombis[i].e.z < -100.0 {
                     self.zombis.swap_remove(i);
                 } else {
                     i += 1;
                 }
             }
-            if version_13a {
+            // Flechas: impacto en mobs (jugador) o en el jugador (esqueletos).
+            if es_supervivencia(self.version) {
+                let mut k = 0;
+                while k < self.particulas.len() {
+                    let (fx, fy, fz, dano, de_jugador, es_flecha) = {
+                        let p = &self.particulas[k];
+                        (p.x, p.y, p.z, p.dano, p.de_jugador, p.es_flecha)
+                    };
+                    let mut impacto = false;
+                    if es_flecha && !self.particulas[k].borrada {
+                        if de_jugador {
+                            let mut j = 0;
+                            while j < self.zombis.len() {
+                                let (zx, zy, zz) = (
+                                    self.zombis[j].e.x,
+                                    self.zombis[j].e.y,
+                                    self.zombis[j].e.z + 0.9,
+                                );
+                                let d2 = (fx - zx).powi(2)
+                                    + (fy - zy).powi(2)
+                                    + (fz - zz).powi(2);
+                                if d2 < 0.8 * 0.8 {
+                                    self.zombis[j].salud -= dano;
+                                    if self.zombis[j].salud <= 0 {
+                                        self.matar_mob(j);
+                                    }
+                                    impacto = true;
+                                    break;
+                                }
+                                j += 1;
+                            }
+                        } else {
+                            if !self.muerto {
+                                let (px, py, pz) = (
+                                    self.jugador.x,
+                                    self.jugador.y,
+                                    self.jugador.z + 1.0,
+                                );
+                                let d2 = (fx - px).powi(2)
+                                    + (fy - py).powi(2)
+                                    + (fz - pz).powi(2);
+                                if d2 < 0.9 * 0.9 {
+                                    self.dano_jugador(dano);
+                                    impacto = true;
+                                }
+                            }
+                            // 0.25: las flechas de esqueleto tambien enfadan a
+                            // otros monstruos; los esqueletos no se pelean entre si.
+                            if !impacto && es_025(self.version) {
+                                let mut j = 0;
+                                while j < self.zombis.len() {
+                                    if self.zombis[j].tipo != TipoMob::Esqueleto {
+                                        let (zx, zy, zz) = (
+                                            self.zombis[j].e.x,
+                                            self.zombis[j].e.y,
+                                            self.zombis[j].e.z + 0.9,
+                                        );
+                                        let d2 = (fx - zx).powi(2)
+                                            + (fy - zy).powi(2)
+                                            + (fz - zz).powi(2);
+                                        if d2 < 0.8 * 0.8 {
+                                            self.zombis[j].salud -= 1;
+                                            self.zombis[j].rot = (self.jugador.x
+                                                - self.zombis[j].e.x)
+                                                .atan2(self.jugador.y - self.zombis[j].e.y);
+                                            if self.zombis[j].salud <= 0 {
+                                                self.matar_mob(j);
+                                            }
+                                            impacto = true;
+                                            break;
+                                        }
+                                    }
+                                    j += 1;
+                                }
+                            }
+                        }
+                    }
+                    if impacto {
+                        self.particulas[k].borrada = true;
+                    }
+                    k += 1;
+                }
+            }
+            if es_025(self.version) && !self.muerto {
+                self.mob_respawn_t -= 1.0 / TPS;
+                if self.mob_respawn_t <= 0.0 && self.zombis.len() < 6 {
+                    let tipos = [TipoMob::Zombi, TipoMob::Esqueleto, TipoMob::Creeper];
+                    let tipo = tipos[(randf() * 3.0) as usize % 3];
+                    let ang = randf() * 6.283;
+                    let x = self.jugador.x + ang.cos() * 14.0;
+                    let y = self.jugador.y + ang.sin() * 14.0;
+                    let mut z = Zombie::new_tipo(&self.nivel, x, y, self.jugador.z + 2.0, tipo);
+                    z.e.set_pos(x, y, self.jugador.z + 2.0);
+                    self.zombis.push(z);
+                    self.mob_respawn_t = 7.0;
+                }
+            }
+            if self.muerto {
+                if reset_mantenido {
+                    self.reiniciar_supervivencia();
+                }
+            } else if version_13a {
                 self.jugador.tick_con(
                     &self.nivel,
                     f,
@@ -2275,6 +2754,41 @@ mod tests {
         // 0.0.13a_03: zd = 0.42 y despues 0.91 de roce menos 0.08 de gravedad.
         j.tick_con(&nivel, 0.0, 0.0, true, false, false, true);
         assert!(j.zd > 0.0 && j.zd < 0.35, "salto 13a inesperado: {}", j.zd);
+    }
+
+    #[test]
+    fn la_salud_mata_y_el_reinicio_la_recupera() {
+        let mut app = App::new("0.24_SURVIVAL_TEST", Modo::Clasico);
+        assert_eq!(app.salud, 20);
+        assert_eq!(app.flechas, 20);
+        app.dano_jugador(19);
+        assert_eq!(app.salud, 1);
+        assert!(!app.muerto);
+        app.dano_jugador(3);
+        assert_eq!(app.salud, 0);
+        assert!(app.muerto);
+        app.reiniciar_supervivencia();
+        assert_eq!((app.salud, app.flechas, app.puntuacion, app.muerto), (20, 20, 0, false));
+    }
+
+    #[test]
+    fn tab_gasta_una_flecha_y_el_esqueleto_suelta_varias() {
+        let mut app = App::new("0.25_SURVIVAL_TEST", Modo::Clasico);
+        app.sonido = false;
+        app.disparar_jugador();
+        assert_eq!(app.flechas, 19);
+        assert!(app.particulas.last().unwrap().es_flecha);
+        assert!(app.particulas.last().unwrap().de_jugador);
+        let antes = app.flechas;
+        let i = app
+            .zombis
+            .iter()
+            .position(|z| z.tipo == TipoMob::Esqueleto)
+            .unwrap();
+        app.zombis[i].salud = 1;
+        app.golpear_mob(i);
+        assert!(app.flechas >= antes + 4 && app.flechas <= antes + 9);
+        assert!(app.puntuacion >= 100);
     }
 
     #[test]

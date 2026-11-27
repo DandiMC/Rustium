@@ -1,6 +1,6 @@
 [package]
 name = "rubydung-rs"
-version = "0.3.7"
+version = "0.3.8"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -173,6 +173,16 @@ path = "src/bin/classic022a.rs"
 [[bin]]
 name = "classic023a"
 path = "src/bin/classic023a.rs"
+
+# 0.24_SURVIVAL_TEST: salud, flechas, mobs, drops y puntos
+[[bin]]
+name = "classic024"
+path = "src/bin/classic024.rs"
+
+# 0.25_SURVIVAL_TEST: guardado, mobs mas rapidos, respawn e infighting
+[[bin]]
+name = "classic025"
+path = "src/bin/classic025.rs"
 
 [dependencies]
 winit = "0.30"

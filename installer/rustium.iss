@@ -11,7 +11,7 @@
 ; also where the launcher keeps its config (lang=...) and downloaded updates.
 
 #define MyAppName "Rustium"
-#define MyAppVersion "0.3.7"
+#define MyAppVersion "0.3.8"
 #define MyAppPublisher "DandiMC"
 #define MyAppExeName "Rustium.exe"
 
@@ -101,6 +101,9 @@ Source: "..\target\x86_64-pc-windows-gnu\release\classic020a02.exe"; DestDir: "{
 Source: "..\target\x86_64-pc-windows-gnu\release\classic021a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic022a.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\x86_64-pc-windows-gnu\release\classic023a.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Survival Test: salud, flechas, mobs, puntos y guardado.
+Source: "..\target\x86_64-pc-windows-gnu\release\classic024.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-gnu\release\classic025.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\rustium.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Apache 2.0 asks for the licence and the attribution notice to be handed to
 ; every recipient, so they are installed next to the executables.

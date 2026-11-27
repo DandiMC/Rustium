@@ -1409,7 +1409,15 @@ impl Renderer {
         // se pintan siempre, aunque el jar de la version este instalado.
         if matches!(
             version_atlas.as_str(),
-            "c0.0.19a" | "c0.0.19a_06" | "c0.0.20a" | "c0.0.20a_02"
+            "c0.0.19a"
+                | "c0.0.19a_06"
+                | "c0.0.20a"
+                | "c0.0.20a_02"
+                | "c0.0.21a"
+                | "c0.0.22a"
+                | "c0.0.23a"
+                | "0.24_SURVIVAL_TEST"
+                | "0.25_SURVIVAL_TEST"
         ) {
             parchear_atlas_019(&mut atlas_data);
         }
@@ -4042,6 +4050,38 @@ pub fn parchear_atlas_019(data: &mut [u8]) {
                 set(86, px, py, r, g, b, 255);
             }
         }
+    }
+    // Flecha (87) de 0.24/0.25: palo diagonal, punta clara y plumas.
+    for py in 0..16 {
+        for px in 0..16 {
+            set(87, px, py, 0, 0, 0, 0);
+        }
+    }
+    for i in 2..13 {
+        set(87, i, 15 - i, 120, 85, 50, 255);
+        set(87, i + 1, 15 - i, 95, 65, 38, 255);
+    }
+    for (px, py) in [(12, 3), (13, 2), (13, 3), (14, 2)] {
+        set(87, px, py, 205, 205, 210, 255);
+    }
+    for (px, py) in [(3, 12), (2, 13), (4, 13), (3, 14), (1, 14), (2, 15)] {
+        set(87, px, py, 225, 225, 230, 255);
+    }
+    // Flecha morada de esqueleto (88): misma silueta, punta violeta.
+    for py in 0..16 {
+        for px in 0..16 {
+            set(88, px, py, 0, 0, 0, 0);
+        }
+    }
+    for i in 2..13 {
+        set(88, i, 15 - i, 120, 85, 50, 255);
+        set(88, i + 1, 15 - i, 95, 65, 38, 255);
+    }
+    for (px, py) in [(12, 3), (13, 2), (13, 3), (14, 2)] {
+        set(88, px, py, 185, 95, 225, 255);
+    }
+    for (px, py) in [(3, 12), (2, 13), (4, 13), (3, 14), (1, 14), (2, 15)] {
+        set(88, px, py, 165, 80, 205, 255);
     }
 }
 

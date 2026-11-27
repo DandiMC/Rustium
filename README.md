@@ -24,7 +24,7 @@ and, if there is none, draws its own.
 
 ## To play
 
-You only need **the installer**: `Rustium-0.3.7-setup.exe`.
+You only need **the installer**: `Rustium-0.3.8-setup.exe`.
 
 - Nothing else. No Rust, no Java, no official launcher, no account.
 - It installs per user into `%LOCALAPPDATA%\Rustium`, with no administrator prompt.
@@ -35,7 +35,7 @@ You only need **the installer**: `Rustium-0.3.7-setup.exe`.
 
 ## The versions
 
-The picker above the Play button starts any of the thirty-seven builds (the six
+The picker above the Play button starts any of the thirty-nine builds (the six
 pre-classics, the four private alphas and the first twenty Classics):
 
 | build | what it brings |
@@ -77,10 +77,12 @@ pre-classics, the four private alphas and the first twenty Classics):
 | c0.0.21a | gray inventory background, walking and changing slots while it is open, auto-clicking and a longer build reach |
 | c0.0.22a | synthesized sound effects for placing and breaking, M mutes them, and lava flows slower |
 | c0.0.23a | Escape opens an options menu for FPS, mouse inversion, render distance and sound; the last creative Classic |
+| 0.24_SURVIVAL_TEST | survival mode: 20 health, 20 arrows fired with Tab, creepers, pigs, skeletons and zombies, block and mob drops, a score, and death without respawn |
+| 0.25_SURVIVAL_TEST | saved worlds, faster mobs with longer sight, mob respawning, monsters fighting each other, purple skeleton arrows, pigs dropping mushrooms and the score always on screen |
 
 The four mc- builds, c0.0.3a, c0.0.9a, c0.0.10a, c0.0.12a, c0.0.12a_01, c0.0.12a_02,
 c0.0.13a, c0.0.14a, c0.0.15a, c0.0.15a_01, c0.0.15a_02, c0.0.16a, c0.0.16a_02,
-c0.0.17a, c0.0.18a, c0.0.18a_02, c0.0.19a, c0.0.20a, c0.0.21a, c0.0.22a and c0.0.23a are **reconstructions**: their jars were never archived. They are built
+c0.0.17a, c0.0.18a, c0.0.18a_02, c0.0.19a, c0.0.20a, c0.0.21a, c0.0.22a, c0.0.23a and 0.24_SURVIVAL_TEST are **reconstructions**: their jars were never archived. They are built
 from c0.0.11a's code plus what the Minecraft Wiki documents for each, and use
 c0.0.11a's textures and font when there is no jar of their own. The launcher marks
 them with **REC** in the picker and the instance list; the id and world folder do not
@@ -169,7 +171,7 @@ installed:
 powershell -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-It writes `dist/Rustium-0.3.7-setup.exe`, the file to attach to a release. The launcher
+It writes `dist/Rustium-0.3.8-setup.exe`, the file to attach to a release. The launcher
 looks there for the `.exe` asset with its `size` and its `digest: sha256:…`, so a
 release without a published SHA-256 is neither downloaded nor run.
 

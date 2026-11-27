@@ -69,6 +69,7 @@ pub struct Cube {
     pub x_rot: f32,
     pub y_rot: f32,
     pub z_rot: f32,
+    pub visible: bool,
 }
 
 impl Cube {
@@ -84,6 +85,7 @@ impl Cube {
             x_rot: 0.0,
             y_rot: 0.0,
             z_rot: 0.0,
+            visible: true,
         }
     }
 
@@ -313,8 +315,21 @@ impl Fisica {
     };
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum TipoMob {
+    Zombi,
+    Esqueleto,
+    Creeper,
+    Cerdo,
+}
+
 pub struct Zombie {
     pub e: Entity,
+    pub tipo: TipoMob,
+    pub salud: i32,
+    pub escala: f32,
+    pub golpe_t: f32,
+    pub disparo_t: f32,
     pub head: Cube,
     pub body: Cube,
     pub arm0: Cube,
@@ -357,6 +372,11 @@ impl Zombie {
 
         Zombie {
             e,
+            tipo: TipoMob::Zombi,
+            salud: 20,
+            escala: 1.0,
+            golpe_t: 0.0,
+            disparo_t: 1.0,
             head,
             body,
             arm0,
@@ -368,6 +388,21 @@ impl Zombie {
             speed: 1.0,
             rot_a: (randf() + 1.0) * 0.01,
         }
+    }
+
+    pub fn new_tipo(level: &dyn Mundo, x: f32, y: f32, z: f32, tipo: TipoMob) -> Self {
+        let mut z = Self::new(level, x, y, z);
+        z.tipo = tipo;
+        z.escala = match tipo {
+            TipoMob::Zombi | TipoMob::Esqueleto => 1.0,
+            TipoMob::Creeper => 1.05,
+            TipoMob::Cerdo => 0.7,
+        };
+        if tipo == TipoMob::Creeper {
+            z.arm0.visible = false;
+            z.arm1.visible = false;
+        }
+        z
     }
 
     pub fn tick(&mut self, level: &dyn Mundo) {
@@ -416,7 +451,7 @@ impl Zombie {
     /// Igual que `vertices`, pero con el tiempo de animacion fijado. Se usa en
     /// el arnes de careo para comparar la misma pose contra el original.
     pub fn vertices_at(&self, time: f64, a: f32, out: &mut Vec<[f32; 5]>) {
-        let size = 0.058333334f32;
+        let size = 0.058333334f32 * self.escala;
         let yy = (-((time * 0.6662).sin().abs()) as f32) * 5.0 - 23.0;
         let px = self.e.xo + (self.e.x - self.e.xo) * a;
         let py = self.e.yo + (self.e.y - self.e.yo) * a;
@@ -451,6 +486,9 @@ impl Zombie {
         ];
 
         for (cube, (xr, yr, zr)) in piezas.iter() {
+            if !cube.visible {
+                continue;
+            }
             for poly in cube.polygons.iter() {
                 // Triangulo (0,1,2) y (0,2,3) con los mismos vertices.
                 for idx in [0usize, 1, 2, 0, 2, 3] {
